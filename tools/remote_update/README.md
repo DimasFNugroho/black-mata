@@ -22,17 +22,33 @@ This installs:
 - `/etc/udev/rules.d/99-opencm.rules`
 - stable port alias: `/dev/opencm`
 
-## 2) Flash from x86 (no rebuild)
+## 2) Flash from x86
+
+Simply run the script — it will scan for compiled `.bin` files and present a menu:
 
 ```bash
 cd tools/remote_update
-./x86_flash_opencm_bin_via_ssh.sh \
-  --arm-host <USER@ARM_IP> \
-  --bin /absolute/path/to/opencm_blink.ino.bin \
-  --arm-port /dev/opencm
+./x86_flash_opencm_bin_via_ssh.sh
 ```
 
-If `--arm-port` is omitted, script auto-detects:
+Example output:
+
+```
+Available firmware:
+  1. firmware/imu_bno080_spi/build/.../imu_bno080_spi.ino.bin
+  2. firmware/opencm_blink/build/.../opencm_blink.ino.bin
+Enter number [1-2]:
+```
+
+You will be asked for the SSH password **once**. All retries and the file transfer reuse the same connection.
+
+To skip the menu and flash a specific file directly:
+
+```bash
+./x86_flash_opencm_bin_via_ssh.sh --bin /path/to/firmware.bin
+```
+
+If `--arm-port` is omitted, the script auto-detects the serial port:
 
 1. `/dev/serial/by-id/*ROBOTIS*`
 2. first `/dev/ttyACM*`
@@ -40,15 +56,7 @@ If `--arm-port` is omitted, script auto-detects:
 
 ## Bootloader Timing Note
 
-When OpenCM already has firmware and an upload attempt is made, the board may switch into bootloader mode.
-
-In that bootloader state, immediate re-upload often fails. Wait about 10 seconds before starting the next upload attempt.
-
-Recommended retry flow:
-
-1. Attempt upload.
-2. If it fails, wait 10 seconds.
-3. Retry upload.
+When OpenCM already has firmware, the first upload attempt may fail as the board transitions into bootloader mode. The script automatically retries for up to 20 seconds (configurable via `--timeout`).
 
 ## Notes
 

@@ -63,19 +63,23 @@ This installs the OpenCM uploader binary and a udev rule that creates a stable `
 
 ### Step 3 — Flash over SSH (x86)
 
-```bash
-./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh \
-  --arm-host <user>@<arm-ip> \
-  --bin firmware/opencm_blink/build/OpenCM904.OpenCM904.OpenCM904/opencm_blink.ino.bin
-```
-
-Or configure defaults in `tools/remote_update/flash.conf` and run without arguments:
+Run the flash script — it scans for compiled `.bin` files and lets you pick one:
 
 ```bash
 ./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh
 ```
 
-See `tools/remote_update/README.md` for detailed flashing options and troubleshooting.
+You will be prompted for the SSH password **once**. The script retries automatically for up to 20 seconds to handle bootloader timing.
+
+Set defaults (ARM host, port, timeout) in `tools/remote_update/flash.conf` to avoid passing flags every time. See `tools/remote_update/README.md` for all options.
+
+### Step 4 — Monitor IMU data on x86
+
+Once the IMU firmware is flashed and running, stream the serial output from ARM to your x86 terminal:
+
+```bash
+./tools/monitor/read_imu.sh
+```
 
 ## Repository Layout
 
@@ -90,7 +94,8 @@ firmware/
 tools/
   remote_update/
     flash.conf                 Default arguments for the flash script
-    x86_flash_opencm_bin_via_ssh.sh   Copy .bin to ARM and flash via SSH
-    setup_arm_opencm_ssh_flasher.sh   One-time ARM-side setup
+    x86_flash_opencm_bin_via_ssh.sh   Scan .bin files, pick one, flash via SSH
     README.md                  Detailed remote-flash instructions
+  monitor/
+    read_imu.sh                Stream IMU serial data from ARM to x86
 ```

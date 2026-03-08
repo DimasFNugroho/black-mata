@@ -21,10 +21,15 @@ if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
 fi
 
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+FIRMWARE_DIR="$PROJECT_ROOT/firmware"
+
 usage() {
   cat <<USAGE
 Usage:
-  $0 --arm-host <user@ip> --bin <local.bin> [options]
+  $0 [options]
+
+  If --bin is omitted, a menu of compiled firmware files is shown.
 
 Config file:
   $CONFIG_FILE
@@ -32,6 +37,7 @@ Config file:
   CLI arguments override config file values.
 
 Options:
+  --bin <path>            Local .bin to flash (default: interactive menu)
   --arm-port <path>       ARM serial device (auto-detect if omitted)
   --remote-bin <path>     Temp path on ARM for uploaded bin (default: /tmp/opencm_flash.bin)
   --uploader <path>       Uploader path on ARM (default: /usr/local/bin/opencm9.04_ld_armhf)
@@ -42,9 +48,40 @@ Options:
   -h, --help              Show this help
 
 Example:
-  $0 --arm-host mata-mata@192.168.1.50 \\
-     --bin /home/user/opencm_blink.ino.bin
+  $0 --arm-host mata-mata@192.168.1.50
 USAGE
+}
+
+select_bin_file() {
+  local bins=()
+  while IFS= read -r -d '' f; do
+    bins+=("$f")
+  done < <(find "$FIRMWARE_DIR" -path "*/build/*.bin" -print0 2>/dev/null | sort -z)
+
+  if [[ ${#bins[@]} -eq 0 ]]; then
+    echo "No compiled .bin files found under $FIRMWARE_DIR." >&2
+    echo "Run build.py first to compile a sketch." >&2
+    exit 1
+  fi
+
+  echo ""
+  echo "Available firmware:"
+  local i=1
+  for f in "${bins[@]}"; do
+    local rel="${f#$PROJECT_ROOT/}"
+    echo "  $i. $rel"
+    (( i++ ))
+  done
+
+  local choice
+  while true; do
+    read -rp "Enter number [1-${#bins[@]}]: " choice
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#bins[@]} )); then
+      BIN_FILE="${bins[$((choice - 1))]}"
+      break
+    fi
+    echo "Invalid selection."
+  done
 }
 
 while [[ $# -gt 0 ]]; do
@@ -97,13 +134,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$ARM_HOST" || -z "$BIN_FILE" ]]; then
-  echo "Missing required arguments." >&2
+if [[ -z "$ARM_HOST" ]]; then
+  echo "Missing ARM_HOST. Set it in flash.conf or pass --arm-host." >&2
   usage >&2
   exit 2
 fi
 
-if [[ ! -f "$BIN_FILE" ]]; then
+if [[ -z "$BIN_FILE" ]]; then
+  select_bin_file
+elif [[ ! -f "$BIN_FILE" ]]; then
   echo "Local .bin not found: $BIN_FILE" >&2
   exit 2
 fi
