@@ -101,17 +101,9 @@ jobs:
             echo "Expected non-zero exit but script succeeded" && exit 1
           fi
 
-  # ── NOTE: hardware tests (flash + monitor) require a self-hosted runner ─────
-  # To enable, add a runner on the ARM host and uncomment the job below.
+  # ── NOTE: hardware tests are intentionally excluded from CI ─────────────────
+  # Flashing and monitoring require the Jetson Nano (ARM64) to be powered on
+  # with the OpenCM9.04 physically connected. These are done manually:
   #
-  # hardware-test:
-  #   name: Flash and monitor (hardware)
-  #   runs-on: [self-hosted, arm]
-  #   needs: compile-sketches
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Flash imu_bno080_spi
-  #       run: ./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh \
-  #              --sketch imu_bno080_spi --timeout 40
-  #     - name: Read IMU data for 5 seconds
-  #       run: timeout 5 ./tools/monitor/read_imu.sh || true
+  #   Flash:   ./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh
+  #   Monitor: ./tools/monitor/read_imu.sh
