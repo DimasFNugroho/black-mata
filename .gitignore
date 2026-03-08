@@ -4,5 +4,6 @@ __pycache__/
 .pytest_cache/
 dist/
 build/
+firmware/
 *.egg-info/
 .env
