@@ -12,11 +12,29 @@ This makes the OpenCM behave like a U2D2 — a transparent USB-to-Dynamixel pass
 
 ### 2. Install Python dependencies
 
+Install the Dynamixel SDK Python package:
+
 ```bash
 pip install dynamixel-sdk
 ```
 
-Or if using the project's pyproject.toml:
+If `pip` is not available, install it first:
+
+```bash
+# Ubuntu / Debian
+sudo apt install python3-pip
+
+# Then install the SDK
+pip3 install dynamixel-sdk
+```
+
+Verify the install:
+
+```bash
+python3 -c "from dynamixel_sdk import PortHandler; print('OK')"
+```
+
+Alternatively, if using the project's `pyproject.toml`:
 
 ```bash
 pip install -e .
