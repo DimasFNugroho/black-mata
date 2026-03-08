@@ -13,8 +13,7 @@ UPLOADER="/usr/local/bin/opencm9.04_ld_armhf"
 BAUD="57600"
 GO="1"
 TARGET="opencm"
-RETRIES="5"
-RETRY_WAIT="20"
+FLASH_TIMEOUT="20"
 
 # Load config file if present (overrides hardcoded defaults above)
 if [[ -f "$CONFIG_FILE" ]]; then
@@ -39,8 +38,7 @@ Options:
   --baud <N>              Baudrate for uploader (default: 57600)
   --go <0|1>              Send go command after flash (default: 1)
   --target <name>         Target arg for uploader (default: opencm)
-  --retries <N>           Max upload attempts before giving up (default: 5)
-  --retry-wait <seconds>  Wait between retries (default: 20)
+  --timeout <seconds>     Stop retrying after this many seconds (default: 20)
   -h, --help              Show this help
 
 Example:
@@ -83,12 +81,8 @@ while [[ $# -gt 0 ]]; do
       TARGET="${2:-}"
       shift 2
       ;;
-    --retries)
-      RETRIES="${2:-}"
-      shift 2
-      ;;
-    --retry-wait)
-      RETRY_WAIT="${2:-}"
+    --timeout)
+      FLASH_TIMEOUT="${2:-}"
       shift 2
       ;;
     -h|--help)
@@ -117,13 +111,16 @@ fi
 echo "[1/3] Copying bin to ARM: $ARM_HOST:$REMOTE_BIN"
 scp "$BIN_FILE" "$ARM_HOST:$REMOTE_BIN"
 
-echo "[2/3] Running uploader on ARM host (up to $RETRIES attempt(s), ${RETRY_WAIT}s between retries)"
+echo "[2/3] Running uploader on ARM host (timeout: ${FLASH_TIMEOUT}s)"
 
 _attempt=0
 _flash_ok=0
-while [[ $_attempt -lt $RETRIES ]]; do
+_deadline=$(( SECONDS + FLASH_TIMEOUT ))
+
+while [[ $SECONDS -lt $_deadline ]]; do
   _attempt=$(( _attempt + 1 ))
-  echo "Attempt $_attempt / $RETRIES ..."
+  _elapsed=$(( SECONDS - ( _deadline - FLASH_TIMEOUT ) ))
+  echo "Attempt $_attempt (${_elapsed}s elapsed) ..."
 
   _rc=0
   ssh "$ARM_HOST" bash -s -- "$UPLOADER" "$ARM_PORT" "$BAUD" "$REMOTE_BIN" "$GO" "$TARGET" <<'EOS' || _rc=$?
@@ -174,14 +171,10 @@ EOS
   fi
 
   echo "Attempt $_attempt failed (exit code $_rc)." >&2
-  if [[ $_attempt -lt $RETRIES ]]; then
-    echo "Waiting ${RETRY_WAIT}s before next attempt..." >&2
-    sleep "$RETRY_WAIT"
-  fi
 done
 
 if [[ $_flash_ok -eq 0 ]]; then
-  echo "Flash failed after $RETRIES attempt(s)." >&2
+  echo "Flash failed: timeout after ${FLASH_TIMEOUT}s (${_attempt} attempt(s))." >&2
   exit 1
 fi
 
