@@ -18,6 +18,7 @@ jobs:
       - name: Lint shell scripts
         run: |
           shellcheck tools/remote_update/setup_arm_opencm_ssh_flasher.sh
+          shellcheck tools/monitor/read_imu.sh
 
   # ── 2. Script smoke tests ───────────────────────────────────────────────────
   smoke-tests:
@@ -26,15 +27,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup script is executable
-        run: test -x tools/remote_update/setup_arm_opencm_ssh_flasher.sh
+      - name: Scripts are executable
+        run: |
+          test -x tools/remote_update/setup_arm_opencm_ssh_flasher.sh
+          test -x tools/monitor/read_imu.sh
 
-      - name: Setup script has valid bash syntax
-        run: bash -n tools/remote_update/setup_arm_opencm_ssh_flasher.sh
+      - name: Scripts have valid bash syntax
+        run: |
+          bash -n tools/remote_update/setup_arm_opencm_ssh_flasher.sh
+          bash -n tools/monitor/read_imu.sh
 
   # ── NOTE: hardware tests are intentionally excluded from CI ─────────────────
   # Flashing and monitoring require the Jetson Nano (ARM64) to be powered on
   # with the OpenCM9.04 physically connected. These are done manually:
   #
   #   Flash:   run x86_flash_opencm_bin_via_ssh.sh from the x86 machine
-  #   Monitor: run tools/monitor/read_imu.sh from the x86 machine
+  #   Monitor: run tools/monitor/read_imu.sh on the ARM host
