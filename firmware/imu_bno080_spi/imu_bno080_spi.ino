@@ -5,7 +5,7 @@
  * and streams them as CSV lines over USB Serial to the ARM host.
  *
  * SPI1 wiring (OpenCM9.04):
- *   CS   → Pin 0
+ *   CS   → Pin 11
  *   SCK  → Pin 1
  *   MISO → Pin 6
  *   MOSI → Pin 7
@@ -30,7 +30,7 @@
 #include "SparkFun_BNO080_Arduino_Library.h"
 
 // SPI1 pin definitions (OpenCM9.04)
-#define IMU_CS   0
+#define IMU_CS   11
 #define IMU_WAK  15
 #define IMU_INT  13
 #define IMU_RST  14
