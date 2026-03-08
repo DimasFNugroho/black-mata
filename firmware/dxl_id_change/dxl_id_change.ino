@@ -16,8 +16,8 @@
 #include <Dynamixel2Arduino.h>
 
 // ── User configuration ────────────────────────────────────────────────────────
-#define CURRENT_ID   1      // ID the servo currently has
-#define NEW_ID       2      // ID to assign
+#define CURRENT_ID   20      // ID the servo currently has
+#define NEW_ID       1      // ID to assign
 #define BAUD_RATE    1000000
 // ─────────────────────────────────────────────────────────────────────────────
 
