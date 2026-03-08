@@ -106,7 +106,7 @@ ssh "${_ssh_opts[@]}" "$ARM_HOST" bash -s <<'EOS'
 python3 -c "from dynamixel_sdk import PortHandler, PacketHandler" 2>/dev/null && exit 0
 echo "Removing incompatible dynamixel-sdk and installing 3.7.x..."
 python3 -m pip uninstall -y dynamixel-sdk 2>/dev/null || true
-python3 -m pip install --user -q "dynamixel-sdk<4.0"
+python3 -m pip install --user -q "dynamixel-sdk<3.8"
 EOS
 
 # ── Auto-detect port if configured one is missing ─────────────────────────────
