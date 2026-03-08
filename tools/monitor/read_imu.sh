@@ -64,8 +64,35 @@ trap cleanup EXIT
 echo "Connecting to $ARM_HOST..."
 ssh "${_ssh_opts[@]}" -fN "$ARM_HOST"
 
-echo "Streaming IMU data from $ARM_HOST:$ARM_PORT (Ctrl+C to stop)"
+echo "Streaming IMU data from $ARM_HOST (Ctrl+C to stop)"
 echo "---"
 
-ssh "${_ssh_opts[@]}" "$ARM_HOST" \
-  "stty -F '$ARM_PORT' $BAUD raw -echo 2>/dev/null; cat '$ARM_PORT'"
+ssh "${_ssh_opts[@]}" "$ARM_HOST" bash -s -- "$ARM_PORT" "$BAUD" <<'EOS'
+set -euo pipefail
+PORT="$1"
+BAUD="$2"
+
+# Use configured port if it exists, otherwise auto-detect
+if [[ -n "$PORT" && ! -e "$PORT" ]]; then
+  echo "# Configured port not found: $PORT — auto-detecting..." >&2
+  PORT=""
+fi
+
+if [[ -z "$PORT" ]]; then
+  PORT="$(ls /dev/serial/by-id/*ROBOTIS* 2>/dev/null | head -n1 || true)"
+fi
+if [[ -z "$PORT" ]]; then
+  PORT="$(ls /dev/ttyACM* 2>/dev/null | head -n1 || true)"
+fi
+if [[ -z "$PORT" ]]; then
+  PORT="$(ls /dev/ttyUSB* 2>/dev/null | head -n1 || true)"
+fi
+if [[ -z "$PORT" ]]; then
+  echo "Could not find OpenCM serial port on ARM. Is it connected and powered?" >&2
+  exit 1
+fi
+
+echo "# Reading from $PORT"
+stty -F "$PORT" "$BAUD" raw -echo 2>/dev/null || true
+cat "$PORT"
+EOS
