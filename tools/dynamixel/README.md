@@ -1,52 +1,38 @@
-# tools/dynamixel — Python DynamixelSDK Tools
+# tools/dynamixel — Dynamixel Servo Tools (ARM)
 
-Python tools for controlling AX-12A servos from **x86 or ARM** via a
-**OpenCM9.04 running `dxl_u2d2_bridge.ino`** (transparent USB-to-Dynamixel bridge).
+Python tools for controlling AX-12A servos directly on the ARM host (Jetson)
+via an OpenCM9.04 running `dxl_commander.ino`.
+
+The OpenCM handles all Dynamixel bus communication internally.
+Python scripts send simple text commands over USB Serial — no DynamixelSDK needed.
 
 ## Prerequisites
 
-### 1. Flash the bridge firmware
+### 1. Flash the commander firmware
 
-Flash `firmware/dxl_u2d2_bridge/dxl_u2d2_bridge.ino` to the OpenCM9.04.
-This makes the OpenCM behave like a U2D2 — a transparent USB-to-Dynamixel passthrough.
+Flash `firmware/dxl_commander/dxl_commander.ino` to the OpenCM9.04 from the x86 branch.
 
-### 2. Install Python dependencies
-
-Install the Dynamixel SDK Python package:
+### 2. Install Python dependency
 
 ```bash
-pip install dynamixel-sdk
+pip3 install pyserial
 ```
 
-If `pip` is not available, install it first:
+Verify:
 
 ```bash
-# Ubuntu / Debian
-sudo apt install python3-pip
-
-# Then install the SDK
-pip3 install dynamixel-sdk
+python3 -c "import serial; print('OK')"
 ```
 
-Verify the install:
+### 3. Serial port
 
-```bash
-python3 -c "from dynamixel_sdk import PortHandler; print('OK')"
-```
+The scripts auto-detect the port in this order:
 
-Alternatively, if using the project's `pyproject.toml`:
+1. `/dev/opencm`
+2. `/dev/serial/by-id/*ROBOTIS*`
+3. `/dev/ttyACM*`
 
-```bash
-pip install -e .
-```
-
-### 3. Find the serial port
-
-| Platform | Typical port         |
-|----------|----------------------|
-| Linux    | `/dev/ttyACM0`       |
-| macOS    | `/dev/tty.usbmodemXX`|
-| Windows  | `COM3` (Device Manager)|
+Override with `--port /dev/ttyACM0` if needed.
 
 ---
 
@@ -54,57 +40,56 @@ pip install -e .
 
 ### `dxl_scan.py` — Scan for servos
 
-Scans IDs 1–252 and reports each servo's ID, model, and mode.
+Scans IDs 1-252 and reports each servo's ID, model, firmware version, and mode.
 
 ```bash
 python3 dxl_scan.py
-python3 dxl_scan.py --port /dev/ttyACM0
-python3 dxl_scan.py --all-bauds          # also try 57600, 115200, 19200, 9600
+python3 dxl_scan.py --max-id 30
 ```
 
 ### `dxl_monitor.py` — Stream servo state
 
-Continuously polls a servo and prints CSV to stdout.
+Continuously streams a servo's state as CSV to stdout.
 
 ```bash
 python3 dxl_monitor.py --id 1
-python3 dxl_monitor.py --id 1 --interval 0.1   # 10 Hz
+python3 dxl_monitor.py --id 1 --interval 100   # 100ms = 10 Hz
 ```
 
 **Output format:**
 
 ```
-STATUS,<ms>,<id>,<mode>,<position_deg>,<speed_rpm>,<load_pct>,<voltage_V>,<temp_C>
+STATUS,<ms>,<id>,<mode>,<pos_deg>,<speed_rpm>,<load_pct>,<voltage_V>,<temp_C>
 ```
 
 | Field          | Unit    | Description                             |
 |----------------|---------|-----------------------------------------|
-| `ms`           | ms      | Time since start                        |
-| `id`           | —       | Servo ID                                |
-| `mode`         | —       | `JOINT` or `WHEEL`                      |
-| `position_deg` | degrees | 0–300° (AX-12A range)                   |
+| `ms`           | ms      | Time since monitor started              |
+| `id`           |         | Servo ID                                |
+| `mode`         |         | `JOINT` or `WHEEL`                      |
+| `pos_deg`      | degrees | 0-300 (AX-12A range)                    |
 | `speed_rpm`    | RPM     | Present speed (magnitude)               |
-| `load_pct`     | %       | Present load (0–100%)                   |
+| `load_pct`     | %       | Present load (0-100%)                   |
 | `voltage_V`    | V       | Present input voltage                   |
-| `temp_C`       | °C      | Present internal temperature            |
+| `temp_C`       | C       | Present internal temperature            |
 
 ### `dxl_nudge.py` — Nudge servo position
 
-Moves the servo +N degrees, waits, then returns to origin. Repeats on an interval.
-Automatically handles WHEEL mode (saves mode → switches to JOINT → nudges → restores).
+Moves the servo +N degrees, waits, then returns to origin.
+Automatically handles WHEEL mode (saves, switches to JOINT, nudges, restores).
 
 ```bash
 python3 dxl_nudge.py --id 1
-python3 dxl_nudge.py --id 1 --nudge 10 --speed 300 --interval 5
-python3 dxl_nudge.py --id 1 --once     # run one cycle then exit
+python3 dxl_nudge.py --id 1 --nudge 10 --speed 300
+python3 dxl_nudge.py --id 1 --repeat 5 --interval 2
 ```
 
 | Option       | Default | Description                        |
 |--------------|---------|------------------------------------|
 | `--nudge`    | 5.0     | Degrees to nudge (positive = CCW)  |
-| `--speed`    | 200     | Goal speed in ticks (1–1023)       |
-| `--interval` | 3.0     | Seconds between nudge cycles       |
-| `--once`     | off     | Run a single cycle and exit        |
+| `--speed`    | 200     | Goal speed in ticks (1-1023)       |
+| `--repeat`   | 1       | Number of nudge cycles             |
+| `--interval` | 3.0     | Seconds between cycles             |
 
 ### `dxl_id_change.py` — Change servo ID
 
@@ -116,69 +101,60 @@ python3 dxl_id_change.py --current 1 --new 5
 
 > **Warning:** Do not power off the servo during the EEPROM write.
 
+### `dxl_position.py` — Read or set position
+
+```bash
+python3 dxl_position.py --id 1                  # read
+python3 dxl_position.py --id 1 --set 512         # move to tick 512
+python3 dxl_position.py --id 1 --set 512 --speed 100
+```
+
+### `dxl_speed.py` — Read or set speed
+
+```bash
+python3 dxl_speed.py --id 1                # read
+python3 dxl_speed.py --id 1 --set 200      # set
+```
+
+### `dxl_mode.py` — Read or set operating mode
+
+```bash
+python3 dxl_mode.py --id 1                  # read current mode
+python3 dxl_mode.py --id 1 --set WHEEL      # switch to wheel mode
+python3 dxl_mode.py --id 1 --set JOINT      # switch to joint mode
+```
+
+### `dxl_voltage.py` — Read servo voltage
+
+```bash
+python3 dxl_voltage.py                # all servos
+python3 dxl_voltage.py --id 1         # single servo
+python3 dxl_voltage.py --max-id 30    # scan up to ID 30
+```
+
 ---
 
 ## Common options (all tools)
 
-| Option    | Default         | Description          |
-|-----------|-----------------|----------------------|
-| `--port`  | `/dev/ttyACM0`  | Serial port          |
-| `--baud`  | `1000000`       | Baud rate            |
-
----
-
-## Running from x86 (OpenCM connected to Jetson)
-
-If the OpenCM is plugged into the Jetson and not your x86 machine, use
-`dxl_remote.sh` to run the tools on the Jetson over SSH.
-
-### Prerequisites on the Jetson
-
-```bash
-pip install dynamixel-sdk
-```
-
-### Setup
-
-Make sure `ARM_HOST` is set in `tools/remote_update/flash.conf`:
-
-```
-ARM_HOST="mata-mata@100.111.193.124"
-ARM_PORT="/dev/ttyACM0"
-```
-
-### Usage
-
-```bash
-cd tools/dynamixel
-
-./dxl_remote.sh scan
-./dxl_remote.sh monitor --id 1
-./dxl_remote.sh monitor --id 1 --interval 0.1
-./dxl_remote.sh nudge --id 1 --nudge 10 --once
-./dxl_remote.sh id_change --current 1 --new 5
-```
-
-The script:
-1. Opens a single SSH connection (one password prompt via ControlMaster)
-2. Syncs the Python tools to `~/.black-mata-dxl/` on the Jetson
-3. Auto-detects the serial port if the configured one is not found
-4. Runs the tool on the Jetson, streaming output back to your x86 terminal
+| Option    | Default        | Description                   |
+|-----------|----------------|-------------------------------|
+| `--port`  | auto-detect    | Serial port                   |
+| `--baud`  | `115200`       | USB baud rate to OpenCM       |
 
 ---
 
 ## How it works
 
 ```
-x86 machine
-  └─ dxl_remote.sh (SSH wrapper)
-       └─ SSH to Jetson
-            └─ Python script (DynamixelSDK)
-                 └─ USB serial (/dev/ttyACM0)
-                      └─ OpenCM9.04 (dxl_u2d2_bridge.ino)
-                           └─ 3-wire TTL Dynamixel bus
-                                └─ AX-12A servos
+ARM host (Jetson)
+  └─ Python script (pyserial)
+       └─ Text commands over USB serial (115200 baud)
+            └─ OpenCM9.04 (dxl_commander.ino)
+                 └─ Dynamixel2Arduino (native half-duplex)
+                      └─ 3-wire TTL Dynamixel bus
+                           └─ AX-12A servos
 ```
 
-The bridge firmware transparently forwards Dynamixel packets in both directions,
-switching the half-duplex TTL bus direction based on a timeout heuristic.
+The commander firmware receives text commands (e.g. `SCAN`, `MONITOR 1 200`),
+handles all Dynamixel protocol communication internally, and returns structured
+CSV responses over USB Serial.
