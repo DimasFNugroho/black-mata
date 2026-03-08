@@ -2,3 +2,9 @@ __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+
+# arduino-cli binary (download separately — too large for git)
+bin/
+
+# Firmware build artifacts
+firmware/*/build/

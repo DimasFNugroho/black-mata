@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="$SCRIPT_DIR/flash.conf"
+
+# Hardcoded defaults
 ARM_HOST=""
 BIN_FILE=""
 ARM_PORT=""
@@ -10,10 +14,21 @@ BAUD="57600"
 GO="1"
 TARGET="opencm"
 
+# Load config file if present (overrides hardcoded defaults above)
+if [[ -f "$CONFIG_FILE" ]]; then
+    # shellcheck source=flash.conf
+    source "$CONFIG_FILE"
+fi
+
 usage() {
   cat <<USAGE
 Usage:
   $0 --arm-host <user@ip> --bin <local.bin> [options]
+
+Config file:
+  $CONFIG_FILE
+  Set any option as a shell variable (ARM_HOST, BIN_FILE, ARM_PORT, etc.).
+  CLI arguments override config file values.
 
 Options:
   --arm-port <path>       ARM serial device (auto-detect if omitted)
