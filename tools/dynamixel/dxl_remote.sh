@@ -99,10 +99,11 @@ scp -o ControlPath="$_ssh_socket" \
     "$ARM_HOST:$REMOTE_DIR/" 2>/dev/null
 
 # ── Ensure dynamixel-sdk is installed (Python 3.6-compatible version) ──────────
+# Check by doing the full import — a broken 4.0.x install will fail with SyntaxError
 ssh "${_ssh_opts[@]}" "$ARM_HOST" bash -s <<'EOS'
-python3 -c "import dynamixel_sdk" 2>/dev/null && exit 0
-echo "dynamixel-sdk not found on Jetson — installing..."
-pip3 install "dynamixel-sdk<4.0" --user -q
+python3 -c "from dynamixel_sdk import PortHandler, PacketHandler" 2>/dev/null && exit 0
+echo "Installing dynamixel-sdk<4.0 (Python 3.6-compatible)..."
+pip3 install --user -q --force-reinstall "dynamixel-sdk<4.0"
 EOS
 
 # ── Auto-detect port if configured one is missing ─────────────────────────────
