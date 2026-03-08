@@ -32,20 +32,9 @@ jobs:
       - name: Setup script has valid bash syntax
         run: bash -n tools/remote_update/setup_arm_opencm_ssh_flasher.sh
 
-  # ── NOTE: hardware tests require a self-hosted runner on the ARM host ────────
-  # The ARM host must have the OpenCM9.04 connected via USB and the uploader
-  # installed (run setup_arm_opencm_ssh_flasher.sh once manually first).
+  # ── NOTE: hardware tests are intentionally excluded from CI ─────────────────
+  # Flashing and monitoring require the Jetson Nano (ARM64) to be powered on
+  # with the OpenCM9.04 physically connected. These are done manually:
   #
-  # To enable, register a GitHub Actions runner on the ARM device:
-  #   https://docs.github.com/en/actions/hosting-your-own-runners
-  # Then uncomment the job below.
-  #
-  # hardware-test:
-  #   name: Uploader smoke test (hardware)
-  #   runs-on: [self-hosted, arm]
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Check uploader binary is present
-  #       run: test -x /usr/local/bin/opencm9.04_ld_armhf
-  #     - name: Check OpenCM serial port is present
-  #       run: ls /dev/serial/by-id/*ROBOTIS* || ls /dev/ttyACM*
+  #   Flash:   run x86_flash_opencm_bin_via_ssh.sh from the x86 machine
+  #   Monitor: run tools/monitor/read_imu.sh from the x86 machine
