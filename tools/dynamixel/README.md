@@ -127,15 +127,57 @@ python3 dxl_id_change.py --current 1 --new 5
 
 ---
 
+## Running from x86 (OpenCM connected to Jetson)
+
+If the OpenCM is plugged into the Jetson and not your x86 machine, use
+`dxl_remote.sh` to run the tools on the Jetson over SSH.
+
+### Prerequisites on the Jetson
+
+```bash
+pip install dynamixel-sdk
+```
+
+### Setup
+
+Make sure `ARM_HOST` is set in `tools/remote_update/flash.conf`:
+
+```
+ARM_HOST="mata-mata@100.111.193.124"
+ARM_PORT="/dev/ttyACM0"
+```
+
+### Usage
+
+```bash
+cd tools/dynamixel
+
+./dxl_remote.sh scan
+./dxl_remote.sh monitor --id 1
+./dxl_remote.sh monitor --id 1 --interval 0.1
+./dxl_remote.sh nudge --id 1 --nudge 10 --once
+./dxl_remote.sh id_change --current 1 --new 5
+```
+
+The script:
+1. Opens a single SSH connection (one password prompt via ControlMaster)
+2. Syncs the Python tools to `~/.black-mata-dxl/` on the Jetson
+3. Auto-detects the serial port if the configured one is not found
+4. Runs the tool on the Jetson, streaming output back to your x86 terminal
+
+---
+
 ## How it works
 
 ```
-x86 / ARM host
-  └─ Python script (DynamixelSDK)
-       └─ USB serial (/dev/ttyACM0)
-            └─ OpenCM9.04 (dxl_u2d2_bridge.ino)
-                 └─ 3-wire TTL Dynamixel bus
-                      └─ AX-12A servos
+x86 machine
+  └─ dxl_remote.sh (SSH wrapper)
+       └─ SSH to Jetson
+            └─ Python script (DynamixelSDK)
+                 └─ USB serial (/dev/ttyACM0)
+                      └─ OpenCM9.04 (dxl_u2d2_bridge.ino)
+                           └─ 3-wire TTL Dynamixel bus
+                                └─ AX-12A servos
 ```
 
 The bridge firmware transparently forwards Dynamixel packets in both directions,
