@@ -108,8 +108,21 @@ if [[ ! -f "$BIN_FILE" ]]; then
   exit 2
 fi
 
+# Open a single multiplexed SSH connection (one password prompt).
+_ssh_socket="/tmp/black-mata-ssh-$$"
+_ssh_opts=( -o ControlMaster=auto -o ControlPath="$_ssh_socket" -o ControlPersist=60 )
+
+cleanup() {
+  ssh "${_ssh_opts[@]}" -O exit "$ARM_HOST" 2>/dev/null || true
+  rm -f "$_ssh_socket"
+}
+trap cleanup EXIT
+
+echo "[0/3] Opening SSH connection to $ARM_HOST"
+ssh "${_ssh_opts[@]}" -fN "$ARM_HOST"
+
 echo "[1/3] Copying bin to ARM: $ARM_HOST:$REMOTE_BIN"
-scp "$BIN_FILE" "$ARM_HOST:$REMOTE_BIN"
+scp -o ControlMaster=no -o ControlPath="$_ssh_socket" "$BIN_FILE" "$ARM_HOST:$REMOTE_BIN"
 
 echo "[2/3] Running uploader on ARM host (timeout: ${FLASH_TIMEOUT}s)"
 
@@ -123,7 +136,7 @@ while [[ $SECONDS -lt $_deadline ]]; do
   echo "Attempt $_attempt (${_elapsed}s elapsed) ..."
 
   _rc=0
-  ssh "$ARM_HOST" bash -s -- "$UPLOADER" "$ARM_PORT" "$BAUD" "$REMOTE_BIN" "$GO" "$TARGET" <<'EOS' || _rc=$?
+  ssh "${_ssh_opts[@]}" "$ARM_HOST" bash -s -- "$UPLOADER" "$ARM_PORT" "$BAUD" "$REMOTE_BIN" "$GO" "$TARGET" <<'EOS' || _rc=$?
 set -euo pipefail
 UP="$1"
 PORT="$2"
