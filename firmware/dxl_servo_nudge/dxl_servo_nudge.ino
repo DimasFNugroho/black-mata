@@ -5,14 +5,11 @@
  * waits for motion to complete, then moves back to the original position.
  * Repeats every REPEAT_INTERVAL_MS milliseconds.
  *
- * Useful for verifying servo responsiveness, checking for backlash,
- * and confirming a servo is in joint (position control) mode.
+ * If the servo is in WHEEL mode, it is temporarily switched to JOINT
+ * mode for the nudge, then restored to WHEEL mode afterwards.
  *
  * Configuration:
  *   Set SERVO_ID, NUDGE_DEG, and REPEAT_INTERVAL_MS below.
- *
- * NOTE: Servo must be in JOINT mode (not wheel mode).
- *       The nudge is clamped to [0, 300] degrees to stay within AX-12A range.
  *
  * Output: 115200 baud USB Serial.
  */
@@ -36,21 +33,40 @@
 #define DEG_TO_TICKS(d)  ((int32_t)((d) * 1023.0f / 300.0f))
 #define TICKS_TO_DEG(t)  ((t) * 300.0f / 1023.0f)
 
-#define AX12A_MAX_TICKS  1023
-#define AX12A_MIN_TICKS  0
+#define AX12A_MAX_TICKS   1023
+#define AX12A_MIN_TICKS   0
+// Default joint mode limits (full range)
+#define AX12A_DEFAULT_CW  0
+#define AX12A_DEFAULT_CCW 1023
 
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 
-bool servoReady = false;
+bool     servoReady   = false;
+uint16_t saved_cw     = 0;
+uint16_t saved_ccw    = 0;
+bool     wasWheelMode = false;
 
-bool isJointMode() {
-  uint16_t cw  = dxl.readControlTableItem(ControlTableItem::CW_ANGLE_LIMIT,  SERVO_ID);
-  uint16_t ccw = dxl.readControlTableItem(ControlTableItem::CCW_ANGLE_LIMIT, SERVO_ID);
-  return !(cw == 0 && ccw == 0);
+bool isWheelMode(uint16_t cw, uint16_t ccw) {
+  return (cw == 0 && ccw == 0);
+}
+
+void setJointMode() {
+  dxl.torqueOff(SERVO_ID);
+  dxl.writeControlTableItem(ControlTableItem::CW_ANGLE_LIMIT,  SERVO_ID, AX12A_DEFAULT_CW);
+  dxl.writeControlTableItem(ControlTableItem::CCW_ANGLE_LIMIT, SERVO_ID, AX12A_DEFAULT_CCW);
+  delay(100);
+  dxl.torqueOn(SERVO_ID);
+}
+
+void restoreMode() {
+  dxl.torqueOff(SERVO_ID);
+  dxl.writeControlTableItem(ControlTableItem::CW_ANGLE_LIMIT,  SERVO_ID, saved_cw);
+  dxl.writeControlTableItem(ControlTableItem::CCW_ANGLE_LIMIT, SERVO_ID, saved_ccw);
+  delay(100);
 }
 
 void waitForMotion() {
-  delay(300);  // Brief settle before checking moving flag
+  delay(300);
   uint32_t timeout = millis() + 3000;
   while (millis() < timeout) {
     int32_t moving = dxl.readControlTableItem(ControlTableItem::MOVING, SERVO_ID);
@@ -86,14 +102,20 @@ void setup() {
   }
   DEBUG_SERIAL.println("Servo found.");
 
-  if (!isJointMode()) {
-    DEBUG_SERIAL.println("ERROR: Servo is in WHEEL mode. Nudge requires JOINT mode.");
-    DEBUG_SERIAL.println("Set CW/CCW angle limits to non-zero to enable joint mode.");
-    return;
-  }
-  DEBUG_SERIAL.println("Mode: JOINT — OK");
+  // Save current mode
+  saved_cw  = dxl.readControlTableItem(ControlTableItem::CW_ANGLE_LIMIT,  SERVO_ID);
+  saved_ccw = dxl.readControlTableItem(ControlTableItem::CCW_ANGLE_LIMIT, SERVO_ID);
+  wasWheelMode = isWheelMode(saved_cw, saved_ccw);
 
-  dxl.torqueOn(SERVO_ID);
+  if (wasWheelMode) {
+    DEBUG_SERIAL.println("Mode: WHEEL — temporarily switching to JOINT for nudge.");
+    setJointMode();
+    DEBUG_SERIAL.println("Switched to JOINT mode.");
+  } else {
+    DEBUG_SERIAL.println("Mode: JOINT — OK");
+    dxl.torqueOn(SERVO_ID);
+  }
+
   servoReady = true;
   DEBUG_SERIAL.println("Ready. Starting nudge cycle...\n");
 }
@@ -111,9 +133,9 @@ void loop() {
     return;
   }
 
-  float origin_deg  = TICKS_TO_DEG(origin);
-  int32_t nudge_pos = DEG_TO_TICKS(origin_deg + NUDGE_DEG);
-  nudge_pos         = constrain(nudge_pos, AX12A_MIN_TICKS, AX12A_MAX_TICKS);
+  float   origin_deg = TICKS_TO_DEG(origin);
+  int32_t nudge_pos  = DEG_TO_TICKS(origin_deg + NUDGE_DEG);
+  nudge_pos          = constrain(nudge_pos, AX12A_MIN_TICKS, AX12A_MAX_TICKS);
 
   DEBUG_SERIAL.print("Origin  : ");
   DEBUG_SERIAL.print(origin_deg, 2);
@@ -144,7 +166,18 @@ void loop() {
   DEBUG_SERIAL.print("Returned: ");
   DEBUG_SERIAL.print(TICKS_TO_DEG(returned), 2);
   DEBUG_SERIAL.println(" deg");
-  DEBUG_SERIAL.println();
 
+  // Restore original mode after each cycle
+  if (wasWheelMode) {
+    restoreMode();
+    DEBUG_SERIAL.println("Restored WHEEL mode.");
+  }
+
+  DEBUG_SERIAL.println();
   delay(REPEAT_INTERVAL_MS);
+
+  // Re-enter joint mode if needed for next cycle
+  if (wasWheelMode) {
+    setJointMode();
+  }
 }
