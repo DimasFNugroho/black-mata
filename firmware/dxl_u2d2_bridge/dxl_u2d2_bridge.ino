@@ -30,6 +30,11 @@
  *                           after switching to RX. Resets on each byte
  *                           received to handle multi-byte responses.
  *                           AX-12A typically responds in <1ms at 1Mbps.
+ *
+ *   ECHO_TIMEOUT_US       — how long to wait when discarding TX echo bytes.
+ *                           On OpenCM9.04 the UART RX reads back its own
+ *                           transmission while DIR is HIGH. These echo bytes
+ *                           must be discarded before reading servo responses.
  */
 
 #define USB_SERIAL    Serial
@@ -41,6 +46,7 @@
 // Tune these if you experience dropped bytes or missed responses
 #define PACKET_END_TIMEOUT_US   2000    // 2ms
 #define RESPONSE_TIMEOUT_MS     10      // 10ms
+#define ECHO_TIMEOUT_US         5000    // 5ms — max wait to discard echo bytes
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -61,9 +67,11 @@ void loop() {
   // ── TX phase: forward instruction packet to servo bus ──────────────────────
   dirTX();
 
+  int bytesSent = 0;
   while (true) {
     if (USB_SERIAL.available()) {
       DXL_SERIAL.write(USB_SERIAL.read());
+      bytesSent++;
     } else {
       // Wait briefly for more bytes before declaring packet complete
       uint32_t t = micros();
@@ -75,6 +83,16 @@ void loop() {
   // Wait for the hardware TX buffer to fully drain before switching direction
   DXL_SERIAL.flush();
   dirRX();
+
+  // ── Discard echo: OpenCM9.04 RX reads back its own TX bytes ───────────────
+  int discarded = 0;
+  uint32_t echoDeadline = micros() + ECHO_TIMEOUT_US;
+  while (discarded < bytesSent && (int32_t)(micros() - echoDeadline) < 0) {
+    if (DXL_SERIAL.available()) {
+      DXL_SERIAL.read();
+      discarded++;
+    }
+  }
 
   // ── RX phase: collect servo response and forward to Jetson ─────────────────
   uint32_t deadline = millis() + RESPONSE_TIMEOUT_MS;
