@@ -13,6 +13,7 @@ Usage:
 
 import sys
 import argparse
+from typing import Optional, Tuple
 from dynamixel_sdk import PortHandler, PacketHandler
 
 # ── Default connection settings ────────────────────────────────────────────────
@@ -60,7 +61,7 @@ def is_wheel_mode(cw: int, ccw: int) -> bool:
 
 # ── Port helpers ───────────────────────────────────────────────────────────────
 
-def open_port(port: str, baud: int = BAUD_RATE) -> tuple[PortHandler, PacketHandler]:
+def open_port(port: str, baud: int = BAUD_RATE) -> Tuple[PortHandler, PacketHandler]:
     """Open port and return (port_handler, packet_handler). Exits on failure."""
     ph = PortHandler(port)
     pkt = PacketHandler(PROTOCOL)
@@ -73,14 +74,14 @@ def open_port(port: str, baud: int = BAUD_RATE) -> tuple[PortHandler, PacketHand
     return ph, pkt
 
 
-def read1(pkt: PacketHandler, ph: PortHandler, servo_id: int, addr: int) -> int | None:
+def read1(pkt: PacketHandler, ph: PortHandler, servo_id: int, addr: int) -> Optional[int]:
     val, result, error = pkt.read1ByteTxRx(ph, servo_id, addr)
     if result != 0 or error != 0:
         return None
     return val
 
 
-def read2(pkt: PacketHandler, ph: PortHandler, servo_id: int, addr: int) -> int | None:
+def read2(pkt: PacketHandler, ph: PortHandler, servo_id: int, addr: int) -> Optional[int]:
     val, result, error = pkt.read2ByteTxRx(ph, servo_id, addr)
     if result != 0 or error != 0:
         return None
