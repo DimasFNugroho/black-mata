@@ -2,7 +2,6 @@ __pycache__/
 *.pyc
 .venv/
 venv/
-tools/dynamixel/black-mata/
 .pytest_cache/
 
 # arduino-cli binary (download separately — too large for git)

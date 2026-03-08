@@ -9,6 +9,4 @@ description = "Remote OpenCM flashing utilities (x86 -> ARM over SSH)"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Black-Mata Team" }]
-dependencies = [
-    "dynamixel-sdk>=3.7",
-]
+dependencies = []
