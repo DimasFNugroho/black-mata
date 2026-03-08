@@ -98,6 +98,13 @@ scp -o ControlPath="$_ssh_socket" \
     "$SCRIPT_DIR"/dxl_id_change.py \
     "$ARM_HOST:$REMOTE_DIR/" 2>/dev/null
 
+# ── Ensure dynamixel-sdk is installed (Python 3.6-compatible version) ──────────
+ssh "${_ssh_opts[@]}" "$ARM_HOST" bash -s <<'EOS'
+python3 -c "import dynamixel_sdk" 2>/dev/null && exit 0
+echo "dynamixel-sdk not found on Jetson — installing..."
+pip3 install "dynamixel-sdk<4.0" --user -q
+EOS
+
 # ── Auto-detect port if configured one is missing ─────────────────────────────
 RESOLVED_PORT="$(ssh "${_ssh_opts[@]}" "$ARM_HOST" bash -s -- "$ARM_PORT" <<'EOS'
 PORT="$1"
