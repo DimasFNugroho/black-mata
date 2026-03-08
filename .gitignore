@@ -8,3 +8,7 @@ bin/
 
 # Firmware build artifacts
 firmware/*/build/
+dist/
+build/
+*.egg-info/
+.env

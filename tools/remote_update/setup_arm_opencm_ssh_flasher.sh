@@ -35,8 +35,12 @@ install -m 0755 "$TMP_DIR/opencm9.04_ld" "$INSTALL_PATH"
 
 echo "[5/5] Installing persistent /dev/opencm udev alias"
 cat > "$RULE_PATH" <<'RULE'
-# Stable alias for OpenCM (ROBOTIS ComPort)
-SUBSYSTEM=="tty", ATTRS{idVendor}=="fff1", ATTRS{idProduct}=="ff48", SYMLINK+="opencm", GROUP="dialout", MODE="0660", ENV{ID_MM_DEVICE_IGNORE}="1"
+# Stable alias for OpenCM9.04 (ROBOTIS, VID:fff1 PID:ff48)
+# Matches both normal mode ("ROBOTIS ComPort") and bootloader mode ("CM-900").
+# Multiple ENV keys ensure ModemManager ignores the device during re-enumeration.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="fff1", ATTRS{idProduct}=="ff48", \
+  SYMLINK+="opencm", GROUP="dialout", MODE="0660", \
+  ENV{ID_MM_DEVICE_IGNORE}="1", ENV{ID_MM_CANDIDATE}="0", ENV{ID_MM_PORT_IGNORE}="1"
 RULE
 udevadm control --reload-rules
 udevadm trigger || true
@@ -45,6 +49,11 @@ echo
 echo "Installed: $INSTALL_PATH"
 echo "udev rule: $RULE_PATH"
 echo "Recommended stable port: /dev/opencm"
+echo
 echo "Quick check:"
 echo "  ls -l /dev/opencm /dev/serial/by-id"
 echo "  $INSTALL_PATH /dev/opencm 57600 /path/to/file.bin 1 opencm"
+echo
+echo "NOTE: If ModemManager still interferes with flashing, consider disabling it:"
+echo "  sudo systemctl stop ModemManager"
+echo "  sudo systemctl disable ModemManager"
