@@ -1,0 +1,51 @@
+name: ARM CI
+
+on:
+  push:
+    branches: [arm]
+  pull_request:
+    branches: [arm, main]
+
+jobs:
+
+  # ── 1. Shell script linting ─────────────────────────────────────────────────
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint shell scripts
+        run: |
+          shellcheck tools/remote_update/setup_arm_opencm_ssh_flasher.sh
+
+  # ── 2. Script smoke tests ───────────────────────────────────────────────────
+  smoke-tests:
+    name: Script smoke tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup script is executable
+        run: test -x tools/remote_update/setup_arm_opencm_ssh_flasher.sh
+
+      - name: Setup script has valid bash syntax
+        run: bash -n tools/remote_update/setup_arm_opencm_ssh_flasher.sh
+
+  # ── NOTE: hardware tests require a self-hosted runner on the ARM host ────────
+  # The ARM host must have the OpenCM9.04 connected via USB and the uploader
+  # installed (run setup_arm_opencm_ssh_flasher.sh once manually first).
+  #
+  # To enable, register a GitHub Actions runner on the ARM device:
+  #   https://docs.github.com/en/actions/hosting-your-own-runners
+  # Then uncomment the job below.
+  #
+  # hardware-test:
+  #   name: Uploader smoke test (hardware)
+  #   runs-on: [self-hosted, arm]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Check uploader binary is present
+  #       run: test -x /usr/local/bin/opencm9.04_ld_armhf
+  #     - name: Check OpenCM serial port is present
+  #       run: ls /dev/serial/by-id/*ROBOTIS* || ls /dev/ttyACM*

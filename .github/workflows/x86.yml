@@ -1,0 +1,117 @@
+name: x86 CI
+
+on:
+  push:
+    branches: [x86]
+  pull_request:
+    branches: [x86, main]
+
+jobs:
+
+  # ── 1. Shell script linting ─────────────────────────────────────────────────
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint shell scripts
+        run: |
+          shellcheck tools/remote_update/x86_flash_opencm_bin_via_ssh.sh
+          shellcheck tools/monitor/read_imu.sh
+
+  # ── 2. Python syntax ────────────────────────────────────────────────────────
+  python-syntax:
+    name: Python syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check build.py syntax
+        run: python3 -m py_compile build.py
+
+  # ── 3. Arduino sketch compilation ───────────────────────────────────────────
+  compile-sketches:
+    name: Compile all sketches
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install arduino-cli
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh \
+            | BINDIR=$HOME/bin sh
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Cache arduino data
+        uses: actions/cache@v4
+        with:
+          path: ~/.arduino15
+          key: arduino-opencm904-${{ hashFiles('.github/workflows/x86.yml') }}
+
+      - name: Install OpenCM9.04 board package
+        run: |
+          arduino-cli config init
+          arduino-cli config set board_manager.additional_urls \
+            https://raw.githubusercontent.com/ROBOTIS-GIT/OpenCM9.04/master/arduino/opencm_release/package_opencm9.04_index.json
+          arduino-cli core update-index
+          arduino-cli core install OpenCM904:OpenCM904
+
+      - name: Install required libraries
+        run: |
+          arduino-cli lib install "SparkFun BNO080 Cortex Based IMU"
+
+      - name: Compile all sketches
+        run: |
+          # Symlink arduino-cli to bin/ so build.py can find it
+          mkdir -p bin
+          ln -sf "$(which arduino-cli)" bin/arduino-cli
+          python3 build.py --all
+
+  # ── 4. Script smoke tests ───────────────────────────────────────────────────
+  smoke-tests:
+    name: Script smoke tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Flash script --help exits cleanly
+        run: ./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh --help
+
+      - name: Flash script fails without ARM_HOST
+        run: |
+          # ARM_HOST is not set — script must exit non-zero
+          if ARM_HOST="" ./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh 2>/dev/null; then
+            echo "Expected non-zero exit but script succeeded" && exit 1
+          fi
+
+      - name: Flash script fails with no compiled firmware
+        run: |
+          # No firmware/*/build/ exists — menu must exit non-zero
+          if ARM_HOST="user@host" ./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh 2>/dev/null; then
+            echo "Expected non-zero exit but script succeeded" && exit 1
+          fi
+
+      - name: Monitor script --help exits cleanly
+        run: ./tools/monitor/read_imu.sh --help
+
+      - name: Monitor script fails without ARM_HOST
+        run: |
+          if ARM_HOST="" ./tools/monitor/read_imu.sh 2>/dev/null; then
+            echo "Expected non-zero exit but script succeeded" && exit 1
+          fi
+
+  # ── NOTE: hardware tests (flash + monitor) require a self-hosted runner ─────
+  # To enable, add a runner on the ARM host and uncomment the job below.
+  #
+  # hardware-test:
+  #   name: Flash and monitor (hardware)
+  #   runs-on: [self-hosted, arm]
+  #   needs: compile-sketches
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Flash imu_bno080_spi
+  #       run: ./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh \
+  #              --sketch imu_bno080_spi --timeout 40
+  #     - name: Read IMU data for 5 seconds
+  #       run: timeout 5 ./tools/monitor/read_imu.sh || true

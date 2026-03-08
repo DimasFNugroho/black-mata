@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import subprocess
 from pathlib import Path
 
@@ -69,6 +70,12 @@ def compile_sketch(sketch_dir: Path, fqbn: str) -> int:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Compile OpenCM9.04 Arduino sketches.")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--all", action="store_true", help="Compile all sketches non-interactively.")
+    group.add_argument("--sketch", metavar="NAME", help="Compile a specific sketch by name.")
+    args = parser.parse_args()
+
     if not ARDUINO_CLI.is_file():
         print(f"arduino-cli not found: {ARDUINO_CLI}")
         return 1
@@ -84,6 +91,30 @@ def main() -> int:
         print("  firmware/<sketch_name>/<sketch_name>.ino")
         return 1
 
+    # Non-interactive: compile all sketches
+    if args.all:
+        failed = []
+        for ino in ino_files:
+            print(f"\n--- Compiling {ino.parent.name} ---")
+            rc = compile_sketch(ino.parent, FQBN)
+            if rc != 0:
+                failed.append(ino.parent.name)
+        if failed:
+            print(f"\nFailed sketches: {', '.join(failed)}")
+            return 1
+        print("\nAll sketches compiled successfully.")
+        return 0
+
+    # Non-interactive: compile a specific sketch by name
+    if args.sketch:
+        match = [ino for ino in ino_files if ino.parent.name == args.sketch]
+        if not match:
+            names = [ino.parent.name for ino in ino_files]
+            print(f"Sketch '{args.sketch}' not found. Available: {', '.join(names)}")
+            return 1
+        return compile_sketch(match[0].parent, FQBN)
+
+    # Interactive mode
     display_items = []
     for ino in ino_files:
         sketch_name = ino.parent.name
