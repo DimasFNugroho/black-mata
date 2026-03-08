@@ -9,9 +9,9 @@
  *   SCK  → Pin 1
  *   MISO → Pin 6
  *   MOSI → Pin 7
- *   INT  → Pin 13
- *   RST  → Pin 14
- *   WAK  → Pin 15
+ *   INT  → Pin 12
+ *   RST  → Pin 13
+ *   WAK  → Pin 14
  *
  * Library required:
  *   SparkFun BNO080 Cortex Based IMU
@@ -31,9 +31,9 @@
 
 // SPI1 pin definitions (OpenCM9.04)
 #define IMU_CS   11
-#define IMU_WAK  15
-#define IMU_INT  13
-#define IMU_RST  14
+#define IMU_WAK  14
+#define IMU_INT  12
+#define IMU_RST  13
 
 // SPI clock (BNO080 max: 3 MHz)
 #define SPI_CLOCK 3000000
