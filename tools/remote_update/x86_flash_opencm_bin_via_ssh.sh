@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/flash.conf"
@@ -13,6 +13,8 @@ UPLOADER="/usr/local/bin/opencm9.04_ld_armhf"
 BAUD="57600"
 GO="1"
 TARGET="opencm"
+RETRIES="5"
+RETRY_WAIT="20"
 
 # Load config file if present (overrides hardcoded defaults above)
 if [[ -f "$CONFIG_FILE" ]]; then
@@ -37,6 +39,8 @@ Options:
   --baud <N>              Baudrate for uploader (default: 57600)
   --go <0|1>              Send go command after flash (default: 1)
   --target <name>         Target arg for uploader (default: opencm)
+  --retries <N>           Max upload attempts before giving up (default: 5)
+  --retry-wait <seconds>  Wait between retries (default: 20)
   -h, --help              Show this help
 
 Example:
@@ -79,6 +83,14 @@ while [[ $# -gt 0 ]]; do
       TARGET="${2:-}"
       shift 2
       ;;
+    --retries)
+      RETRIES="${2:-}"
+      shift 2
+      ;;
+    --retry-wait)
+      RETRY_WAIT="${2:-}"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -105,8 +117,16 @@ fi
 echo "[1/3] Copying bin to ARM: $ARM_HOST:$REMOTE_BIN"
 scp "$BIN_FILE" "$ARM_HOST:$REMOTE_BIN"
 
-echo "[2/3] Running uploader on ARM host"
-ssh "$ARM_HOST" bash -s -- "$UPLOADER" "$ARM_PORT" "$BAUD" "$REMOTE_BIN" "$GO" "$TARGET" <<'EOS'
+echo "[2/3] Running uploader on ARM host (up to $RETRIES attempt(s), ${RETRY_WAIT}s between retries)"
+
+_attempt=0
+_flash_ok=0
+while [[ $_attempt -lt $RETRIES ]]; do
+  _attempt=$(( _attempt + 1 ))
+  echo "Attempt $_attempt / $RETRIES ..."
+
+  _rc=0
+  ssh "$ARM_HOST" bash -s -- "$UPLOADER" "$ARM_PORT" "$BAUD" "$REMOTE_BIN" "$GO" "$TARGET" <<'EOS' || _rc=$?
 set -euo pipefail
 UP="$1"
 PORT="$2"
@@ -147,5 +167,22 @@ echo "Using ARM serial port: $PORT"
 
 "$UP" "$PORT" "$BAUD" "$BIN" "$GO" "$TARGET"
 EOS
+
+  if [[ $_rc -eq 0 ]]; then
+    _flash_ok=1
+    break
+  fi
+
+  echo "Attempt $_attempt failed (exit code $_rc)." >&2
+  if [[ $_attempt -lt $RETRIES ]]; then
+    echo "Waiting ${RETRY_WAIT}s before next attempt..." >&2
+    sleep "$RETRY_WAIT"
+  fi
+done
+
+if [[ $_flash_ok -eq 0 ]]; then
+  echo "Flash failed after $RETRIES attempt(s)." >&2
+  exit 1
+fi
 
 echo "[3/3] Flash complete."
