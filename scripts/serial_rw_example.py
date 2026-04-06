@@ -77,6 +77,10 @@ def parse_packet(raw: bytes):
 def cmd_name(cmd: int) -> str:
     return {CMD_HEARTBEAT: 'HEARTBEAT', CMD_HB_ACK: 'HB_ACK'}.get(cmd, f'0x{cmd:02X}')
 
+def hex_str(data: bytes) -> str:
+    """Space-separated hex string, compatible with Python 3.6+."""
+    return ' '.join(f'{b:02x}' for b in data)
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -96,7 +100,7 @@ def main():
             # ── Transmit HEARTBEAT ─────────────────────────────────────────────
             pkt = build_packet(CMD_HEARTBEAT, seq)
             ser.write(pkt)
-            print(f"[TX] {cmd_name(CMD_HEARTBEAT):<12} seq={seq:3d}  raw={pkt.hex(' ')}")
+            print(f"[TX] {cmd_name(CMD_HEARTBEAT):<12} seq={seq:3d}  raw={hex_str(pkt)}")
 
             # ── Wait for HB_ACK ────────────────────────────────────────────────
             raw = ser.read(PACKET_SIZE)
@@ -106,11 +110,11 @@ def main():
             else:
                 parsed = parse_packet(raw)
                 if parsed is None:
-                    print(f"[RX] Bad packet (CRC error or wrong START)  raw={raw.hex(' ')}\n")
+                    print(f"[RX] Bad packet (CRC error or wrong START)  raw={hex_str(raw)}\n")
                 elif parsed['cmd'] != CMD_HB_ACK:
                     print(f"[RX] Unexpected cmd={cmd_name(parsed['cmd'])}\n")
                 else:
-                    print(f"[RX] {cmd_name(parsed['cmd']):<12} seq={parsed['seq']:3d}  raw={raw.hex(' ')}")
+                    print(f"[RX] {cmd_name(parsed['cmd']):<12} seq={parsed['seq']:3d}  raw={hex_str(raw)}")
                     print(f"     Status : Healthy\n")
 
             seq = (seq + 1) & 0xFF
