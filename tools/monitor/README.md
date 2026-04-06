@@ -13,34 +13,57 @@ A single script that supports two modes:
 
 Mode is auto-detected: **remote** if `ARM_HOST` is configured in `flash.conf`, otherwise **local**.
 
+## Configuration
+
+Edit `monitor.conf` (same directory) to add known Jetson SSH addresses and serial ports:
+
+```bash
+KNOWN_HOSTS=(
+    "mata-mata@192.168.1.50"
+)
+
+KNOWN_PORTS=(
+    "/dev/opencm"
+    "/dev/ttyACM0"
+)
+```
+
 ## Usage
 
-Just run the script — it will prompt you for everything:
+Just run the script — it will prompt for everything:
 
 ```bash
 ./tools/monitor/serial_monitor.sh
 ```
 
-Example session:
+Example session (remote mode):
 
 ```
 Serial Monitor — OpenCM9.04
 ===========================
- 1) Local  — read directly from serial port (run on Jetson)
- 2) Remote — stream via SSH from Jetson (run on x86)
+  1) Local  — read directly from serial port (run on Jetson)
+  2) Remote — stream via SSH from Jetson (run on x86)
 
 Select mode [1/2]: 2
 
-Jetson SSH address [mata-mata@192.168.1.50]:
-Serial port on Jetson [/dev/opencm]:
+Select Jetson SSH address:
+  1) mata-mata@192.168.1.50
+
+Select [1-1]: 1
+
+Select serial port on Jetson:
+  1) /dev/opencm
+  2) /dev/serial/by-id/usb-CM-900_ROBOTIS_Virtual_COM_Port-if00
+  3) /dev/ttyACM0
+
+Select [1-3]: 1
 
 Connecting to mata-mata@192.168.1.50...
 Streaming from mata-mata@192.168.1.50  (Ctrl+C to stop)
 ---
-QUAT,1234,...
 ```
 
-Known values from `flash.conf` are shown as defaults — just press Enter to accept them.
+In local mode, the script also auto-detects currently connected serial devices and merges them with the list in `monitor.conf`.
 
 ## Configuration
 

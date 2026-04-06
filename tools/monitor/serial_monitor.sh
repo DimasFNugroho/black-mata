@@ -3,58 +3,90 @@ set -uo pipefail
 
 # serial_monitor.sh — stream raw serial output from the OpenCM9.04
 #
-# Interactive: prompts for mode and port at runtime.
-# No command-line arguments needed — just run the script.
+# Interactive: prompts for mode, host, and port at runtime.
+# Configure known hosts and ports in monitor.conf (same directory).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="$SCRIPT_DIR/../remote_update/flash.conf"
+CONFIG_FILE="$SCRIPT_DIR/monitor.conf"
 
-# Defaults (may be overridden by flash.conf)
-ARM_HOST=""
-ARM_PORT=""
+# Defaults (overridden by monitor.conf)
+KNOWN_HOSTS=()
+KNOWN_PORTS=()
 BAUD="115200"
 
 if [[ -f "$CONFIG_FILE" ]]; then
-    # shellcheck source=../remote_update/flash.conf
+    # shellcheck source=monitor.conf
     source "$CONFIG_FILE"
 fi
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Generic selection menu ────────────────────────────────────────────────────
+# Usage: select_from_list "Prompt" item1 item2 ...
+# Prints the selected item to stdout.
+select_from_list() {
+    local prompt="$1"
+    shift
+    local items=("$@")
+    local count="${#items[@]}"
 
-detect_port() {
-    local p=""
-    p="$(ls /dev/opencm 2>/dev/null || true)"
-    [[ -n "$p" ]] && echo "$p" && return
-    p="$(ls /dev/serial/by-id/*ROBOTIS* 2>/dev/null | head -n1 || true)"
-    [[ -n "$p" ]] && echo "$p" && return
-    p="$(ls /dev/ttyACM* 2>/dev/null | head -n1 || true)"
-    [[ -n "$p" ]] && echo "$p" && return
-    p="$(ls /dev/ttyUSB* 2>/dev/null | head -n1 || true)"
-    [[ -n "$p" ]] && echo "$p" && return
     echo ""
+    echo "$prompt"
+    for (( i=0; i<count; i++ )); do
+        echo "  $((i+1))) ${items[$i]}"
+    done
+    echo ""
+
+    local choice
+    while true; do
+        read -rp "Select [1-$count]: " choice
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= count )); then
+            echo "${items[$((choice-1))]}"
+            return
+        fi
+        echo "  Invalid choice, enter a number between 1 and $count."
+    done
 }
 
-prompt_port() {
-    # Show detected port as the default, let user confirm or override
-    local detected
-    detected="$(detect_port)"
+# ── Port detection for local mode ─────────────────────────────────────────────
+detect_local_ports() {
+    local found=()
+    local p=""
 
-    if [[ -n "$detected" ]]; then
-        read -rp "Serial port [$detected]: " input
-        echo "${input:-$detected}"
-    else
-        read -rp "Serial port (e.g. /dev/ttyACM0): " input
-        echo "$input"
-    fi
+    p="$(ls /dev/opencm 2>/dev/null || true)"
+    [[ -n "$p" ]] && found+=("$p")
+
+    while IFS= read -r dev; do
+        found+=("$dev")
+    done < <(ls /dev/serial/by-id/*ROBOTIS* 2>/dev/null || true)
+
+    while IFS= read -r dev; do
+        found+=("$dev")
+    done < <(ls /dev/ttyACM* 2>/dev/null || true)
+
+    while IFS= read -r dev; do
+        found+=("$dev")
+    done < <(ls /dev/ttyUSB* 2>/dev/null || true)
+
+    # Merge with KNOWN_PORTS, deduplicate, preserve order
+    local seen=()
+    local all=("${found[@]}" "${KNOWN_PORTS[@]}")
+    for item in "${all[@]}"; do
+        local dup=0
+        for s in "${seen[@]+"${seen[@]}"}"; do
+            [[ "$s" == "$item" ]] && dup=1 && break
+        done
+        [[ "$dup" -eq 0 ]] && seen+=("$item")
+    done
+
+    printf '%s\n' "${seen[@]}"
 }
 
-# ── Mode selection ────────────────────────────────────────────────────────────
+# ── Mode selection ─────────────────────────────────────────────────────────────
 
 echo ""
 echo "Serial Monitor — OpenCM9.04"
 echo "==========================="
-echo " 1) Local  — read directly from serial port (run on Jetson)"
-echo " 2) Remote — stream via SSH from Jetson (run on x86)"
+echo "  1) Local  — read directly from serial port (run on Jetson)"
+echo "  2) Remote — stream via SSH from Jetson (run on x86)"
 echo ""
 read -rp "Select mode [1/2]: " mode_choice
 
@@ -64,21 +96,17 @@ case "$mode_choice" in
     *) echo "Invalid choice." >&2; exit 1 ;;
 esac
 
-# ── Local mode ────────────────────────────────────────────────────────────────
+# ── Local mode ─────────────────────────────────────────────────────────────────
 
 run_local() {
-    echo ""
-    PORT="$(prompt_port)"
+    mapfile -t port_list < <(detect_local_ports)
 
-    if [[ -z "$PORT" ]]; then
-        echo "No serial port specified. Is the OpenCM connected?" >&2
+    if [[ "${#port_list[@]}" -eq 0 ]]; then
+        echo "No serial ports found. Is the OpenCM connected?" >&2
         exit 1
     fi
 
-    if [[ ! -e "$PORT" ]]; then
-        echo "Port not found: $PORT" >&2
-        exit 1
-    fi
+    PORT="$(select_from_list "Select serial port:" "${port_list[@]}")"
 
     echo ""
     echo "Reading from $PORT at $BAUD baud  (Ctrl+C to stop)"
@@ -87,31 +115,16 @@ run_local() {
     cat "$PORT"
 }
 
-# ── Remote mode ───────────────────────────────────────────────────────────────
+# ── Remote mode ────────────────────────────────────────────────────────────────
 
 run_remote() {
-    echo ""
-
-    # Prompt for ARM_HOST, showing flash.conf value as default
-    if [[ -n "$ARM_HOST" ]]; then
-        read -rp "Jetson SSH address [$ARM_HOST]: " input
-        ARM_HOST="${input:-$ARM_HOST}"
-    else
-        read -rp "Jetson SSH address (e.g. user@192.168.1.50): " ARM_HOST
-    fi
-
-    if [[ -z "$ARM_HOST" ]]; then
-        echo "No SSH address provided." >&2
+    if [[ "${#KNOWN_HOSTS[@]}" -eq 0 ]]; then
+        echo "No hosts configured. Add entries to $CONFIG_FILE." >&2
         exit 1
     fi
 
-    # Prompt for port on Jetson, showing flash.conf value as default
-    if [[ -n "$ARM_PORT" ]]; then
-        read -rp "Serial port on Jetson [$ARM_PORT]: " input
-        ARM_PORT="${input:-$ARM_PORT}"
-    else
-        read -rp "Serial port on Jetson (leave blank to auto-detect): " ARM_PORT
-    fi
+    ARM_HOST="$(select_from_list "Select Jetson SSH address:" "${KNOWN_HOSTS[@]}")"
+    ARM_PORT="$(select_from_list "Select serial port on Jetson:" "${KNOWN_PORTS[@]}")"
 
     echo ""
     echo "Connecting to $ARM_HOST..."
@@ -136,28 +149,24 @@ set -euo pipefail
 PORT="$1"
 BAUD="$2"
 
-detect_port() {
-    local p=""
-    p="$(ls /dev/opencm 2>/dev/null || true)"
-    [[ -n "$p" ]] && echo "$p" && return
-    p="$(ls /dev/serial/by-id/*ROBOTIS* 2>/dev/null | head -n1 || true)"
-    [[ -n "$p" ]] && echo "$p" && return
-    p="$(ls /dev/ttyACM* 2>/dev/null | head -n1 || true)"
-    [[ -n "$p" ]] && echo "$p" && return
-    p="$(ls /dev/ttyUSB* 2>/dev/null | head -n1 || true)"
-    [[ -n "$p" ]] && echo "$p" && return
-    echo ""
-}
-
+# Fall back to auto-detection if the configured port is missing
 if [[ -n "$PORT" && ! -e "$PORT" ]]; then
     echo "# Port not found: $PORT — auto-detecting..." >&2
     PORT=""
 fi
 
 if [[ -z "$PORT" ]]; then
-    PORT="$(detect_port)"
+    PORT="$(ls /dev/opencm 2>/dev/null | head -n1 || true)"
 fi
-
+if [[ -z "$PORT" ]]; then
+    PORT="$(ls /dev/serial/by-id/*ROBOTIS* 2>/dev/null | head -n1 || true)"
+fi
+if [[ -z "$PORT" ]]; then
+    PORT="$(ls /dev/ttyACM* 2>/dev/null | head -n1 || true)"
+fi
+if [[ -z "$PORT" ]]; then
+    PORT="$(ls /dev/ttyUSB* 2>/dev/null | head -n1 || true)"
+fi
 if [[ -z "$PORT" ]]; then
     echo "Could not find OpenCM serial port on Jetson. Is it connected and powered?" >&2
     exit 1
@@ -169,7 +178,7 @@ cat "$PORT"
 EOS
 }
 
-# ── Dispatch ──────────────────────────────────────────────────────────────────
+# ── Dispatch ───────────────────────────────────────────────────────────────────
 
 case "$MODE" in
     local)  run_local ;;

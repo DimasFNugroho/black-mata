@@ -210,5 +210,6 @@ tools/
     setup_arm_opencm_ssh_flasher.sh   One-time ARM/Jetson setup
     README.md                  Detailed remote-flash instructions
   monitor/
-    serial_monitor.sh          Stream serial data (--local for Jetson, default SSH from x86)
+    serial_monitor.sh          Interactive serial monitor (local or remote via SSH)
+    monitor.conf               Known Jetson SSH addresses and serial ports
 ```
