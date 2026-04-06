@@ -147,7 +147,7 @@ With the OpenCM connected to the Jetson via USB, stream data directly
 to your x86 terminal over SSH:
 
 ```bash
-./tools/monitor/read_imu.sh
+./tools/monitor/serial_monitor.sh
 ```
 
 See `tools/monitor/README.md` for configuration and options.

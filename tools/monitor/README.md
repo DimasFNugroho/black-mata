@@ -1,72 +1,64 @@
 # Monitor Tools
 
-Tools for reading live data from the OpenCM9.04.
+Stream raw serial output from the OpenCM9.04.
 
-Two modes are supported:
+## serial_monitor.sh
 
-| Script | Run on | How |
+A single script that supports two modes:
+
+| Mode | Run on | How |
 |---|---|---|
-| `read_imu.sh` | x86 machine | SSH into Jetson, forward serial stream to x86 terminal |
-| `read_imu_local.sh` | Jetson (ARM) | Read directly from local serial port |
+| `serial_monitor.sh` (default) | x86 | SSH into Jetson, forward serial stream to x86 terminal |
+| `serial_monitor.sh --local` | Jetson | Read directly from local serial port |
 
-## read_imu.sh (x86 → Jetson → OpenCM)
+Mode is auto-detected: **remote** if `ARM_HOST` is configured in `flash.conf`, otherwise **local**.
 
-### How it works
-
-```
-OpenCM9.04 --[USB serial]--> Jetson --[SSH]--> x86 terminal
-```
-
-Everything the OpenCM prints over `Serial` (e.g. sensor readings, debug output)
-is streamed live to your screen.
-
-## Files
-
-- `read_imu.sh`: stream BNO080 IMU data from the OpenCM to your x86 terminal (via SSH).
-- `read_imu_local.sh`: read BNO080 IMU data directly from a local serial port — run this **on the Jetson**.
-
-## read_imu.sh
-
-### Usage
+## Usage
 
 ```bash
-cd tools/monitor
-./read_imu.sh
+# Auto-detect mode and port
+./tools/monitor/serial_monitor.sh
+
+# Force local (e.g. on Jetson)
+./tools/monitor/serial_monitor.sh --local
+./tools/monitor/serial_monitor.sh --local --port /dev/ttyACM0
+
+# Force remote (from x86)
+./tools/monitor/serial_monitor.sh --remote
+./tools/monitor/serial_monitor.sh --remote --arm-host user@192.168.1.50
+./tools/monitor/serial_monitor.sh --remote --port /dev/ttyACM0
 ```
 
-You will be prompted for the SSH password **once**. The serial port on ARM is
-auto-detected if the configured one is not found.
+Run `./tools/monitor/serial_monitor.sh --help` for all options.
 
-### Configuration
+## Configuration
 
-`read_imu.sh` reads `ARM_HOST` and `ARM_PORT` from `tools/remote_update/flash.conf`.
-Set them there to avoid passing flags every time:
+Set defaults in `tools/remote_update/flash.conf`:
 
 ```bash
 ARM_HOST="user@arm-ip"
 ARM_PORT="/dev/serial/by-id/usb-CM-900_ROBOTIS_Virtual_COM_Port-if00"
 ```
 
-Override per-run with flags:
+When `ARM_HOST` is set, the script defaults to remote mode automatically.
 
-```bash
-./read_imu.sh --arm-host user@arm-ip --arm-port /dev/ttyACM0 --baud 115200
+## Serial port auto-detection
+
+If `--port` is omitted (or the specified port is not found), the script tries in order:
+
+1. `/dev/opencm` (udev alias set by `setup_arm_opencm_ssh_flasher.sh`)
+2. `/dev/serial/by-id/*ROBOTIS*`
+3. first `/dev/ttyACM*`
+4. first `/dev/ttyUSB*`
+
+## Expected output
+
+Whatever the OpenCM9.04 sends over its USB serial port is printed as-is.
+For example, with the `imu_bno080_spi` firmware:
+
 ```
-
-### Serial port auto-detection
-
-If the configured `ARM_PORT` is not found on ARM, the script falls back to:
-
-1. `/dev/serial/by-id/*ROBOTIS*`
-2. first `/dev/ttyACM*`
-3. first `/dev/ttyUSB*`
-
-### Expected output
-
-```
-# Reading from /dev/serial/by-id/usb-CM-900_ROBOTIS_Virtual_COM_Port-if00
-# BNO080 IMU ready — streaming at 20 Hz
-# FORMAT: TYPE,timestamp_ms,values...
+# Reading from /dev/serial/by-id/usb-CM-900_ROBOTIS_Virtual_COM_Port-if00 at 115200 baud
+---
 QUAT,1234,0.001234,-0.002345,0.003456,0.999900,0.012300
 ACCEL,1234,0.0123,9.8100,0.0045
 GYRO,1234,0.0001,-0.0002,0.0003
@@ -74,32 +66,3 @@ LINACC,1234,0.0120,-0.0010,0.0040
 GRAV,1234,0.0001,9.8099,0.0005
 MAG,1234,23.1200,-4.5600,38.9900
 ```
-
-### Data format
-
-| Type   | Fields                              | Units     |
-|--------|-------------------------------------|-----------|
-| QUAT   | timestamp, i, j, k, real, accuracy  | rad       |
-| ACCEL  | timestamp, x, y, z                  | m/s²      |
-| GYRO   | timestamp, x, y, z                  | rad/s     |
-| LINACC | timestamp, x, y, z                  | m/s² (gravity removed) |
-| GRAV   | timestamp, x, y, z                  | m/s²      |
-| MAG    | timestamp, x, y, z                  | µTesla    |
-
-## read_imu_local.sh (Jetson only)
-
-Run this **on the Jetson** when the OpenCM is connected directly by USB.
-
-### Usage
-
-```bash
-./tools/monitor/read_imu_local.sh
-./tools/monitor/read_imu_local.sh --port /dev/ttyACM0 --baud 115200
-```
-
-Serial port is auto-detected if `--port` is omitted, in this order:
-
-1. `/dev/opencm`
-2. `/dev/serial/by-id/*ROBOTIS*`
-3. first `/dev/ttyACM*`
-4. first `/dev/ttyUSB*`

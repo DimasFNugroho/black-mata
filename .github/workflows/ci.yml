@@ -19,8 +19,7 @@ jobs:
         run: |
           shellcheck tools/remote_update/x86_flash_opencm_bin_via_ssh.sh
           shellcheck tools/remote_update/setup_arm_opencm_ssh_flasher.sh
-          shellcheck tools/monitor/read_imu.sh
-          shellcheck tools/monitor/read_imu_local.sh
+          shellcheck tools/monitor/serial_monitor.sh
 
   # ── 2. Python syntax ────────────────────────────────────────────────────────
   python-syntax:
@@ -87,15 +86,13 @@ jobs:
         run: |
           test -x tools/remote_update/x86_flash_opencm_bin_via_ssh.sh
           test -x tools/remote_update/setup_arm_opencm_ssh_flasher.sh
-          test -x tools/monitor/read_imu.sh
-          test -x tools/monitor/read_imu_local.sh
+          test -x tools/monitor/serial_monitor.sh
 
       - name: Scripts have valid bash syntax
         run: |
           bash -n tools/remote_update/x86_flash_opencm_bin_via_ssh.sh
           bash -n tools/remote_update/setup_arm_opencm_ssh_flasher.sh
-          bash -n tools/monitor/read_imu.sh
-          bash -n tools/monitor/read_imu_local.sh
+          bash -n tools/monitor/serial_monitor.sh
 
       - name: Flash script --help exits cleanly
         run: ./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh --help
@@ -113,11 +110,11 @@ jobs:
           fi
 
       - name: Monitor script --help exits cleanly
-        run: ./tools/monitor/read_imu.sh --help
+        run: ./tools/monitor/serial_monitor.sh --help
 
       - name: Monitor script fails without ARM_HOST
         run: |
-          if ARM_HOST="" ./tools/monitor/read_imu.sh 2>/dev/null; then
+          if ARM_HOST="" ./tools/monitor/serial_monitor.sh 2>/dev/null; then
             echo "Expected non-zero exit but script succeeded" && exit 1
           fi
 
@@ -127,5 +124,5 @@ jobs:
   #
   #   ARM setup:  sudo ./tools/remote_update/setup_arm_opencm_ssh_flasher.sh
   #   Flash:      ./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh
-  #   Monitor:    ./tools/monitor/read_imu.sh           (from x86)
-  #               ./tools/monitor/read_imu_local.sh     (on Jetson)
+  #   Monitor:    ./tools/monitor/serial_monitor.sh           (from x86)
+  #               ./tools/monitor/serial_monitor.sh --local     (on Jetson)

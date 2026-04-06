@@ -94,7 +94,7 @@ Set defaults (ARM host, port, timeout) in `tools/remote_update/flash.conf` to av
 Once the IMU firmware is flashed and running, stream the serial output from ARM to your x86 terminal:
 
 ```bash
-./tools/monitor/read_imu.sh
+./tools/monitor/serial_monitor.sh
 ```
 
 ## Sketches
@@ -210,6 +210,5 @@ tools/
     setup_arm_opencm_ssh_flasher.sh   One-time ARM/Jetson setup
     README.md                  Detailed remote-flash instructions
   monitor/
-    read_imu.sh                Stream IMU serial data from x86 (via SSH)
-    read_imu_local.sh          Read IMU serial data directly on Jetson
+    serial_monitor.sh          Stream serial data (--local for Jetson, default SSH from x86)
 ```

@@ -92,7 +92,7 @@ If it consistently fails, increase the timeout:
 To read live serial output from the OpenCM on your x86 machine:
 
 ```bash
-./tools/monitor/read_imu.sh
+./tools/monitor/serial_monitor.sh
 ```
 
 See `tools/monitor/README.md` for details.
