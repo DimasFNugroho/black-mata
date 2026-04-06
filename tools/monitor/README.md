@@ -1,14 +1,20 @@
-# Monitor Tools (x86)
+# Monitor Tools
 
-Tools for reading live data from the OpenCM9.04 over SSH from an x86 machine.
-The OpenCM is physically connected to the ARM host via USB serial. These scripts
-SSH into ARM and forward the serial stream to your x86 terminal — no need to be
-physically near the robot.
+Tools for reading live data from the OpenCM9.04.
 
-## How it works
+Two modes are supported:
+
+| Script | Run on | How |
+|---|---|---|
+| `read_imu.sh` | x86 machine | SSH into Jetson, forward serial stream to x86 terminal |
+| `read_imu_local.sh` | Jetson (ARM) | Read directly from local serial port |
+
+## read_imu.sh (x86 → Jetson → OpenCM)
+
+### How it works
 
 ```
-OpenCM9.04 --[USB serial]--> ARM host --[SSH]--> x86 terminal
+OpenCM9.04 --[USB serial]--> Jetson --[SSH]--> x86 terminal
 ```
 
 Everything the OpenCM prints over `Serial` (e.g. sensor readings, debug output)
@@ -16,7 +22,8 @@ is streamed live to your screen.
 
 ## Files
 
-- `read_imu.sh`: stream BNO080 IMU data from the OpenCM to your x86 terminal.
+- `read_imu.sh`: stream BNO080 IMU data from the OpenCM to your x86 terminal (via SSH).
+- `read_imu_local.sh`: read BNO080 IMU data directly from a local serial port — run this **on the Jetson**.
 
 ## read_imu.sh
 
@@ -78,3 +85,21 @@ MAG,1234,23.1200,-4.5600,38.9900
 | LINACC | timestamp, x, y, z                  | m/s² (gravity removed) |
 | GRAV   | timestamp, x, y, z                  | m/s²      |
 | MAG    | timestamp, x, y, z                  | µTesla    |
+
+## read_imu_local.sh (Jetson only)
+
+Run this **on the Jetson** when the OpenCM is connected directly by USB.
+
+### Usage
+
+```bash
+./tools/monitor/read_imu_local.sh
+./tools/monitor/read_imu_local.sh --port /dev/ttyACM0 --baud 115200
+```
+
+Serial port is auto-detected if `--port` is omitted, in this order:
+
+1. `/dev/opencm`
+2. `/dev/serial/by-id/*ROBOTIS*`
+3. first `/dev/ttyACM*`
+4. first `/dev/ttyUSB*`

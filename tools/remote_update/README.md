@@ -6,7 +6,19 @@ connected to an ARM host, over SSH. No need to be near the robot.
 ## Files
 
 - `x86_flash_opencm_bin_via_ssh.sh`: selects a firmware file and flashes it to the OpenCM via SSH.
+- `setup_arm_opencm_ssh_flasher.sh`: one-time ARM setup — installs the OpenCM uploader and udev rule on the Jetson.
 - `flash.conf`: default configuration (ARM host, serial port, timeout).
+
+## ARM setup (one time, run on Jetson)
+
+```bash
+cd tools/remote_update
+sudo ./setup_arm_opencm_ssh_flasher.sh
+```
+
+This installs:
+- `/usr/local/bin/opencm9.04_ld_armhf` — OpenCM uploader binary
+- `/etc/udev/rules.d/99-opencm.rules` — stable `/dev/opencm` port alias
 
 ## Configuration
 

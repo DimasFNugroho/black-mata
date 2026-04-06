@@ -1,10 +1,10 @@
-name: x86 CI
+name: CI
 
 on:
   push:
-    branches: [x86]
+    branches: [unified, main]
   pull_request:
-    branches: [x86, main]
+    branches: [unified, main]
 
 jobs:
 
@@ -18,7 +18,9 @@ jobs:
       - name: Lint shell scripts
         run: |
           shellcheck tools/remote_update/x86_flash_opencm_bin_via_ssh.sh
+          shellcheck tools/remote_update/setup_arm_opencm_ssh_flasher.sh
           shellcheck tools/monitor/read_imu.sh
+          shellcheck tools/monitor/read_imu_local.sh
 
   # ── 2. Python syntax ────────────────────────────────────────────────────────
   python-syntax:
@@ -29,6 +31,12 @@ jobs:
 
       - name: Check build.py syntax
         run: python3 -m py_compile build.py
+
+      - name: Check Dynamixel tools syntax
+        run: |
+          for f in tools/dynamixel/*.py; do
+            python3 -m py_compile "$f"
+          done
 
   # ── 3. Arduino sketch compilation ───────────────────────────────────────────
   compile-sketches:
@@ -47,7 +55,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.arduino15
-          key: arduino-opencm904-${{ hashFiles('.github/workflows/x86.yml') }}
+          key: arduino-opencm904-${{ hashFiles('.github/workflows/ci.yml') }}
 
       - name: Install OpenCM9.04 board package
         run: |
@@ -60,10 +68,10 @@ jobs:
       - name: Install required libraries
         run: |
           arduino-cli lib install "SparkFun BNO080 Cortex Based IMU"
+          arduino-cli lib install "Dynamixel2Arduino"
 
       - name: Compile all sketches
         run: |
-          # Symlink arduino-cli to bin/ so build.py can find it
           mkdir -p bin
           ln -sf "$(which arduino-cli)" bin/arduino-cli
           python3 build.py --all
@@ -75,19 +83,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Scripts are executable
+        run: |
+          test -x tools/remote_update/x86_flash_opencm_bin_via_ssh.sh
+          test -x tools/remote_update/setup_arm_opencm_ssh_flasher.sh
+          test -x tools/monitor/read_imu.sh
+          test -x tools/monitor/read_imu_local.sh
+
+      - name: Scripts have valid bash syntax
+        run: |
+          bash -n tools/remote_update/x86_flash_opencm_bin_via_ssh.sh
+          bash -n tools/remote_update/setup_arm_opencm_ssh_flasher.sh
+          bash -n tools/monitor/read_imu.sh
+          bash -n tools/monitor/read_imu_local.sh
+
       - name: Flash script --help exits cleanly
         run: ./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh --help
 
       - name: Flash script fails without ARM_HOST
         run: |
-          # ARM_HOST is not set — script must exit non-zero
           if ARM_HOST="" ./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh 2>/dev/null; then
             echo "Expected non-zero exit but script succeeded" && exit 1
           fi
 
       - name: Flash script fails with no compiled firmware
         run: |
-          # No firmware/*/build/ exists — menu must exit non-zero
           if ARM_HOST="user@host" ./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh 2>/dev/null; then
             echo "Expected non-zero exit but script succeeded" && exit 1
           fi
@@ -105,5 +125,7 @@ jobs:
   # Flashing and monitoring require the Jetson Nano (ARM64) to be powered on
   # with the OpenCM9.04 physically connected. These are done manually:
   #
-  #   Flash:   ./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh
-  #   Monitor: ./tools/monitor/read_imu.sh
+  #   ARM setup:  sudo ./tools/remote_update/setup_arm_opencm_ssh_flasher.sh
+  #   Flash:      ./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh
+  #   Monitor:    ./tools/monitor/read_imu.sh           (from x86)
+  #               ./tools/monitor/read_imu_local.sh     (on Jetson)
