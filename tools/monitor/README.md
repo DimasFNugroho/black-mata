@@ -19,7 +19,7 @@ Edit `monitor.conf` (same directory) to add known Jetson SSH addresses and seria
 
 ```bash
 KNOWN_HOSTS=(
-    "mata-mata@192.168.1.50"
+    "mata-mata@192.168.1.0"
 )
 
 KNOWN_PORTS=(
@@ -41,13 +41,13 @@ Example session (remote mode):
 ```
 Serial Monitor — OpenCM9.04
 ===========================
-  1) Local  — read directly from serial port (run on Jetson)
+  1) Local  — read directly from serial port
   2) Remote — stream via SSH from Jetson (run on x86)
 
 Select mode [1/2]: 2
 
 Select Jetson SSH address:
-  1) mata-mata@192.168.1.50
+  1) mata-mata@192.168.1.0
 
 Select [1-1]: 1
 
@@ -58,8 +58,8 @@ Select serial port on Jetson:
 
 Select [1-3]: 1
 
-Connecting to mata-mata@192.168.1.50...
-Streaming from mata-mata@192.168.1.50  (Ctrl+C to stop)
+Connecting to mata-mata@192.168.1.0...
+Streaming from mata-mata@192.168.1.0  (Ctrl+C to stop)
 ---
 ```
 
@@ -86,17 +86,4 @@ If `--port` is omitted (or the specified port is not found), the script tries in
 4. first `/dev/ttyUSB*`
 
 ## Expected output
-
-Whatever the OpenCM9.04 sends over its USB serial port is printed as-is.
-For example, with the `imu_bno080_spi` firmware:
-
-```
-# Reading from /dev/serial/by-id/usb-CM-900_ROBOTIS_Virtual_COM_Port-if00 at 115200 baud
----
-QUAT,1234,0.001234,-0.002345,0.003456,0.999900,0.012300
-ACCEL,1234,0.0123,9.8100,0.0045
-GYRO,1234,0.0001,-0.0002,0.0003
-LINACC,1234,0.0120,-0.0010,0.0040
-GRAV,1234,0.0001,9.8099,0.0005
-MAG,1234,23.1200,-4.5600,38.9900
-```
+Whatever the OpenCM9.04 sends over its USB serial port is printed as-is. Assume that it works similarly as Arduino IDE's serial monitor
