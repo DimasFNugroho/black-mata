@@ -15,21 +15,32 @@ Mode is auto-detected: **remote** if `ARM_HOST` is configured in `flash.conf`, o
 
 ## Usage
 
+Just run the script — it will prompt you for everything:
+
 ```bash
-# Auto-detect mode and port
 ./tools/monitor/serial_monitor.sh
-
-# Force local (e.g. on Jetson)
-./tools/monitor/serial_monitor.sh --local
-./tools/monitor/serial_monitor.sh --local --port /dev/ttyACM0
-
-# Force remote (from x86)
-./tools/monitor/serial_monitor.sh --remote
-./tools/monitor/serial_monitor.sh --remote --arm-host user@192.168.1.50
-./tools/monitor/serial_monitor.sh --remote --port /dev/ttyACM0
 ```
 
-Run `./tools/monitor/serial_monitor.sh --help` for all options.
+Example session:
+
+```
+Serial Monitor — OpenCM9.04
+===========================
+ 1) Local  — read directly from serial port (run on Jetson)
+ 2) Remote — stream via SSH from Jetson (run on x86)
+
+Select mode [1/2]: 2
+
+Jetson SSH address [mata-mata@192.168.1.50]:
+Serial port on Jetson [/dev/opencm]:
+
+Connecting to mata-mata@192.168.1.50...
+Streaming from mata-mata@192.168.1.50  (Ctrl+C to stop)
+---
+QUAT,1234,...
+```
+
+Known values from `flash.conf` are shown as defaults — just press Enter to accept them.
 
 ## Configuration
 
