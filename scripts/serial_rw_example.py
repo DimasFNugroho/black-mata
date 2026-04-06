@@ -137,7 +137,7 @@ def main():
     parser = argparse.ArgumentParser(description='Jetson HEARTBEAT sender')
     parser.add_argument('--port',     required=True,              help='Serial port (e.g. /dev/ttyACM0)')
     parser.add_argument('--baud',     type=int,   default=115200, help='Baud rate')
-    parser.add_argument('--interval', type=float, default=2.0,    help='Heartbeat interval in seconds')
+    parser.add_argument('--interval', type=float, default=0.001,    help='Heartbeat interval in seconds')
     args = parser.parse_args()
 
     try:
