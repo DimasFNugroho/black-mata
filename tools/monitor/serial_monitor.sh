@@ -21,28 +21,29 @@ fi
 
 # ── Generic selection menu ────────────────────────────────────────────────────
 # Usage: select_from_list "Prompt" item1 item2 ...
-# Prints the selected item to stdout.
+# Prints the selected item to stdout; all display output goes to stderr
+# so the menu is visible even when this function is called inside $().
 select_from_list() {
     local prompt="$1"
     shift
     local items=("$@")
     local count="${#items[@]}"
 
-    echo ""
-    echo "$prompt"
+    echo "" >&2
+    echo "$prompt" >&2
     for (( i=0; i<count; i++ )); do
-        echo "  $((i+1))) ${items[$i]}"
+        echo "  $((i+1))) ${items[$i]}" >&2
     done
-    echo ""
+    echo "" >&2
 
     local choice
     while true; do
-        read -rp "Select [1-$count]: " choice
+        read -rp "Select [1-$count]: " choice </dev/tty
         if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= count )); then
             echo "${items[$((choice-1))]}"
             return
         fi
-        echo "  Invalid choice, enter a number between 1 and $count."
+        echo "  Invalid choice, enter a number between 1 and $count." >&2
     done
 }
 
