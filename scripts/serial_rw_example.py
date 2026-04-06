@@ -2,8 +2,10 @@
 """
 serial_rw_example.py — Jetson-side HEARTBEAT sender.
 
-Sends a HEARTBEAT packet to the OpenCM9.04 at a fixed interval and waits for
-an HB_ACK callback. Prints "Healthy" when a valid ACK is received.
+Two operating modes:
+  CONNECTING  — port is closed; retries every second until the port opens.
+  RUNNING     — port is open; sends HEARTBEAT and waits for HB_ACK.
+                Any serial error drops back to CONNECTING mode.
 
 Packet layout (9 bytes, fixed length):
   [0]    START   = 0xAA
@@ -25,12 +27,13 @@ import serial
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-START_BYTE    = 0xAA
-CMD_HEARTBEAT = 0x01
-CMD_HB_ACK    = 0x02
-PACKET_SIZE   = 9
-PAYLOAD_SIZE  = 4
-READ_TIMEOUT  = 1.0   # seconds to wait for a response
+START_BYTE      = 0xAA
+CMD_HEARTBEAT   = 0x01
+CMD_HB_ACK      = 0x02
+PACKET_SIZE     = 9
+PAYLOAD_SIZE    = 4
+READ_TIMEOUT    = 1.0   # seconds to wait for a single response
+RECONNECT_DELAY = 1.0   # seconds between reconnection attempts
 
 # ── CRC-16 CCITT (poly=0x1021, init=0xFFFF) ───────────────────────────────────
 
@@ -47,8 +50,8 @@ def crc16(data: bytes) -> int:
 
 def build_packet(cmd: int, seq: int) -> bytes:
     """Build a 9-byte packet with CRC appended."""
-    payload = bytes(PAYLOAD_SIZE)   # all zeros
-    body = bytes([START_BYTE, cmd, seq & 0xFF]) + payload   # bytes [0..6]
+    payload = bytes(PAYLOAD_SIZE)
+    body = bytes([START_BYTE, cmd, seq & 0xFF]) + payload
     crc  = crc16(body)
     return body + bytes([(crc >> 8) & 0xFF, crc & 0xFF])
 
@@ -61,12 +64,10 @@ def parse_packet(raw: bytes):
         return None
     if raw[0] != START_BYTE:
         return None
-
     expected = crc16(raw[:PACKET_SIZE - 2])
     received = (raw[7] << 8) | raw[8]
     if expected != received:
         return None
-
     return {
         'cmd':     raw[1],
         'seq':     raw[2],
@@ -81,6 +82,55 @@ def hex_str(data: bytes) -> str:
     """Space-separated hex string, compatible with Python 3.6+."""
     return ' '.join(f'{b:02x}' for b in data)
 
+# ── Modes ──────────────────────────────────────────────────────────────────────
+
+def connect(port: str, baud: int) -> serial.Serial:
+    """
+    CONNECTING mode — blocks until the port opens successfully.
+    Retries every RECONNECT_DELAY seconds.
+    Returns an open Serial instance.
+    """
+    print(f"[CONNECTING] Opening {port} @ {baud} baud...")
+    while True:
+        try:
+            ser = serial.Serial(port, baud, timeout=READ_TIMEOUT)
+            print(f"[CONNECTING] Connected.\n")
+            return ser
+        except serial.SerialException as e:
+            print(f"[CONNECTING] Failed: {e} — retrying in {RECONNECT_DELAY}s")
+            time.sleep(RECONNECT_DELAY)
+
+def run_session(ser: serial.Serial, interval: float) -> None:
+    """
+    RUNNING mode — sends HEARTBEAT packets and waits for HB_ACK.
+    Raises serial.SerialException if the port breaks (caller handles reconnect).
+    """
+    print(f"[RUNNING] Sending HEARTBEAT every {interval}s")
+    seq = 0
+    while True:
+        # ── Transmit HEARTBEAT ─────────────────────────────────────────────────
+        pkt = build_packet(CMD_HEARTBEAT, seq)
+        ser.write(pkt)
+        print(f"[TX] {cmd_name(CMD_HEARTBEAT):<12} seq={seq:3d}  raw={hex_str(pkt)}")
+
+        # ── Wait for HB_ACK ────────────────────────────────────────────────────
+        raw = ser.read(PACKET_SIZE)
+
+        if len(raw) < PACKET_SIZE:
+            print(f"[RX] Timeout — no response (got {len(raw)} bytes)\n")
+        else:
+            parsed = parse_packet(raw)
+            if parsed is None:
+                print(f"[RX] Bad packet (CRC error or wrong START)  raw={hex_str(raw)}\n")
+            elif parsed['cmd'] != CMD_HB_ACK:
+                print(f"[RX] Unexpected cmd={cmd_name(parsed['cmd'])}\n")
+            else:
+                print(f"[RX] {cmd_name(parsed['cmd']):<12} seq={parsed['seq']:3d}  raw={hex_str(raw)}")
+                print(f"     Status : Healthy\n")
+
+        seq = (seq + 1) & 0xFF
+        time.sleep(interval)
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -90,40 +140,24 @@ def main():
     parser.add_argument('--interval', type=float, default=2.0,    help='Heartbeat interval in seconds')
     args = parser.parse_args()
 
-    ser = serial.Serial(args.port, args.baud, timeout=READ_TIMEOUT)
-    print(f"Connected : {args.port} @ {args.baud} baud")
-    print(f"Interval  : {args.interval}s\n")
-
-    seq = 0
     try:
         while True:
-            # ── Transmit HEARTBEAT ─────────────────────────────────────────────
-            pkt = build_packet(CMD_HEARTBEAT, seq)
-            ser.write(pkt)
-            print(f"[TX] {cmd_name(CMD_HEARTBEAT):<12} seq={seq:3d}  raw={hex_str(pkt)}")
+            # ── CONNECTING mode ────────────────────────────────────────────────
+            ser = connect(args.port, args.baud)
 
-            # ── Wait for HB_ACK ────────────────────────────────────────────────
-            raw = ser.read(PACKET_SIZE)
-
-            if len(raw) < PACKET_SIZE:
-                print(f"[RX] Timeout — no response (got {len(raw)} bytes)\n")
-            else:
-                parsed = parse_packet(raw)
-                if parsed is None:
-                    print(f"[RX] Bad packet (CRC error or wrong START)  raw={hex_str(raw)}\n")
-                elif parsed['cmd'] != CMD_HB_ACK:
-                    print(f"[RX] Unexpected cmd={cmd_name(parsed['cmd'])}\n")
-                else:
-                    print(f"[RX] {cmd_name(parsed['cmd']):<12} seq={parsed['seq']:3d}  raw={hex_str(raw)}")
-                    print(f"     Status : Healthy\n")
-
-            seq = (seq + 1) & 0xFF
-            time.sleep(args.interval)
+            # ── RUNNING mode ───────────────────────────────────────────────────
+            try:
+                run_session(ser, args.interval)
+            except serial.SerialException as e:
+                print(f"\n[CONNECTING] Connection lost: {e}")
+            finally:
+                try:
+                    ser.close()
+                except Exception:
+                    pass
 
     except KeyboardInterrupt:
         print("\nStopped.")
-    finally:
-        ser.close()
 
 if __name__ == '__main__':
     main()
