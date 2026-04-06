@@ -1,4 +1,4 @@
-# Remote Flash Workflow (x86 -> ARM over SSH)
+# Remote Flash Workflow (x86 ---(SSH)---> ARM ---(USB)---> OpenCM9.04)
 
 Flashes a compiled `.bin` from x86 to an OpenCM9.04 that is physically
 connected to an ARM host, over SSH. No need to be near the robot.
@@ -49,8 +49,8 @@ Available firmware:
   2. firmware/opencm_blink/build/.../opencm_blink.ino.bin
 Enter number [1-2]: 1
 
-[0/3] Opening SSH connection to mata-mata@100.111.193.124
-mata-mata@100.111.193.124's password:        ← only once
+[0/3] Opening SSH connection to mata-mata@192.168.1.0
+mata-mata@192.168.1.0's password: 
 [1/3] Copying bin to ARM ...
 [2/3] Running uploader on ARM host (timeout: 20s)
 Attempt 1 (0s elapsed) ...
@@ -58,7 +58,7 @@ Attempt 1 (0s elapsed) ...
 [3/3] Flash complete.
 ```
 
-You are asked for the SSH password **once**. All retries and the file transfer
+You are asked for the SSH password. All retries and the file transfer
 reuse the same connection via SSH ControlMaster.
 
 To skip the menu and flash a specific file directly:
