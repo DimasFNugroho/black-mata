@@ -27,7 +27,8 @@ static const uint8_t  CMD_HB_ACK   = 0x02;
 static const uint8_t  PACKET_SIZE  = 9;
 static const uint8_t  PAYLOAD_SIZE = 4;
 static const uint32_t BAUD_RATE    = 115200;
-static const uint32_t LED_INTERVAL = 1000;   // ms — blink period when comms OK
+static const uint32_t LED_INTERVAL = 500;   // ms — blink period when comms OK
+static const uint32_t COMM_TIMEOUT = 1000;   // ms — declare comms lost if no heartbeat received within this window
 
 // ── Packet struct (all uint8_t fields — zero padding risk) ────────────────────
 
@@ -106,24 +107,29 @@ static bool readPacket(Packet* out) {
 // ── State ─────────────────────────────────────────────────────────────────────
 
 static uint8_t  tx_seq    = 0;
-static bool     comm_ok   = false;   // true after first valid heartbeat
+static uint32_t last_hb_ms = 0;     // millis() timestamp of last valid heartbeat (0 = never received)
 static bool     led_state = false;
 static uint32_t led_last  = 0;
 
 // ── Non-blocking LED blink ────────────────────────────────────────────────────
 
 static void updateLed() {
-    if (!comm_ok) {
-        // LED off when no communication has been established yet.
-        digitalWrite(LED_BUILTIN, LOW);
-        led_state = false;
-        return;
-    }
     uint32_t now = millis();
+
+    // Communication is healthy only if a heartbeat arrived within COMM_TIMEOUT.
+    // last_hb_ms == 0 means no heartbeat has ever been received.
+    bool comm_ok = (last_hb_ms != 0) && (now - last_hb_ms < COMM_TIMEOUT);
+
     if (now - led_last >= LED_INTERVAL) {
         led_last  = now;
         led_state = !led_state;
         digitalWrite(LED_BUILTIN, led_state ? HIGH : LOW);
+    }
+
+    if (!comm_ok) {
+        digitalWrite(LED_BUILTIN, HIGH);
+        led_state = false;
+        return;
     }
 }
 
@@ -141,7 +147,7 @@ void loop() {
     if (readPacket(&pkt)) {
         if (pkt.cmd == CMD_HEARTBEAT) {
             sendPacket(CMD_HB_ACK, tx_seq++);
-            comm_ok = true;
+            last_hb_ms = millis();
         }
     }
 
