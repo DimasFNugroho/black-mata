@@ -86,10 +86,33 @@ def nudge_servo(ser, servo_id, nudge_deg, speed):
     return ok_line is not None and ok_line.startswith("OK")
 
 
-def identify_servo(ser, servo, nudge_deg, speed):
+def ask_label(remaining_labels):
+    """Show a numbered menu of remaining labels. Returns chosen label or None to skip."""
+    print()
+    print("  Which joint just moved?")
+    for i, label in enumerate(remaining_labels, start=1):
+        print("    {}. {}".format(i, label))
+    print("    0. Skip")
+
+    while True:
+        try:
+            choice = input("  Select [0-{}]: ".format(len(remaining_labels))).strip()
+        except KeyboardInterrupt:
+            raise
+
+        if choice == "0":
+            return None
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(remaining_labels):
+                return remaining_labels[idx]
+        print("  Invalid selection. Try again.")
+
+
+def identify_servo(ser, servo, nudge_deg, speed, remaining_labels):
     """
     Nudge a single servo (handling mode switching) and ask the user to
-    identify it. Returns the label string entered by the user.
+    identify it. Returns the label string chosen by the user, or None to skip.
     """
     servo_id = servo["id"]
     original_mode = servo["mode"]
@@ -103,8 +126,7 @@ def identify_servo(ser, servo, nudge_deg, speed):
         print("  Switching to JOINT mode for nudge...")
         if not set_mode(ser, servo_id, "JOINT"):
             print("  WARNING: Could not switch mode. Skipping nudge.", file=sys.stderr)
-            label = input("  Enter label for this servo (or press Enter to skip): ").strip()
-            return label or None
+            return ask_label(remaining_labels)
 
         switched = True
         time.sleep(0.3)
@@ -121,13 +143,7 @@ def identify_servo(ser, servo, nudge_deg, speed):
         set_mode(ser, servo_id, "WHEEL")
         time.sleep(0.3)
 
-    # Ask user
-    print()
-    print("  Which joint just moved?")
-    print("  Suggestions: {}".format(", ".join(JOINT_LABELS)))
-    print("  (or type any custom label, or press Enter to skip)")
-    label = input("  > ").strip()
-    return label or None
+    return ask_label(remaining_labels)
 
 
 def main():
@@ -152,11 +168,16 @@ def main():
 
     servo_map = {}
     skipped = []
+    remaining_labels = list(JOINT_LABELS)
 
     try:
         for servo in servos:
-            label = identify_servo(ser, servo, args.nudge, args.speed)
+            if not remaining_labels:
+                print("\nAll joints have been assigned. Stopping early.")
+                break
+            label = identify_servo(ser, servo, args.nudge, args.speed, remaining_labels)
             if label:
+                remaining_labels.remove(label)
                 servo_map[str(servo["id"])] = {
                     "label": label,
                     "model": servo["model"],
