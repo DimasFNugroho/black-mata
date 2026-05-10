@@ -189,9 +189,9 @@
     return rows.map(row => {
       let info = row.info;
       if (row.group === "servo") {
-        const normalized = row.id.replace(/_/g, " ").toLowerCase();
+        const nodeKey = row.id.replace(/_/g, "").toLowerCase();
         const match = Object.entries(idByLabel).find(([lbl]) =>
-          lbl.replace(/_/g, " ").toLowerCase() === normalized);
+          lbl.replace(/_/g, "").toLowerCase().startsWith(nodeKey));
         if (match) info = "ID: " + match[1] + " · " + info;
       }
       const label = row.label.replace("Bluetooth Dongle", "Bluetooth\nDongle")
