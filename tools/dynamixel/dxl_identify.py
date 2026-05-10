@@ -152,8 +152,8 @@ def identify_servo(ser, servo, nudge_deg, speed, remaining_labels):
 
 def main():
     p = port_arg("Identify Dynamixel servos by nudging them one at a time")
-    p.add_argument("--output", "-o", default="servo_map.json",
-                   help="Output file path (default: servo_map.json)")
+    p.add_argument("--output", "-o", default="docs/wiring/servo_map.json",
+                   help="Output file path (default: docs/wiring/servo_map.json)")
     p.add_argument("--nudge", "-n", type=float, default=NUDGE_DEG_DEFAULT,
                    help="Degrees to nudge each servo (default: {})".format(NUDGE_DEG_DEFAULT))
     p.add_argument("--speed", "-s", type=int, default=SPEED_DEFAULT,
