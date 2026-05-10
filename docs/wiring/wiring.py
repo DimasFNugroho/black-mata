@@ -11,8 +11,11 @@ Usage:
 """
 
 import csv
+import io
 import json
 import os
+import pydoc
+import sys
 from collections import defaultdict
 
 DIR = os.path.dirname(os.path.abspath(__file__))
@@ -106,6 +109,21 @@ def print_table(nodes, edges):
         print(fmt.format(from_label, to_label, e["voltage"], e["current"], e["protocol"]))
 
 
+def print_component_table(nodes):
+    col_label = max(len("Component"), max(len(n["label"]) for n in nodes))
+    col_group = max(len("Group"),     max(len(n["group"]) for n in nodes))
+    col_info  = max(len("Info"),      max(len(n["info"])  for n in nodes))
+
+    fmt = "  {{:<{}}}  {{:<{}}}  {{:<{}}}".format(col_label, col_group, col_info)
+    sep = "  {}  {}  {}".format("-" * col_label, "-" * col_group, "-" * col_info)
+
+    print("\n=== Component Info ===\n")
+    print(fmt.format("Component", "Group", "Info"))
+    print(sep)
+    for n in nodes:
+        print(fmt.format(n["label"], n["group"], n["info"]))
+
+
 def main():
     nodes = load_csv("nodes.csv")
     edges = load_csv("edges.csv")
@@ -113,10 +131,25 @@ def main():
 
     if servo_map:
         nodes = apply_servo_map(nodes, servo_map)
-        print("(servo_map.json loaded — servo IDs applied)")
 
+    # Capture output then page it if running in a terminal
+    buf = io.StringIO()
+    sys_stdout = sys.stdout
+    sys.stdout = buf
+
+    if servo_map:
+        print("(servo_map.json loaded — servo IDs applied)\n")
     print_tree(nodes, edges)
     print_table(nodes, edges)
+    print_component_table(nodes)
+
+    sys.stdout = sys_stdout
+    output = buf.getvalue()
+
+    if sys.stdout.isatty():
+        pydoc.pager(output)
+    else:
+        print(output, end="")
 
 
 if __name__ == "__main__":
