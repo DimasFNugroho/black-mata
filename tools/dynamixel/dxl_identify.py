@@ -15,9 +15,12 @@ Usage:
 """
 
 import json
+import os
 import sys
 import time
 from dxl_common import open_port, send_cmd, read_until_ok, read_line, port_arg
+
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 NUDGE_DEG_DEFAULT = 10.0
 SPEED_DEFAULT = 150
@@ -152,7 +155,8 @@ def identify_servo(ser, servo, nudge_deg, speed, remaining_labels):
 
 def main():
     p = port_arg("Identify Dynamixel servos by nudging them one at a time")
-    p.add_argument("--output", "-o", default="docs/wiring/servo_map.json",
+    default_output = os.path.join(REPO_ROOT, "docs", "wiring", "servo_map.json")
+    p.add_argument("--output", "-o", default=default_output,
                    help="Output file path (default: docs/wiring/servo_map.json)")
     p.add_argument("--nudge", "-n", type=float, default=NUDGE_DEG_DEFAULT,
                    help="Degrees to nudge each servo (default: {})".format(NUDGE_DEG_DEFAULT))
