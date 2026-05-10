@@ -120,6 +120,9 @@ def identify_servo(ser, servo, nudge_deg, speed, remaining_labels):
     print("\n--- Servo ID {} (model: {}, current mode: {}) ---".format(
         servo_id, servo["model"], original_mode))
 
+    print("  Watch the robot... nudging in 2 seconds.")
+    time.sleep(2)
+
     # Switch to JOINT mode if needed
     switched = False
     if original_mode == "WHEEL":
@@ -143,6 +146,7 @@ def identify_servo(ser, servo, nudge_deg, speed, remaining_labels):
         set_mode(ser, servo_id, "WHEEL")
         time.sleep(0.3)
 
+    # Now ask which joint moved
     return ask_label(remaining_labels)
 
 
