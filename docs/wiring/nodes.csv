@@ -1,0 +1,18 @@
+id,label,group,info
+lipo,LiPo Battery,power,3S · 11.1V nominal · 5000mAh
+adapter,AC Adapter,power,12V · 3A · wall socket
+rail12v,12V Rail,rail,Parallel connection from LiPo and AC adapter
+ubec,UBEC,power,12V in · 5V 5A out
+jetson,Jetson Nano,compute,5V · barrel jack · USB host
+opencm,OpenCM 9.04,compute,5V via USB (logic) · 12V via rail (servo power) · Dynamixel TTL bus controller
+camera,Camera,peripheral,USB 2.0 High Speed · UVC · 480Mbps
+wifi,WiFi Dongle,peripheral,USB 2.0 High Speed · rtl8192eu · 480Mbps
+bt,Bluetooth Dongle,peripheral,USB 2.0 Full Speed · 12Mbps
+fl_steer,FL Steering AX-12A,servo,12V · Dynamixel TTL
+fl_wheel,FL Wheel AX-12A,servo,12V · Dynamixel TTL
+fr_steer,FR Steering AX-12A,servo,12V · Dynamixel TTL
+fr_wheel,FR Wheel AX-12A,servo,12V · Dynamixel TTL
+rl_steer,RL Steering AX-12A,servo,12V · Dynamixel TTL
+rl_wheel,RL Wheel AX-12A,servo,12V · Dynamixel TTL
+rr_steer,RR Steering AX-12A,servo,12V · Dynamixel TTL
+rr_wheel,RR Wheel AX-12A,servo,12V · Dynamixel TTL

@@ -1,0 +1,18 @@
+from,to,voltage,current,protocol
+lipo,rail12v,12V,5000mAh,
+adapter,rail12v,12V,3A,
+rail12v,ubec,12V,,
+ubec,jetson,5V,5A,
+jetson,opencm,5V,,USB 2.0 Full Speed 12Mbps
+jetson,camera,5V,,USB 2.0 High Speed 480Mbps
+jetson,wifi,5V,,USB 2.0 High Speed 480Mbps
+jetson,bt,5V,,USB 2.0 Full Speed 12Mbps
+rail12v,opencm,12V,,
+opencm,fl_steer,12V,,Dynamixel TTL 1Mbps
+opencm,fr_steer,12V,,Dynamixel TTL 1Mbps
+opencm,rl_steer,12V,,Dynamixel TTL 1Mbps
+opencm,rr_steer,12V,,Dynamixel TTL 1Mbps
+fl_steer,fl_wheel,,,Dynamixel TTL daisy-chain
+fr_steer,fr_wheel,,,Dynamixel TTL daisy-chain
+rl_steer,rl_wheel,,,Dynamixel TTL daisy-chain
+rr_steer,rr_wheel,,,Dynamixel TTL daisy-chain

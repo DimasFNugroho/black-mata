@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Black-Mata Wiring Diagram</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: monospace;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    header {
+      padding: 12px 20px;
+      background: #16213e;
+      border-bottom: 1px solid #0f3460;
+      font-size: 16px;
+      font-weight: bold;
+      color: #e94560;
+    }
+
+    #main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    #cy {
+      flex: 1;
+      background: #1a1a2e;
+    }
+
+    #panel {
+      width: 280px;
+      background: #16213e;
+      border-left: 1px solid #0f3460;
+      padding: 20px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    #panel h2 {
+      font-size: 13px;
+      color: #e94560;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    #panel-name {
+      font-size: 15px;
+      font-weight: bold;
+      color: #ffffff;
+    }
+
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .field-group label {
+      font-size: 10px;
+      color: #e94560;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .field-value {
+      font-size: 12px;
+      color: #e0e0e0;
+      padding: 4px 0;
+      line-height: 1.6;
+    }
+
+    .field-value.empty {
+      color: #555577;
+      font-style: italic;
+    }
+
+    #panel-hint {
+      font-size: 11px;
+      color: #555577;
+      margin-top: auto;
+      padding-top: 12px;
+      border-top: 1px solid #0f3460;
+      line-height: 1.6;
+    }
+
+    #no-selection {
+      font-size: 13px;
+      color: #555577;
+    }
+
+    #edit-form { display: none; flex-direction: column; gap: 10px; }
+  </style>
+</head>
+<body>
+
+<header>Black-Mata — Electrical System Overview</header>
+
+<div id="main">
+  <div id="cy"></div>
+  <div id="panel">
+    <h2>Details</h2>
+
+    <div id="no-selection">Click any component or wire to inspect and edit.</div>
+
+    <div id="edit-form">
+      <div id="panel-name">—</div>
+
+      <div id="field-info-group">
+        <div class="field-group">
+          <label>Info</label>
+          <div id="field-info" class="field-value">—</div>
+        </div>
+      </div>
+
+      <div id="field-wire-group">
+        <div class="field-group">
+          <label>Voltage</label>
+          <div id="field-wire-voltage" class="field-value">—</div>
+        </div>
+        <div class="field-group">
+          <label>Current</label>
+          <div id="field-wire-current" class="field-value">—</div>
+        </div>
+        <div class="field-group">
+          <label>Protocol</label>
+          <div id="field-wire-proto" class="field-value">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="panel-hint">
+      Drag to pan · Scroll to zoom<br>
+      Click any component or wire to inspect
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Node positions ───────────────────────────────────────────────────────────
+
+  const positions = {
+    lipo:     { x: 100, y: 80  },
+    adapter:  { x: 280, y: 80  },
+    rail12v:  { x: 190, y: 200 },
+    ubec:     { x: 190, y: 320 },
+    jetson:   { x: 190, y: 440 },
+    opencm:   { x: 420, y: 440 },
+    camera:   { x: 60,  y: 560 },
+    wifi:     { x: 190, y: 560 },
+    bt:       { x: 320, y: 560 },
+    fl_steer: { x: 560, y: 200 },
+    fl_wheel: { x: 680, y: 200 },
+    fr_steer: { x: 560, y: 310 },
+    fr_wheel: { x: 680, y: 310 },
+    rl_steer: { x: 560, y: 420 },
+    rl_wheel: { x: 680, y: 420 },
+    rr_steer: { x: 560, y: 530 },
+    rr_wheel: { x: 680, y: 530 },
+  };
+
+  // ── CSV parser ───────────────────────────────────────────────────────────────
+
+  function parseCSV(text) {
+    const [headerLine, ...lines] = text.trim().split("\n");
+    const headers = headerLine.split(",");
+    return lines.map(line => {
+      const values = line.split(",");
+      return Object.fromEntries(headers.map((h, i) => [h.trim(), (values[i] || "").trim()]));
+    });
+  }
+
+  // ── Build Cytoscape elements from CSV rows ───────────────────────────────────
+
+  function buildNodes(rows, servoMap) {
+    const idByLabel = {};
+    Object.entries(servoMap).forEach(([id, v]) => { idByLabel[v.label] = id; });
+
+    return rows.map(row => {
+      let info = row.info;
+      if (row.group === "servo") {
+        const normalized = row.id.replace(/_/g, " ").toLowerCase();
+        const match = Object.entries(idByLabel).find(([lbl]) =>
+          lbl.replace(/_/g, " ").toLowerCase() === normalized);
+        if (match) info = "ID: " + match[1] + " · " + info;
+      }
+      const label = row.label.replace("Bluetooth Dongle", "Bluetooth\nDongle")
+                             .replace(" AX-12A", "\nAX-12A");
+      return { data: { id: row.id, label, group: row.group, info } };
+    });
+  }
+
+  function buildEdges(rows) {
+    return rows.map((row, i) => {
+      const parts = [row.voltage, row.current, row.protocol].filter(Boolean);
+      const label = parts.join("\n");
+      return { data: { id: "e" + i, source: row.from, target: row.to, label, proto: row.protocol } };
+    });
+  }
+
+  // ── Load CSVs then init Cytoscape ────────────────────────────────────────────
+
+  async function loadData() {
+    const [nodesCsv, edgesCsv, servoMapRaw] = await Promise.all([
+      fetch("nodes.csv").then(r => r.text()),
+      fetch("edges.csv").then(r => r.text()),
+      fetch("servo_map.json").then(r => r.json()).catch(() => ({})),
+    ]);
+    return {
+      nodes: buildNodes(parseCSV(nodesCsv), servoMapRaw),
+      edges: buildEdges(parseCSV(edgesCsv)),
+    };
+  }
+
+  loadData().then(({ nodes, edges }) => { initCy(nodes, edges); });
+
+  function initCy(nodes, edges) {
+
+  // ── Cytoscape ───────────────────────────────────────────────────────────────
+
+  const groupColors = {
+    power:      "#e94560",
+    rail:       "#f5a623",
+    compute:    "#4a9eff",
+    peripheral: "#7ed321",
+    servo:      "#9b59b6",
+  };
+
+  const cy = cytoscape({
+    container: document.getElementById("cy"),
+    elements: { nodes, edges },
+    style: [
+      {
+        selector: "node",
+        style: {
+          "label": "data(label)",
+          "text-valign": "center",
+          "text-halign": "center",
+          "text-wrap": "wrap",
+          "font-family": "monospace",
+          "font-size": "11px",
+          "color": "#ffffff",
+          "background-color": ele => groupColors[ele.data("group")] || "#555",
+          "border-width": 2,
+          "border-color": "#ffffff22",
+          "width": 90,
+          "height": 50,
+          "shape": "roundrectangle",
+        }
+      },
+      {
+        selector: "node:selected",
+        style: { "border-color": "#ffffff", "border-width": 3 }
+      },
+      {
+        selector: "edge",
+        style: {
+          "label": "data(label)",
+          "font-family": "monospace",
+          "font-size": "9px",
+          "color": "#aaaacc",
+          "text-background-color": "#1a1a2e",
+          "text-background-opacity": 1,
+          "text-background-padding": "2px",
+          "text-wrap": "wrap",
+          "curve-style": "bezier",
+          "target-arrow-shape": "triangle",
+          "arrow-scale": 0.8,
+          "line-color": "#445566",
+          "target-arrow-color": "#445566",
+          "width": 1.5,
+        }
+      },
+      {
+        selector: "edge:selected",
+        style: {
+          "line-color": "#e94560",
+          "target-arrow-color": "#e94560",
+          "width": 2.5,
+        }
+      },
+    ],
+    layout: { name: "preset", positions },
+    userZoomingEnabled: true,
+    userPanningEnabled: true,
+    boxSelectionEnabled: false,
+  });
+
+  // ── Panel logic ─────────────────────────────────────────────────────────────
+
+  const elNoSel     = document.getElementById("no-selection");
+  const elEditForm  = document.getElementById("edit-form");
+  const elPanelName = document.getElementById("panel-name");
+  const elInfo      = document.getElementById("field-info");
+  const elInfoGroup = document.getElementById("field-info-group");
+  const elWireGroup = document.getElementById("field-wire-group");
+  const elVoltage   = document.getElementById("field-wire-voltage");
+  const elCurrent   = document.getElementById("field-wire-current");
+  const elProto     = document.getElementById("field-wire-proto");
+
+  function setText(el, value) {
+    el.textContent = value || "—";
+    el.classList.toggle("empty", !value);
+  }
+
+  function showPanel(el) {
+    const isNode = el.isNode();
+    elNoSel.style.display = "none";
+    elEditForm.style.display = "flex";
+
+    elPanelName.textContent = isNode
+      ? el.data("label").replace(/\n/g, " ")
+      : el.data("source") + " → " + el.data("target");
+
+    if (isNode) {
+      elInfoGroup.style.display = "flex";
+      elWireGroup.style.display = "none";
+      setText(elInfo, el.data("info"));
+    } else {
+      elInfoGroup.style.display = "none";
+      elWireGroup.style.display = "flex";
+      const parts = (el.data("label") || "").split("\n");
+      setText(elVoltage, parts[0]);
+      setText(elCurrent, parts[1]);
+      setText(elProto,   parts[2]);
+    }
+  }
+
+  function clearPanel() {
+    elNoSel.style.display = "block";
+    elEditForm.style.display = "none";
+  }
+
+  cy.on("tap", "node, edge", function(evt) { showPanel(evt.target); });
+  cy.on("tap", function(evt) { if (evt.target === cy) clearPanel(); });
+
+  cy.fit(undefined, 40);
+  } // end initCy
+</script>
+</body>
+</html>
