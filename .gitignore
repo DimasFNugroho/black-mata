@@ -13,3 +13,4 @@ firmware/*/build/
 # Local development notes (not for repo)
 PLAN.md
 CLAUDE.md
+tools/dynamixel/servo_map.json
