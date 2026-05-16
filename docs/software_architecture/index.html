@@ -135,6 +135,54 @@
     font-size: 11px; padding: 2px 8px; border-radius: 4px;
     background: var(--bg); border: 1px solid var(--border); color: var(--muted);
   }
+
+  /* ── V1 Status table ──────────────────────────────────────────── */
+  .status-section {
+    margin-bottom: 48px;
+  }
+  .status-layer {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .status-layer-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: #0d1117;
+  }
+  .status-layer-title {
+    font-size: 13px; font-weight: 700; color: var(--text);
+  }
+  .status-layer-path {
+    font-size: 11px; color: var(--muted); font-family: 'SFMono-Regular', Consolas, monospace;
+  }
+  .status-layer-pill {
+    margin-left: auto;
+    font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 10px;
+  }
+  .pill-done    { background: #0f2a18; color: var(--green);  border: 1px solid #1f4a28; }
+  .pill-partial { background: #2a2000; color: var(--yellow); border: 1px solid #4a3800; }
+  .pill-pending { background: #2a0f0f; color: var(--red);    border: 1px solid #4a1f1f; }
+
+  .status-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 10px 20px;
+    border-bottom: 1px solid #21262d;
+    font-size: 13px;
+  }
+  .status-row:last-child { border-bottom: none; }
+  .status-icon { flex-shrink: 0; margin-top: 1px; font-size: 14px; width: 18px; text-align: center; }
+  .status-item-text { flex: 1; color: var(--text); }
+  .status-item-text.pending { color: var(--muted); }
+  .status-module {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 11px; color: var(--muted);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
 </style>
 </head>
 <body>
@@ -157,7 +205,7 @@
       <span class="badge">C4 Model</span>
       <span class="badge">UML Sequence Diagrams</span>
       <span class="badge">Deployment Diagram</span>
-      <span class="badge">6 ADRs</span>
+      <span class="badge">8 ADRs</span>
     </div>
   </div>
 
@@ -172,13 +220,184 @@
     text command protocol over USB Serial.
   </div>
 
-  <h2 class="section-heading">Main Features — v1</h2>
-  <div class="features-grid" style="margin-bottom: 48px;">
-    <div class="feature-card"><div class="feature-num">FEATURE 1</div><div class="feature-name">Ackermann Drive (4WS + 4WD)</div></div>
-    <div class="feature-card"><div class="feature-num">FEATURE 2</div><div class="feature-name">Camera Live Stream</div></div>
-    <div class="feature-card"><div class="feature-num">FEATURE 3</div><div class="feature-name">Remote Connection &amp; Communication</div></div>
-    <div class="feature-card"><div class="feature-num">FEATURE 4</div><div class="feature-name">Gamepad / Keyboard Control</div></div>
-    <div class="feature-card"><div class="feature-num">FEATURE 5</div><div class="feature-name">Robot Dashboard UI</div></div>
+  <h2 class="section-heading">V1 Implementation Status</h2>
+  <div class="status-section">
+
+    <!-- Firmware -->
+    <div class="status-layer">
+      <div class="status-layer-header">
+        <div class="status-layer-title">Firmware — OpenCM9.04</div>
+        <div class="status-layer-path">firmware/dxl_commander/</div>
+        <span class="status-layer-pill pill-done">Complete</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">✅</span>
+        <span class="status-item-text">Binary CMD frame receiver &amp; STATE frame transmitter (105 / 202 bytes, CRC-16 CCITT)</span>
+        <span class="status-module">dxl_commander.ino</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">✅</span>
+        <span class="status-item-text">Dual-mode serial — text diagnostic commands + binary frames on the same USB port</span>
+        <span class="status-module">dxl_commander.ino</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">✅</span>
+        <span class="status-item-text">JOINT / WHEEL mode switching per servo; Dynamixel Protocol 1.0 at 1 Mbaud</span>
+        <span class="status-module">dxl_commander.ino</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">✅</span>
+        <span class="status-item-text">Firmware watchdog — zeros all drive speeds if no frame received within 500 ms</span>
+        <span class="status-module">dxl_commander.ino</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">✅</span>
+        <span class="status-item-text">Round-robin temperature &amp; voltage polling; correct AX-12A Present Speed via address 38</span>
+        <span class="status-module">dxl_commander.ino</span>
+      </div>
+    </div>
+
+    <!-- Robot Agent -->
+    <div class="status-layer">
+      <div class="status-layer-header">
+        <div class="status-layer-title">Robot Agent — Jetson</div>
+        <div class="status-layer-path">software/robot/</div>
+        <span class="status-layer-pill pill-done">Complete</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">✅</span>
+        <span class="status-item-text">Serial driver — binary frame encode/decode, background recv thread, CRC validation</span>
+        <span class="status-module">serial_driver.py</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">✅</span>
+        <span class="status-item-text">Ackermann kinematics — 4WS counter-phase geometry, per-wheel speed differential</span>
+        <span class="status-module">ackermann.py</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">✅</span>
+        <span class="status-item-text">E-stop handler — WebSocket silence detection (500 ms timeout), zero-speed frame dispatch</span>
+        <span class="status-module">estop.py</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">✅</span>
+        <span class="status-item-text">Camera generator — V4L2 capture, MJPEG encode, background thread</span>
+        <span class="status-module">camera.py</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">✅</span>
+        <span class="status-item-text">FastAPI server — WebSocket <code>/ws</code>, MJPEG <code>/stream</code>, JSON <code>/status</code></span>
+        <span class="status-module">main.py</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">✅</span>
+        <span class="status-item-text">Command translator — gamepad axes [−1…1] → physical (v m/s, δ deg)</span>
+        <span class="status-module">main.py</span>
+      </div>
+    </div>
+
+    <!-- Operator Dashboard -->
+    <div class="status-layer">
+      <div class="status-layer-header">
+        <div class="status-layer-title">Operator Dashboard</div>
+        <div class="status-layer-path">docs/dashboard/</div>
+        <span class="status-layer-pill pill-pending">Not started</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">⬜</span>
+        <span class="status-item-text pending">Single-page HTML dashboard (Vanilla JS, no build step)</span>
+        <span class="status-module">index.html</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">⬜</span>
+        <span class="status-item-text pending">Gamepad API polling at 50 Hz → WebSocket drive commands</span>
+        <span class="status-module">index.html</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">⬜</span>
+        <span class="status-item-text pending">Keyboard fallback control (arrow keys / WASD)</span>
+        <span class="status-module">index.html</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">⬜</span>
+        <span class="status-item-text pending">Live MJPEG camera feed (<code>&lt;img src="/stream"&gt;</code>)</span>
+        <span class="status-module">index.html</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">⬜</span>
+        <span class="status-item-text pending">Servo status panel — voltages, temperatures, positions, modes</span>
+        <span class="status-module">index.html</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">⬜</span>
+        <span class="status-item-text pending">E-stop indicator and manual E-stop button</span>
+        <span class="status-module">index.html</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">⬜</span>
+        <span class="status-item-text pending">WebSocket reconnect on connection loss</span>
+        <span class="status-module">index.html</span>
+      </div>
+    </div>
+
+    <!-- Infrastructure -->
+    <div class="status-layer">
+      <div class="status-layer-header">
+        <div class="status-layer-title">Infrastructure &amp; Deployment</div>
+        <div class="status-layer-path">tools/ · scripts/</div>
+        <span class="status-layer-pill pill-partial">Partial</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">✅</span>
+        <span class="status-item-text">Remote firmware flash toolchain — compile x86, flash OpenCM9.04 over SSH</span>
+        <span class="status-module">tools/remote_update/</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">✅</span>
+        <span class="status-item-text">Serial monitor — stream OpenCM debug output from Jetson to x86 terminal</span>
+        <span class="status-module">tools/monitor/</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">⬜</span>
+        <span class="status-item-text pending">Tailscale VPN setup — stable robot addressing and NAT traversal (manual external step)</span>
+        <span class="status-module">external</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">⬜</span>
+        <span class="status-item-text pending">Systemd service units — auto-start Robot Agent on Jetson boot</span>
+        <span class="status-module">scripts/</span>
+      </div>
+    </div>
+
+    <!-- Calibration tools -->
+    <div class="status-layer">
+      <div class="status-layer-header">
+        <div class="status-layer-title">Calibration &amp; Commissioning Tools</div>
+        <div class="status-layer-path">tools/ackermann_ui/ · tools/dynamixel/</div>
+        <span class="status-layer-pill pill-done">Complete</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">✅</span>
+        <span class="status-item-text">Ackermann UI — browser-based parameter tuning, bird's-eye view, servo state readback</span>
+        <span class="status-module">tools/ackermann_ui/</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">✅</span>
+        <span class="status-item-text">Servo ID identification — nudge each servo and map DXL ID to wheel role</span>
+        <span class="status-module">tools/dynamixel/dxl_identify.py</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">✅</span>
+        <span class="status-item-text">Steer centre calibration — torque off, physically align, record neutral offsets</span>
+        <span class="status-module">tools/ackermann_ui/</span>
+      </div>
+      <div class="status-row">
+        <span class="status-icon">✅</span>
+        <span class="status-item-text">Trapezoidal steering profile — smooth motion on large angle commands; drag vs. click detection</span>
+        <span class="status-module">tools/ackermann_ui/</span>
+      </div>
+    </div>
+
   </div>
 
   <h2 class="section-heading">Architecture Documents</h2>
