@@ -1,0 +1,6 @@
+# Robot Agent (Jetson Nano)
+fastapi>=0.111
+uvicorn[standard]>=0.29
+pyserial>=3.5
+opencv-python-headless>=4.9
+websockets>=12.0

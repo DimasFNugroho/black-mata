@@ -97,6 +97,7 @@ async def _shutdown():
 async def ws_drive(websocket: WebSocket):
     await websocket.accept()
     print('[WS] Operator connected')
+    estop.arm()
     try:
         while True:
             raw = await websocket.receive_text()

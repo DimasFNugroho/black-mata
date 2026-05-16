@@ -49,6 +49,7 @@ class EStopWatchdog:
 
         self._last_cmd  = time.monotonic()  # updated by notify()
         self._active    = False             # True while e-stop is in effect
+        self._armed     = False             # only True after first WS connect
         self._lock      = threading.Lock()
 
         self._running   = False
@@ -73,12 +74,22 @@ class EStopWatchdog:
             self._thread.join(timeout=2.0)
             self._thread = None
 
+    def arm(self) -> None:
+        """
+        Arm the watchdog (call when the first WebSocket operator connects).
+        Until armed, the watchdog does not fire on silence.
+        """
+        with self._lock:
+            self._armed    = True
+            self._last_cmd = time.monotonic()
+
     def notify(self) -> None:
         """
         Call this on every valid incoming drive command.
         Clears the e-stop state if it was active (link recovered).
         """
         with self._lock:
+            self._armed    = True
             self._last_cmd = time.monotonic()
             if self._active:
                 self._active = False
@@ -117,7 +128,7 @@ class EStopWatchdog:
                 elapsed = time.monotonic() - self._last_cmd
                 already = self._active
 
-            if elapsed > self._timeout and not already:
+            if self._armed and elapsed > self._timeout and not already:
                 with self._lock:
                     self._active = True
                 print(f'[EStop] Watchdog fired after {elapsed:.2f}s silence')
