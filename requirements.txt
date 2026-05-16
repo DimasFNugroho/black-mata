@@ -3,5 +3,6 @@ dataclasses>=0.6        # stdlib in 3.7+, backport needed for 3.6
 fastapi>=0.63,<0.84     # 0.84+ requires Python 3.7+
 uvicorn>=0.17,<0.18     # last version supporting Python 3.6
 pyserial>=3.5
-opencv-python-headless>=4.5,<4.6  # 4.6+ dropped Python 3.6 wheels for ARM
+# opencv: use system install (JetPack provides it via apt, not pip)
+# On Jetson: sudo apt install python3-opencv
 websockets>=9.0,<10.0   # 10.0+ requires Python 3.7+
