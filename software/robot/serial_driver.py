@@ -164,18 +164,35 @@ class StateFrame:
 
 # ── Frame builders / parsers ───────────────────────────────────────────────────
 
-def build_cmd_frame(targets: list, seq: int, timestamp_ms: int = None) -> bytes:
+def build_cmd_frame(targets: list, seq: int, servo_ids: list = None,
+                    timestamp_ms: int = None) -> bytes:
     """
     Build a 105-byte CMD frame.
-    targets : list of 8 ServoCmd objects (index 0 = servo ID 1)
-    seq     : rolling uint8 (0–255)
+    targets   : list of 8 ServoCmd objects in wheel-role order
+                [FL_steer, FR_steer, RL_steer, RR_steer, FL_drive, FR_drive, RL_drive, RR_drive]
+    seq       : rolling uint8 (0–255)
+    servo_ids : physical DXL IDs for each role (same order as targets).
+                Default [1,2,3,4,5,6,7,8] — slot i gets targets[i].
+                If your wiring differs (e.g. RL_steer is ID 5), set accordingly.
     Returns the complete frame including CRC.
     """
     if len(targets) != NUM_SERVOS:
-        raise ValueError(f'Expected {NUM_SERVOS} servo targets, got {len(targets)}')
+        raise ValueError('Expected {} servo targets, got {}'.format(NUM_SERVOS, len(targets)))
+
+    if servo_ids is None:
+        servo_ids = list(range(1, NUM_SERVOS + 1))
 
     if timestamp_ms is None:
         timestamp_ms = int(time.monotonic() * 1000) & 0xFFFFFFFF
+
+    # Slots 0-7 correspond to physical servo IDs 1-8.
+    # Place each target in the slot matching its physical ID.
+    slots = [ServoCmd(mode=0, enable_torque=0, target=0)] * NUM_SERVOS
+    for i, cmd in enumerate(targets):
+        if i < len(servo_ids):
+            sid = servo_ids[i]
+            if 1 <= sid <= NUM_SERVOS:
+                slots[sid - 1] = cmd
 
     buf = bytearray(CMD_FRAME_SIZE)
     buf[0] = FRAME_START
@@ -183,7 +200,7 @@ def build_cmd_frame(targets: list, seq: int, timestamp_ms: int = None) -> bytes:
     buf[2] = seq & 0xFF
     struct.pack_into('<I', buf, CMD_OFF_TS, timestamp_ms & 0xFFFFFFFF)
 
-    for i, cmd in enumerate(targets):
+    for i, cmd in enumerate(slots):
         off = CMD_OFF_SERVOS + i * CMD_SERVO_STRIDE
         buf[off]     = cmd.mode & 0x01
         buf[off + 1] = cmd.enable_torque & 0x01
@@ -254,23 +271,26 @@ class SerialDriver:
     # ── Connection ─────────────────────────────────────────────────────────────
 
     def connect(self) -> None:
-        """Open the serial port without asserting DTR, so the OpenCM does not reset."""
+        """Open the serial port. DTR assertion resets the OpenCM for a clean start."""
         while True:
             try:
                 ser = serial.Serial()
                 ser.port     = self._port
                 ser.baudrate = self._baud
                 ser.timeout  = RECV_TIMEOUT
-                ser.dtr      = False   # must be set before open() to suppress reset
-                ser.rts      = False
                 ser.open()
-                ser.reset_input_buffer()
+                # Brief settle for USB enumeration, then drain stale bytes.
+                time.sleep(0.2)
+                ser.timeout = 0.05
+                while ser.read(256):
+                    pass
+                ser.timeout = RECV_TIMEOUT
                 with self._ser_lock:
                     self._ser = ser
-                print(f'[SerialDriver] Connected: {self._port} @ {self._baud} (DTR suppressed)')
+                print('[SerialDriver] Connected: {} @ {}'.format(self._port, self._baud))
                 return
             except serial.SerialException as e:
-                print(f'[SerialDriver] {e} — retrying in {RECONNECT_DELAY}s')
+                print('[SerialDriver] {} — retrying in {}s'.format(e, RECONNECT_DELAY))
                 time.sleep(RECONNECT_DELAY)
 
     def close(self) -> None:
@@ -344,17 +364,18 @@ class SerialDriver:
 
     # ── Transmit ───────────────────────────────────────────────────────────────
 
-    def send_frame(self, targets: list) -> None:
+    def send_frame(self, targets: list, servo_ids: list = None) -> None:
         """
         Build and transmit a CMD frame.
-        targets: list of 8 ServoCmd objects (index 0 = servo ID 1).
+        targets   : list of 8 ServoCmd objects in wheel-role order.
+        servo_ids : physical DXL IDs for each role (see build_cmd_frame).
         Thread-safe; fire-and-forget.
         """
         with self._seq_lock:
             seq = self._seq
             self._seq = (self._seq + 1) & 0xFF
 
-        frame = build_cmd_frame(targets, seq)
+        frame = build_cmd_frame(targets, seq, servo_ids)
 
         with self._ser_lock:
             if self._ser and self._ser.is_open:
@@ -364,11 +385,8 @@ class SerialDriver:
                     print(f'[SerialDriver] send_frame error: {e}')
 
     def send_estop(self) -> None:
-        """Send a zero-speed frame for all servos immediately."""
-        targets = (
-            [ServoCmd.neutral_joint()] * 4 +   # IDs 1–4: steering, hold position
-            [ServoCmd.stop_wheel()]    * 4      # IDs 5–8: wheels, zero speed
-        )
+        """Disable torque on all servos — robot goes limp (safe, no forced movement)."""
+        targets = [ServoCmd.torque_off()] * NUM_SERVOS
         self.send_frame(targets)
 
     # ── State access ───────────────────────────────────────────────────────────

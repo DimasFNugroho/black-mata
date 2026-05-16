@@ -258,13 +258,10 @@ static void refreshServoState() {
     int32_t pos = dxl.readControlTableItem(ControlTableItem::PRESENT_POSITION, id);
     int32_t spd = dxl.readControlTableItem(ControlTableItem::PRESENT_VELOCITY, id);
 
-    if (pos < 0 || spd < 0) {
-      servoAvail[i] = false;
-      continue;
-    }
-
-    servoPos[i]   = (uint16_t)pos;
-    servoSpeed[i] = (uint16_t)(spd & 0x7FFF);
+    // On a single read failure, keep last known values — do NOT mark unavailable.
+    // A transient bus hiccup should not cause the next CMD frame to skip this servo.
+    if (pos >= 0) servoPos[i]   = (uint16_t)pos;
+    if (spd >= 0) servoSpeed[i] = (uint16_t)(spd & 0x7FFF);
   }
 
   // Round-robin: one servo's temp+volt per frame.

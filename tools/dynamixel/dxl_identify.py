@@ -25,15 +25,17 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 NUDGE_DEG_DEFAULT = 10.0
 SPEED_DEFAULT = 150
 
-JOINT_LABELS = [
-    "FL_steering",
-    "FL_wheel",
-    "FR_steering",
-    "FR_wheel",
-    "RL_steering",
-    "RL_wheel",
-    "RR_steering",
-    "RR_wheel",
+# Order matches AckermannConfig.servo_ids:
+# [FL_steer, FR_steer, RL_steer, RR_steer, FL_drive, FR_drive, RL_drive, RR_drive]
+ROLE_LABELS = [
+    "FL_steer",   # servo_ids[0]
+    "FR_steer",   # servo_ids[1]
+    "RL_steer",   # servo_ids[2]
+    "RR_steer",   # servo_ids[3]
+    "FL_drive",   # servo_ids[4]
+    "FR_drive",   # servo_ids[5]
+    "RL_drive",   # servo_ids[6]
+    "RR_drive",   # servo_ids[7]
 ]
 
 
@@ -176,7 +178,7 @@ def main():
 
     servo_map = {}
     skipped = []
-    remaining_labels = list(JOINT_LABELS)
+    remaining_labels = list(ROLE_LABELS)
 
     try:
         for servo in servos:
@@ -206,8 +208,16 @@ def main():
         print("\nNo mappings recorded. Nothing saved.")
         sys.exit(0)
 
+    # Build servo_ids array: position in ROLE_LABELS → physical DXL ID
+    label_to_id = {info["label"]: int(sid) for sid, info in servo_map.items()}
+    servo_ids = [label_to_id.get(role, 0) for role in ROLE_LABELS]
+
+    output_data = {
+        "servo_map": servo_map,
+        "servo_ids": servo_ids,
+    }
     with open(args.output, "w") as f:
-        json.dump(servo_map, f, indent=2)
+        json.dump(output_data, f, indent=2)
 
     print("\n==============================================")
     print(" Servo Map")
@@ -216,6 +226,22 @@ def main():
         print("  ID {:>3s} → {}".format(sid, info["label"]))
     if skipped:
         print("  Skipped IDs: {}".format(skipped))
+
+    print("\n==============================================")
+    print(" servo_ids array for AckermannConfig / UI")
+    print("==============================================")
+    print(" Role order: FL_steer, FR_steer, RL_steer, RR_steer,")
+    print("             FL_drive, FR_drive, RL_drive, RR_drive")
+    print()
+    for i, role in enumerate(ROLE_LABELS):
+        sid = servo_ids[i]
+        status = "ID {}".format(sid) if sid else "NOT MAPPED"
+        print("  [{}] {:10s} → {}".format(i, role, status))
+    print()
+    print(" servo_ids = {}".format(servo_ids))
+    print()
+    print(" Paste into the UI Config panel or AckermannConfig:")
+    print('   servo_ids: {}'.format(servo_ids))
     print("\nSaved to: {}".format(args.output))
 
 

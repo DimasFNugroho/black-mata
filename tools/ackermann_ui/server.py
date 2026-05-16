@@ -23,34 +23,33 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from software.robot.serial_driver import SerialDriver
+from software.robot.serial_driver import SerialDriver, ServoCmd, NUM_SERVOS
 from software.robot.ackermann import Ackermann, AckermannConfig
 
 CONFIG_PATH = Path(__file__).parent / 'ackermann_config.json'
 
-_driver = None        # SerialDriver, set in main()
-_sending = False      # True while keep-alive loop is active
-
-# Last commanded state — updated by /drive, read by keep-alive thread
-_current_steer = 0.0
-_current_speed = 0.0
-_current_cfg   = None  # AckermannConfig, set on first /drive
-_cmd_lock      = threading.Lock()
+_driver         = None   # SerialDriver, set in main()
+_current_cfg    = None   # last AckermannConfig used for a drive command
+_last_drive_t   = 0.0   # monotonic time of last /drive POST
 
 
 # ── Ackermann helpers ──────────────────────────────────────────────────────────
 
 def _build_cfg(c):
+    def _f(key, default): return float(c.get(key) if c.get(key) is not None else default)
+    def _i(key, default): return int(c.get(key) if c.get(key) is not None else default)
+    def _l(key, default): return list(c.get(key) if c.get(key) is not None else default)
     cfg = AckermannConfig()
-    cfg.wheelbase             = float(c.get('wheelbase',             0.20))
-    cfg.track_width           = float(c.get('track_width',           0.15))
-    cfg.max_steer_deg         = float(c.get('max_steer_deg',         30.0))
-    cfg.max_speed_mps         = float(c.get('max_speed_mps',         0.5))
-    cfg.max_wheel_speed_ticks = int(c.get('max_wheel_speed_ticks',   300))
-    cfg.steer_center_ticks    = int(c.get('steer_center_ticks',      512))
-    cfg.steer_dir             = list(c.get('steer_dir',        [1, -1, -1,  1]))
-    cfg.drive_dir             = list(c.get('drive_dir',        [1, -1,  1, -1]))
-    cfg.steer_offset_deg      = list(c.get('steer_offset_deg', [0.0, 0.0, 0.0, 0.0]))
+    cfg.wheelbase             = _f('wheelbase',             0.20)
+    cfg.track_width           = _f('track_width',           0.15)
+    cfg.max_steer_deg         = _f('max_steer_deg',         30.0)
+    cfg.max_speed_mps         = _f('max_speed_mps',         0.5)
+    cfg.max_wheel_speed_ticks = _i('max_wheel_speed_ticks', 300)
+    cfg.steer_center_ticks    = _i('steer_center_ticks',    512)
+    cfg.steer_dir             = _l('steer_dir',        [1, -1, -1,  1])
+    cfg.drive_dir             = _l('drive_dir',        [1, -1,  1, -1])
+    cfg.steer_offset_deg      = _l('steer_offset_deg', [0.0, 0.0, 0.0, 0.0])
+    cfg.servo_ids             = _l('servo_ids',        [4, 2, 8, 6, 3, 1, 7, 5])
     return cfg
 
 
@@ -59,11 +58,28 @@ def _compute_result(steer_deg, speed_mps, cfg):
     targets = ack.compute(steer_deg, speed_mps)
     labels  = ['FL', 'FR', 'RL', 'RR']
 
-    steer_angles = []
-    for i in range(4):
-        tick  = targets[i].target
-        angle = (tick - cfg.steer_center_ticks) / (cfg.steer_dir[i] * cfg.ticks_per_deg)
-        steer_angles.append(round(angle, 2))
+    # Compute wheel angles from pure Ackermann geometry — independent of servo calibration
+    δ  = max(-cfg.max_steer_deg, min(cfg.max_steer_deg, steer_deg))
+    L2 = cfg.wheelbase / 2.0
+    W2 = cfg.track_width / 2.0
+    if abs(δ) < 0.5:
+        steer_angles = [0.0, 0.0, 0.0, 0.0]
+    else:
+        δ_rad     = math.radians(abs(δ))
+        sign      = 1 if δ > 0 else -1
+        R         = L2 / math.tan(δ_rad)
+        outer_abs = math.degrees(math.atan2(L2, R + W2))
+        inner_abs = math.degrees(math.atan2(L2, R - W2))
+        if sign > 0:  # right turn: FL/RL outer, FR/RR inner
+            fl_deg, fr_deg =  outer_abs,  inner_abs
+        else:          # left turn:  FL/RL inner, FR/RR outer
+            fl_deg, fr_deg = -inner_abs, -outer_abs
+        steer_angles = [
+            round( fl_deg, 2),
+            round( fr_deg, 2),
+            round(-fl_deg, 2),
+            round(-fr_deg, 2),
+        ]
 
     drive_info = []
     for i in range(4):
@@ -118,23 +134,6 @@ def _compute_result(steer_deg, speed_mps, cfg):
     }
 
 
-def _keepalive_loop():
-    """Send CMD frames at 10 Hz to keep the firmware watchdog fed."""
-    while _sending:
-        if _driver is not None:
-            with _cmd_lock:
-                steer = _current_steer
-                speed = _current_speed
-                cfg   = _current_cfg
-            if cfg is not None:
-                try:
-                    targets = Ackermann(cfg).compute(steer, speed)
-                    _driver.send_frame(targets)
-                except Exception:
-                    pass
-        time.sleep(0.1)
-
-
 def _default_config():
     return {
         'wheelbase': 0.20, 'track_width': 0.15,
@@ -142,6 +141,7 @@ def _default_config():
         'max_wheel_speed_ticks': 300, 'steer_center_ticks': 512,
         'steer_dir': [1, -1, -1, 1], 'drive_dir': [1, -1, 1, -1],
         'steer_offset_deg': [0.0, 0.0, 0.0, 0.0],
+        'servo_ids': [4, 2, 8, 6, 3, 1, 7, 5],
     }
 
 
@@ -194,7 +194,34 @@ class Handler(BaseHTTPRequestHandler):
                 'pos': sv.pos, 'speed': sv.speed,
                 'temp_c': sv.temperature, 'volt_v': sv.voltage,
             } for sv in s.servos]
-            self._send_json({'connected': True,
+            # Decode FL steer position and FL drive speed back to engineering units
+            feedback = None
+            cfg = _current_cfg
+            if cfg is not None:
+                try:
+                    fl_s = s.servos[cfg.servo_ids[0] - 1]
+                    if fl_s.available and cfg.steer_dir[0] != 0:
+                        raw_angle = (fl_s.pos - cfg.steer_center_ticks) / (cfg.steer_dir[0] * cfg.ticks_per_deg)
+                        steer_fb = raw_angle - cfg.steer_offset_deg[0]
+                        steer_fb = max(-cfg.max_steer_deg, min(cfg.max_steer_deg, steer_fb))
+                    else:
+                        steer_fb = 0.0
+                    fl_d = s.servos[cfg.servo_ids[4] - 1]
+                    if fl_d.available:
+                        raw = fl_d.speed  # 0-2047 AX-12A PRESENT_SPEED encoding
+                        if raw == 0 or raw == 1024:
+                            frac = 0.0
+                        elif raw < 1024:
+                            frac = (raw / float(cfg.max_wheel_speed_ticks)) * cfg.drive_dir[0]
+                        else:
+                            frac = -((raw - 1024) / float(cfg.max_wheel_speed_ticks)) * cfg.drive_dir[0]
+                        speed_fb = max(-cfg.max_speed_mps, min(cfg.max_speed_mps, frac * cfg.max_speed_mps))
+                    else:
+                        speed_fb = 0.0
+                    feedback = {'steer_deg': round(steer_fb, 2), 'speed_mps': round(speed_fb, 3)}
+                except Exception:
+                    feedback = None
+            self._send_json({'connected': True, 'feedback': feedback,
                              'state': {'seq': s.seq, 'e_stop': s.e_stop, 'servos': servos}})
 
         elif self.path == '/ports':
@@ -210,17 +237,19 @@ class Handler(BaseHTTPRequestHandler):
         data = self._read_json()
 
         if self.path == '/drive':
-            # Update stored command — keep-alive thread will apply it continuously
-            global _current_steer, _current_speed, _current_cfg
+            # Send CMD frame directly — JS polls this at 10Hz to feed the watchdog
+            global _current_cfg, _last_drive_t
             if _driver is None:
                 self._send_json({'error': 'No robot connected'}, 503)
                 return
             cfg = _build_cfg(data.get('config', {}))
-            with _cmd_lock:
-                _current_steer = float(data.get('steer_deg', 0))
-                _current_speed = float(data.get('speed_mps', 0))
-                _current_cfg   = cfg
-            result = _compute_result(_current_steer, _current_speed, cfg)
+            _current_cfg = cfg
+            _last_drive_t = time.monotonic()
+            steer_deg = float(data.get('steer_deg', 0))
+            speed_mps = float(data.get('speed_mps', 0))
+            targets = Ackermann(cfg).compute(steer_deg, speed_mps)
+            _driver.send_frame(targets, servo_ids=cfg.servo_ids)
+            result = _compute_result(steer_deg, speed_mps, cfg)
             result['driving'] = True
             self._send_json(result)
 
@@ -241,7 +270,7 @@ class Handler(BaseHTTPRequestHandler):
             targets = ack.compute(
                 float(data.get('steer_deg', 0)),
                 float(data.get('speed_mps', 0)))
-            _driver.send_frame(targets)
+            _driver.send_frame(targets, servo_ids=cfg.servo_ids)
             result = _compute_result(
                 float(data.get('steer_deg', 0)),
                 float(data.get('speed_mps', 0)),
@@ -253,11 +282,67 @@ class Handler(BaseHTTPRequestHandler):
             if _driver is None:
                 self._send_json({'error': 'No robot connected'}, 503)
                 return
-            with _cmd_lock:
-                _current_steer = 0.0
-                _current_speed = 0.0
             _driver.send_estop()
             self._send_json({'status': 'e-stop sent'})
+
+        elif self.path == '/torque':
+            if _driver is None:
+                self._send_json({'error': 'No robot connected'}, 503)
+                return
+            on = bool(data.get('on', True))
+            if on:
+                # Enable torque: hold position (steer=0, speed=0) with torque on
+                cfg = _build_cfg(data.get('config', {}))
+                targets = Ackermann(cfg).compute(0.0, 0.0)
+                _driver.send_frame(targets, servo_ids=cfg.servo_ids)
+            else:
+                _driver.send_estop()
+            self._send_json({'torque': on})
+
+        elif self.path == '/record_centers':
+            # Read current steering servo positions and compute steer_offset_deg.
+            # Call this after torque is off and user has manually aligned wheels straight.
+            if _driver is None:
+                self._send_json({'error': 'No robot connected'}, 503)
+                return
+            s = _driver.get_state()
+            if s is None:
+                self._send_json({'error': 'No STATE frame received yet'}, 503)
+                return
+            cfg     = _build_cfg(data.get('config', {}))
+            offsets = []
+            details = []
+            for i in range(4):
+                sid = cfg.servo_ids[i]
+                sv  = s.servos[sid - 1]
+                if sv.available and cfg.steer_dir[i] != 0:
+                    offset = (sv.pos - cfg.steer_center_ticks) / (cfg.steer_dir[i] * cfg.ticks_per_deg)
+                    offsets.append(round(offset, 2))
+                    details.append({'id': sid, 'pos': sv.pos, 'offset_deg': round(offset, 2)})
+                else:
+                    offsets.append(0.0)
+                    details.append({'id': sid, 'pos': None, 'offset_deg': 0.0})
+            self._send_json({'steer_offset_deg': offsets, 'details': details})
+
+        elif self.path == '/nudge':
+            # Nudge a single servo to help identify its physical location.
+            # Sends JOINT+torque-on to one servo ID, all others torque-off.
+            # Client calls /nudge repeatedly at ~10Hz to feed the watchdog.
+            if _driver is None:
+                self._send_json({'error': 'No robot connected'}, 503)
+                return
+            sid      = int(data.get('servo_id', 1))
+            nudge    = int(data.get('nudge_ticks', 30))
+            center   = int(data.get('center_ticks', 512))
+            target   = max(0, min(1023, center + nudge))
+            cmds = []
+            for slot in range(1, NUM_SERVOS + 1):
+                if slot == sid:
+                    cmds.append(ServoCmd(mode=0, enable_torque=1, target=target))
+                else:
+                    cmds.append(ServoCmd(mode=0, enable_torque=0, target=center))
+            _driver.send_frame(cmds)
+            self._send_json({'nudging': sid, 'target_tick': target})
 
         elif self.path == '/config':
             cfg = data if data else _default_config()
@@ -281,9 +366,9 @@ HTML_PAGE = """<!DOCTYPE html>
   body { font-family: monospace; background: #111; color: #ddd; font-size: 14px; }
   h2 { color: #7cf; margin-bottom: 8px; }
   h3 { color: #adf; margin-bottom: 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
-  #layout { display: grid; grid-template-columns: 420px 1fr; grid-template-rows: auto auto; gap: 12px; padding: 12px; }
+  #layout { display: grid; grid-template-columns: 420px 1fr; grid-template-rows: auto auto auto; gap: 12px; padding: 12px; }
   .card { background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 14px; }
-  #viz-card { grid-row: 1 / 3; }
+  #viz-card { grid-row: 1 / 4; }
   svg { display: block; margin: 0 auto; }
   .slider-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
   .slider-row label { width: 90px; color: #aaa; }
@@ -292,8 +377,10 @@ HTML_PAGE = """<!DOCTYPE html>
   .btn { padding: 7px 16px; border: none; border-radius: 4px; cursor: pointer; font-family: monospace; font-size: 13px; font-weight: bold; }
   .btn-send  { background: #2a7; color: #fff; }
   .btn-estop { background: #c33; color: #fff; }
-  .btn-save  { background: #46a; color: #fff; }
-  .btn-load  { background: #555; color: #fff; }
+  .btn-save    { background: #46a; color: #fff; }
+  .btn-load    { background: #555; color: #fff; }
+  .btn-torque-on  { background: #2a7; color: #fff; }
+  .btn-torque-off { background: #555; color: #aaa; border: 1px solid #888; }
   .btn:hover { opacity: 0.85; }
   .btn:active { opacity: 0.7; }
   .btn-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
@@ -321,26 +408,81 @@ HTML_PAGE = """<!DOCTYPE html>
 <div id="layout">
   <div class="card" id="viz-card">
     <h3>Bird's-eye view</h3>
-    <svg id="robot-svg" width="390" height="440" viewBox="-195 -220 390 440">
-      <line x1="-195" y1="0" x2="195" y2="0" stroke="#2a2a2a" stroke-width="1"/>
-      <line x1="0" y1="-220" x2="0" y2="220" stroke="#2a2a2a" stroke-width="1"/>
+    <svg id="robot-svg" width="400" height="460" viewBox="-200 -230 400 460" overflow="hidden">
+      <!-- grid lines -->
+      <line x1="-200" y1="0" x2="200" y2="0" stroke="#2a2a2a" stroke-width="1"/>
+      <line x1="0" y1="-230" x2="0" y2="230" stroke="#2a2a2a" stroke-width="1"/>
+
+      <!-- Wheelbase dimension line (right side) -->
+      <line x1="92" y1="-55" x2="92" y2="55" stroke="#446" stroke-width="1" stroke-dasharray="3,2"/>
+      <line x1="87" y1="-55" x2="97" y2="-55" stroke="#556" stroke-width="1.5"/>
+      <line x1="87" y1="55"  x2="97" y2="55"  stroke="#556" stroke-width="1.5"/>
+      <text id="dim-wb" x="100" y="3" font-size="9" fill="#668" text-anchor="start" dominant-baseline="middle">L=0.20m</text>
+
+      <!-- Track width dimension line (bottom) -->
+      <line x1="-65" y1="95" x2="65" y2="95" stroke="#446" stroke-width="1" stroke-dasharray="3,2"/>
+      <line x1="-65" y1="90" x2="-65" y2="100" stroke="#556" stroke-width="1.5"/>
+      <line x1="65"  y1="90" x2="65"  y2="100" stroke="#556" stroke-width="1.5"/>
+      <text id="dim-tw" x="0" y="111" font-size="9" fill="#668" text-anchor="middle">W=0.15m</text>
+
+      <!-- Ackermann arcs (updated by JS) -->
+      <g id="ackermann-arcs"></g>
+
+      <!-- Robot body -->
       <rect x="-40" y="-55" width="80" height="110" rx="6" fill="#1e2a3a" stroke="#4af" stroke-width="1.5"/>
       <polygon points="0,-70 -7,-55 7,-55" fill="#4af" opacity="0.7"/>
-      <text x="0" y="-80" text-anchor="middle" font-size="10" fill="#4af">FWD</text>
-      <g id="wheel-FL"><rect x="-9" y="-16" width="18" height="32" rx="3" fill="#336"/><text x="0" y="28" text-anchor="middle" font-size="9" fill="#99f">FL</text></g>
-      <g id="wheel-FR"><rect x="-9" y="-16" width="18" height="32" rx="3" fill="#336"/><text x="0" y="28" text-anchor="middle" font-size="9" fill="#99f">FR</text></g>
-      <g id="wheel-RL"><rect x="-9" y="-16" width="18" height="32" rx="3" fill="#336"/><text x="0" y="-20" text-anchor="middle" font-size="9" fill="#99f">RL</text></g>
-      <g id="wheel-RR"><rect x="-9" y="-16" width="18" height="32" rx="3" fill="#336"/><text x="0" y="-20" text-anchor="middle" font-size="9" fill="#99f">RR</text></g>
+      <text x="0" y="-82" text-anchor="middle" font-size="10" fill="#4af">FWD</text>
+
+      <!-- Wheels: rect + axis line (rotates with wheel) + label -->
+      <g id="wheel-FL">
+        <rect x="-9" y="-16" width="18" height="32" rx="3" fill="#336"/>
+        <line x1="0" y1="-20" x2="0" y2="20" stroke="#6af" stroke-width="1" opacity="0.8"/>
+        <text x="0" y="28" text-anchor="middle" font-size="9" fill="#99f">FL</text>
+      </g>
+      <g id="wheel-FR">
+        <rect x="-9" y="-16" width="18" height="32" rx="3" fill="#336"/>
+        <line x1="0" y1="-20" x2="0" y2="20" stroke="#6af" stroke-width="1" opacity="0.8"/>
+        <text x="0" y="28" text-anchor="middle" font-size="9" fill="#99f">FR</text>
+      </g>
+      <g id="wheel-RL">
+        <rect x="-9" y="-16" width="18" height="32" rx="3" fill="#336"/>
+        <line x1="0" y1="-20" x2="0" y2="20" stroke="#6af" stroke-width="1" opacity="0.8"/>
+        <text x="0" y="-20" text-anchor="middle" font-size="9" fill="#99f">RL</text>
+      </g>
+      <g id="wheel-RR">
+        <rect x="-9" y="-16" width="18" height="32" rx="3" fill="#336"/>
+        <line x1="0" y1="-20" x2="0" y2="20" stroke="#6af" stroke-width="1" opacity="0.8"/>
+        <text x="0" y="-20" text-anchor="middle" font-size="9" fill="#99f">RR</text>
+      </g>
+
+      <!-- Steer angle labels (fixed world position, updated by JS) -->
+      <text id="angle-FL" x="-65" y="-80" text-anchor="middle" font-size="9" fill="#fa0">0.0°</text>
+      <text id="angle-FR" x="65"  y="-80" text-anchor="middle" font-size="9" fill="#fa0">0.0°</text>
+      <text id="angle-RL" x="-65" y="78"  text-anchor="middle" font-size="9" fill="#fa0">0.0°</text>
+      <text id="angle-RR" x="65"  y="78"  text-anchor="middle" font-size="9" fill="#fa0">0.0°</text>
+
+      <!-- Drive arrows and rotation centre -->
       <g id="arrow-FL"></g>
       <g id="arrow-FR"></g>
       <g id="arrow-RL"></g>
       <g id="arrow-RR"></g>
       <circle id="rc-dot" r="5" fill="#f80" opacity="0"/>
       <text id="rc-label" x="0" y="0" font-size="10" fill="#f80" opacity="0">RC</text>
+
+      <!-- Legend: bottom-left corner of viewBox (-200,-230 to 200,230) -->
+      <g transform="translate(-196, 150)" font-size="10" fill="#aaa">
+        <rect x="-2" y="-2" width="152" height="76" rx="3" fill="#1a1a1a" stroke="#444" stroke-width="0.8" opacity="0.85"/>
+        <text y="10"><tspan font-weight="bold" fill="#ddd">FL/FR</tspan>  Front Left / Right</text>
+        <text y="22"><tspan font-weight="bold" fill="#ddd">RL/RR</tspan>  Rear Left / Right</text>
+        <text y="34"><tspan font-weight="bold" fill="#ddd">L</tspan>  Wheelbase</text>
+        <text y="46"><tspan font-weight="bold" fill="#ddd">W</tspan>  Track Width</text>
+        <text y="58"><tspan font-weight="bold" fill="#ddd">FWD</tspan>  Forward direction</text>
+        <text y="70"><tspan font-weight="bold" fill="#f80">RC</tspan>  Rotation Centre</text>
+      </g>
     </svg>
     <div style="margin-top:8px;">
       <table>
-        <tr><th>Wheel</th><th>Steer angle</th><th>Steer tick</th><th>Drive</th><th>Raw</th></tr>
+        <tr><th>Wheel</th><th>DXL IDs</th><th>Steer angle</th><th>Steer tick</th><th>Drive</th><th>Raw</th></tr>
         <tbody id="wheel-table"></tbody>
       </table>
       <div style="margin-top:8px;color:#888;font-size:12px;">
@@ -357,14 +499,47 @@ HTML_PAGE = """<!DOCTYPE html>
       <input type="range" id="sl-steer" min="-30" max="30" step="0.5" value="0">
       <span class="val"><span id="lbl-steer">0.0</span> deg</span>
     </div>
+    <div style="font-size:11px;color:#666;margin:-6px 0 8px 98px;">
+      actual: <span id="fb-steer" style="color:#fa0">—</span>
+    </div>
     <div class="slider-row">
       <label>Speed (m/s)</label>
       <input type="range" id="sl-speed" min="-0.5" max="0.5" step="0.01" value="0">
       <span class="val"><span id="lbl-speed">0.00</span></span>
     </div>
+    <div style="font-size:11px;color:#666;margin:-6px 0 8px 98px;">
+      actual: <span id="fb-speed" style="color:#fa0">—</span>
+    </div>
     <div class="btn-row">
       <button class="btn btn-send"  onclick="sendCmd()">Send to robot</button>
       <button class="btn btn-estop" onclick="sendEstop()">E-STOP</button>
+      <button id="btn-torque" class="btn btn-torque-on" onclick="toggleTorque()">Torque: ON</button>
+    </div>
+  </div>
+
+  <div class="card" id="mapper-card">
+    <h3>Servo ID Mapper</h3>
+    <div style="font-size:12px;color:#888;margin-bottom:10px;">
+      Click a servo ID to nudge it. Watch the robot, then click the role that moved.
+      Repeat for all 8. The servo_ids field below is updated automatically.
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;" id="nudge-btns"></div>
+    <div style="font-size:12px;color:#aaa;margin-bottom:6px;">
+      Assign nudged servo (<span id="nudge-active-id" style="color:#fa0">none</span>) to role:
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;" id="role-btns"></div>
+    <div style="margin-top:10px;font-size:12px;">
+      <table style="width:100%;border-collapse:collapse;" id="map-table">
+        <tr>
+          <th style="color:#7cf;font-weight:normal;text-align:left;padding:2px 4px;">Role</th>
+          <th style="color:#7cf;font-weight:normal;text-align:left;padding:2px 4px;">Assigned ID</th>
+        </tr>
+      </table>
+    </div>
+    <div class="btn-row" style="margin-top:8px;">
+      <button class="btn btn-estop" onclick="stopNudge()" style="font-size:12px;padding:5px 12px;">Stop nudge</button>
+      <button class="btn btn-save"  onclick="applyMap()"  style="font-size:12px;padding:5px 12px;">Apply to servo_ids</button>
+      <button class="btn btn-load"  onclick="clearMap()"  style="font-size:12px;padding:5px 12px;">Clear map</button>
     </div>
   </div>
 
@@ -380,6 +555,26 @@ HTML_PAGE = """<!DOCTYPE html>
       <div class="cfg-row"><label>steer_dir [FL,FR,RL,RR]</label><input id="c-sdir" type="text" value="1,-1,-1,1"></div>
       <div class="cfg-row"><label>drive_dir [FL,FR,RL,RR]</label><input id="c-ddir" type="text" value="1,-1,1,-1"></div>
       <div class="cfg-row" style="grid-column:1/-1"><label>steer_offset_deg [FL,FR,RL,RR]</label><input id="c-offset" type="text" value="0,0,0,0" style="width:160px"></div>
+      <div class="cfg-row" style="grid-column:1/-1">
+        <label style="color:#f84;">servo_ids [FL_s,FR_s,RL_s,RR_s,<br>FL_d,FR_d,RL_d,RR_d]</label>
+        <input id="c-sids" type="text" value="4,2,8,6,3,1,7,5" style="width:200px">
+        <span style="font-size:11px;color:#888;margin-left:6px;">DXL IDs for each wheel role</span>
+      </div>
+    </div>
+
+    <!-- Steer calibration -->
+    <div style="margin-top:14px;border-top:1px solid #333;padding-top:12px;">
+      <h3>Steer centre calibration</h3>
+      <div style="font-size:12px;color:#888;margin-bottom:8px;">
+        1. Click <b style="color:#fa0">Torque off steering</b> — drive wheels stop, steering goes limp.<br>
+        2. Push each wheel physically to straight-ahead.<br>
+        3. Click <b style="color:#4f4">Record neutral</b> — reads current ticks and fills steer_offset_deg.
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-estop"  onclick="steerTorqueOff()"  style="font-size:12px;padding:5px 12px;">Torque off steering</button>
+        <button class="btn btn-send"   onclick="recordCenters()"   style="font-size:12px;padding:5px 12px;">Record neutral</button>
+      </div>
+      <div id="calib-result" style="margin-top:8px;font-size:12px;color:#888;"></div>
     </div>
 
     <!-- AX-12A position space bars -->
@@ -428,6 +623,7 @@ function readConfig() {
     steer_dir:             parseDir('c-sdir'),
     drive_dir:             parseDir('c-ddir'),
     steer_offset_deg:      parseFloat4('c-offset'),
+    servo_ids:             parseDir('c-sids'),
   };
 }
 
@@ -442,6 +638,8 @@ function fillConfig(c) {
   document.getElementById('c-ddir').value      = c.drive_dir.join(',');
   var off = c.steer_offset_deg || [0,0,0,0];
   document.getElementById('c-offset').value    = off.join(',');
+  var ids = c.servo_ids || [1,2,3,4,5,6,7,8];
+  document.getElementById('c-sids').value      = ids.join(',');
   updateSliderRange(c.max_steer_deg, c.max_speed_mps);
 }
 
@@ -503,32 +701,56 @@ function preview() {
   });
 }
 
-var _driving = false;
+var _driving  = false;
+var _torqueOn = true;
 
 function sendCmd() {
+  _driving = true;
+  if (!_torqueOn) { setTorqueUI(true); }
+  doDrive();
+}
+
+function doDrive() {
+  if (!_driving) return;
   var body = { steer_deg: parseFloat(slSteer.value), speed_mps: parseFloat(slSpeed.value), config: readConfig() };
   postJSON('/drive', body, function(err, d) {
     if (err || (d && d.error)) { setStatus('Robot: ' + (d && d.error ? d.error : err), true); return; }
-    _driving = true;
-    setStatus('Driving  steer=' + body.steer_deg.toFixed(1) + ' deg  speed=' + body.speed_mps.toFixed(2) + ' m/s');
+    setStatus('Sent  steer=' + body.steer_deg.toFixed(1) + ' deg  speed=' + body.speed_mps.toFixed(2) + ' m/s');
     updateViz(d);
   });
 }
 
 function driveIfActive() {
   if (!_driving) return;
-  var body = { steer_deg: parseFloat(slSteer.value), speed_mps: parseFloat(slSpeed.value), config: readConfig() };
-  postJSON('/drive', body, function(err, d) {
-    if (err || (d && d.error)) return;
-    updateViz(d);
-  });
+  doDrive();
 }
+
+// Feed the firmware watchdog at 10 Hz while driving is active
+setInterval(function() { if (_driving) doDrive(); }, 100);
 
 function sendEstop() {
   _driving = false;
   postJSON('/estop', {}, function(err) {
     setStatus(err ? 'Estop error: ' + err : 'E-STOP sent.', !!err);
+    if (!err) setTorqueUI(false);
   });
+}
+
+function toggleTorque() {
+  var newState = !_torqueOn;
+  if (_driving && !newState) _driving = false;
+  postJSON('/torque', { on: newState, config: readConfig() }, function(err, d) {
+    if (err || (d && d.error)) { setStatus('Torque error: ' + (d && d.error ? d.error : err), true); return; }
+    setTorqueUI(newState);
+    setStatus(newState ? 'Torque enabled (holding neutral).' : 'Torque disabled — robot limp.');
+  });
+}
+
+function setTorqueUI(on) {
+  _torqueOn = on;
+  var btn = document.getElementById('btn-torque');
+  btn.textContent = on ? 'Torque: ON' : 'Torque: OFF';
+  btn.className = 'btn ' + (on ? 'btn-torque-on' : 'btn-torque-off');
 }
 
 function saveConfig() {
@@ -549,13 +771,18 @@ function loadConfig() {
 function updateViz(data) {
   var wheels = data.wheels;
   if (data.position_space) updatePosBars(data.position_space);
+  var cfg = readConfig();
+  var sids = cfg.servo_ids || [1,2,3,4,5,6,7,8];
   var tbody = document.getElementById('wheel-table');
   tbody.innerHTML = '';
-  wheels.forEach(function(w) {
+  wheels.forEach(function(w, i) {
     var color = w.drive_dir === 'CCW' ? '#4f4' : w.drive_dir === 'CW' ? '#f84' : '#888';
     var sign  = w.steer_angle >= 0 ? '+' : '';
+    var steerId = sids[i] !== undefined ? sids[i] : (i+1);
+    var driveId = sids[i+4] !== undefined ? sids[i+4] : (i+5);
     tbody.innerHTML +=
       '<tr><td class="hl">' + w.label + '</td>' +
+      '<td style="color:#888;font-size:11px;">S:ID' + steerId + ' D:ID' + driveId + '</td>' +
       '<td>' + sign + w.steer_angle.toFixed(1) + ' deg</td>' +
       '<td>' + w.steer_tick + '</td>' +
       '<td style="color:' + color + '">' + w.drive_dir + ' ' + w.drive_mag + '</td>' +
@@ -566,6 +793,23 @@ function updateViz(data) {
     data.turning_radius !== null ? data.turning_radius + ' m' : 'inf (straight)';
   var cs = data.steer_clamped;
   document.getElementById('cs-val').textContent = (cs >= 0 ? '+' : '') + cs.toFixed(1);
+
+  updateAckermannArcs(data.steer_clamped, cfg);
+
+  // Update angle labels and dimension labels
+  var angleLabels = ['FL','FR','RL','RR'];
+  angleLabels.forEach(function(lbl, i) {
+    var el = document.getElementById('angle-' + lbl);
+    if (el) {
+      var a = wheels[i].steer_angle;
+      el.textContent = (a >= 0 ? '+' : '') + a.toFixed(1) + '°';
+    }
+  });
+  var cfg = readConfig();
+  var dimWB = document.getElementById('dim-wb');
+  if (dimWB) dimWB.textContent = 'L=' + (cfg.wheelbase || 0.20).toFixed(3) + 'm';
+  var dimTW = document.getElementById('dim-tw');
+  if (dimTW) dimTW.textContent = 'W=' + (cfg.track_width || 0.15).toFixed(3) + 'm';
 
   WHEEL_ORDER.forEach(function(lbl, i) {
     var w   = wheels[i];
@@ -593,7 +837,11 @@ function updateViz(data) {
   var rcLbl = document.getElementById('rc-label');
   if (data.turning_radius !== null) {
     var sign = data.steer_clamped >= 0 ? 1 : -1;
-    var rcX  = sign * Math.min(data.turning_radius * 150, 180);
+    var cfg2 = readConfig();
+    var W2px = 65;  // SVG x-position of wheel centres (px)
+    var W2m  = (cfg2.track_width || 0.15) / 2;
+    var scaleX = W2px / W2m;
+    var rcX  = sign * data.turning_radius * scaleX;
     rc.setAttribute('cx', rcX); rc.setAttribute('cy', 0); rc.setAttribute('opacity', 0.8);
     rcLbl.setAttribute('x', rcX + 7); rcLbl.setAttribute('y', 4); rcLbl.setAttribute('opacity', 0.8);
   } else {
@@ -650,6 +898,13 @@ function refreshState() {
     }
     badge.textContent = 'connected';
     badge.style.background = '#1a3a1a'; badge.style.color = '#4f4';
+
+    // Update actual-value feedback labels only — sliders are user-controlled
+    if (d.feedback) {
+      document.getElementById('fb-steer').textContent = d.feedback.steer_deg.toFixed(1) + ' deg';
+      document.getElementById('fb-speed').textContent = d.feedback.speed_mps.toFixed(3) + ' m/s';
+    }
+
     var tbody = document.getElementById('state-table');
     if (!d.state) { tbody.innerHTML = '<tr><td colspan="6" style="color:#555">waiting...</td></tr>'; return; }
     tbody.innerHTML = d.state.servos.map(function(s) {
@@ -657,7 +912,7 @@ function refreshState() {
       return '<tr><td>' + s.id + '</td><td>' + s.mode + '</td><td>' + s.pos + '</td>' +
              '<td>' + s.speed + '</td><td>' + s.temp_c + 'C</td><td>' + s.volt_v.toFixed(1) + 'V</td></tr>';
     }).join('');
-    if (d.state.e_stop) setStatus('E-STOP active on robot', true);
+    if (d.state.e_stop) { setStatus('E-STOP active on robot', true); setTorqueUI(false); }
   });
 }
 
@@ -667,12 +922,266 @@ function setStatus(msg, err) {
   el.className = err ? 'err' : '';
 }
 
+// ── Ackermann arcs ───────────────────────────────────────────────────────────
+function updateAckermannArcs(steer, cfg) {
+  var el = document.getElementById('ackermann-arcs');
+  if (!el) return;
+  if (Math.abs(steer) < 0.5) { el.innerHTML = ''; return; }
+
+  var L2  = cfg.wheelbase   / 2;
+  var W2  = cfg.track_width / 2;
+  var sign = steer > 0 ? 1 : -1;
+  var dRad = Math.abs(steer) * Math.PI / 180;
+  var R    = L2 / Math.tan(dRad);
+
+  // IRC x in SVG: scale lateral distance so W2 maps to 65 px (wheel x position)
+  var scaleX = 65 / W2;
+  var irc_x  = sign * R * scaleX;
+
+  // Arc radii: defined to pass exactly through the wheel SVG positions
+  var dxOut   = irc_x + sign * 65;
+  var dxIn    = irc_x - sign * 65;
+  var rOuter  = Math.sqrt(dxOut * dxOut + 55 * 55);
+  var rInner  = Math.sqrt(dxIn  * dxIn  + 55 * 55);
+  var rCenter = Math.abs(irc_x);  // vehicle centre turning radius
+
+  // Arc sweeping exactly steer_deg around the IRC from vehicle centre (0,0).
+  var angleStartDeg = sign > 0 ? 180 : 0;
+  var angleEndDeg   = angleStartDeg + sign * Math.abs(steer);
+  var angleEndRad   = angleEndDeg * Math.PI / 180;
+  var xEnd = irc_x + rCenter * Math.cos(angleEndRad);
+  var yEnd =          rCenter * Math.sin(angleEndRad);
+  var sweepFlag = sign > 0 ? 1 : 0;
+  var largeArc  = Math.abs(steer) > 180 ? 1 : 0;
+
+  // Tangent direction at arc end via small step in direction of motion
+  var stepRad = sign * 3 * Math.PI / 180;
+  var tx = irc_x + rCenter * Math.cos(angleEndRad + stepRad) - xEnd;
+  var ty =          rCenter * Math.sin(angleEndRad + stepRad) - yEnd;
+  var tLen = Math.sqrt(tx*tx + ty*ty);
+  if (tLen > 0) { tx /= tLen; ty /= tLen; }
+
+  // Constant-length tangent arrow at arc end
+  var arrowLen = 36;
+  var tipX = xEnd + arrowLen * tx;
+  var tipY = yEnd + arrowLen * ty;
+  var aw = 5, al = 10;
+  var arrowPath = 'M' + tipX.toFixed(1) + ',' + tipY.toFixed(1) +
+    ' L' + (tipX - al*tx + aw*ty).toFixed(1) + ',' + (tipY - al*ty - aw*tx).toFixed(1) +
+    ' L' + (tipX - al*tx - aw*ty).toFixed(1) + ',' + (tipY - al*ty + aw*tx).toFixed(1) + 'Z';
+
+  // Label just beyond the arrow tip, continuing in the tangent direction
+  var xLabel = tipX + 14 * tx;
+  var yLabel = tipY + 14 * ty;
+
+  el.innerHTML =
+    // Outer wheel path circle
+    '<circle cx="' + irc_x.toFixed(1) + '" cy="0" r="' + rOuter.toFixed(1) +
+      '" fill="none" stroke="#2a5a8a" stroke-width="1.2" stroke-dasharray="6,4" opacity="0.6"/>' +
+    // Centre (vehicle body) path circle
+    '<circle cx="' + irc_x.toFixed(1) + '" cy="0" r="' + rCenter.toFixed(1) +
+      '" fill="none" stroke="#3a7aaa" stroke-width="1.2" stroke-dasharray="3,4" opacity="0.6"/>' +
+    // Inner wheel path circle
+    '<circle cx="' + irc_x.toFixed(1) + '" cy="0" r="' + rInner.toFixed(1) +
+      '" fill="none" stroke="#2a5a8a" stroke-width="1.2" stroke-dasharray="6,4" opacity="0.6"/>' +
+    // Arc sweeping steer_deg
+    '<path d="M0,0 A' + rCenter.toFixed(1) + ',' + rCenter.toFixed(1) +
+      ' 0 ' + largeArc + ',' + sweepFlag + ' ' + xEnd.toFixed(1) + ',' + yEnd.toFixed(1) +
+      '" fill="none" stroke="#fa8" stroke-width="2" opacity="0.85"/>' +
+    // Constant-length tangent arrow at arc end
+    '<line x1="' + xEnd.toFixed(1) + '" y1="' + yEnd.toFixed(1) +
+      '" x2="' + tipX.toFixed(1) + '" y2="' + tipY.toFixed(1) +
+      '" stroke="#fa8" stroke-width="2" opacity="0.85"/>' +
+    '<path d="' + arrowPath + '" fill="#fa8" opacity="0.85"/>' +
+    // Steer angle label
+    '<text x="' + xLabel.toFixed(1) + '" y="' + yLabel.toFixed(1) +
+      '" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#fa8" ' +
+      'style="text-shadow:0 0 4px #111">' +
+      (steer >= 0 ? '+' : '') + steer.toFixed(1) + '°</text>';
+}
+
+// ── Steer centre calibration ─────────────────────────────────────────────────
+function steerTorqueOff() {
+  // Stop drive wheels (speed=0) and disable steering torque so user can push by hand.
+  // Easiest: send estop (all torque off) then immediately re-enable drive at speed=0.
+  _driving = false;
+  postJSON('/estop', {}, function(err) {
+    if (err) { setStatus('Estop error: ' + err, true); return; }
+    setTorqueUI(false);
+    setStatus('Steering torque off — push wheels to straight-ahead, then click Record neutral.');
+  });
+}
+
+function recordCenters() {
+  postJSON('/record_centers', { config: readConfig() }, function(err, d) {
+    if (err || (d && d.error)) {
+      setStatus('Record error: ' + (d && d.error ? d.error : err), true);
+      return;
+    }
+    var offsets = d.steer_offset_deg;
+    document.getElementById('c-offset').value = offsets.join(',');
+
+    var labels = ['FL','FR','RL','RR'];
+    var html = '<table style="border-collapse:collapse;">' +
+      '<tr><th style="color:#7cf;font-weight:normal;text-align:left;padding:2px 6px;">Wheel</th>' +
+      '<th style="color:#7cf;font-weight:normal;text-align:left;padding:2px 6px;">Servo ID</th>' +
+      '<th style="color:#7cf;font-weight:normal;text-align:left;padding:2px 6px;">Recorded tick</th>' +
+      '<th style="color:#7cf;font-weight:normal;text-align:left;padding:2px 6px;">Offset (deg)</th></tr>';
+    d.details.forEach(function(det, i) {
+      var col = Math.abs(det.offset_deg) > 5 ? '#f84' : '#4f4';
+      html += '<tr>' +
+        '<td style="padding:2px 6px;color:#adf;">' + labels[i] + '</td>' +
+        '<td style="padding:2px 6px;">' + det.id + '</td>' +
+        '<td style="padding:2px 6px;">' + (det.pos !== null ? det.pos : 'UNAVAIL') + '</td>' +
+        '<td style="padding:2px 6px;color:' + col + ';">' + det.offset_deg + '°</td></tr>';
+    });
+    html += '</table><div style="margin-top:4px;color:#aaa;">steer_offset_deg filled → click <b>Save config</b> to persist.</div>';
+    document.getElementById('calib-result').innerHTML = html;
+    setStatus('Neutral recorded. steer_offset_deg = [' + offsets.join(', ') + ']');
+    preview();
+  });
+}
+
 loadConfig();
-setInterval(preview, 300);
 setInterval(refreshState, 1000);
+
+// ── Servo ID Mapper ──────────────────────────────────────────────────────────
+var ROLES = ['FL_steer','FR_steer','RL_steer','RR_steer','FL_drive','FR_drive','RL_drive','RR_drive'];
+var _nudgeId    = null;   // currently nudging servo ID
+var _nudgeTimer = null;   // setInterval handle
+var _roleMap    = {};     // role → servo_id
+
+(function initMapper() {
+  // Servo ID buttons (1-8)
+  var nb = document.getElementById('nudge-btns');
+  for (var i = 1; i <= 8; i++) {
+    (function(sid) {
+      var b = document.createElement('button');
+      b.id = 'nudge-btn-' + sid;
+      b.textContent = 'ID ' + sid;
+      b.className = 'btn btn-load';
+      b.style.cssText = 'font-size:12px;padding:5px 10px;';
+      b.onclick = function() { startNudge(sid); };
+      nb.appendChild(b);
+    })(i);
+  }
+
+  // Role buttons
+  var rb = document.getElementById('role-btns');
+  ROLES.forEach(function(role) {
+    var b = document.createElement('button');
+    b.id = 'role-btn-' + role;
+    b.textContent = role;
+    b.className = 'btn btn-load';
+    b.style.cssText = 'font-size:11px;padding:4px 8px;';
+    b.onclick = function() { assignRole(role); };
+    rb.appendChild(b);
+  });
+
+  renderMapTable();
+})();
+
+function startNudge(sid) {
+  stopNudge();
+  _nudgeId = sid;
+  document.getElementById('nudge-active-id').textContent = 'ID ' + sid;
+
+  // Highlight active nudge button
+  for (var i = 1; i <= 8; i++) {
+    var b = document.getElementById('nudge-btn-' + i);
+    b.className = 'btn ' + (i === sid ? 'btn-send' : 'btn-load');
+  }
+
+  var cfg = readConfig();
+  function doNudge() {
+    postJSON('/nudge', {
+      servo_id: _nudgeId,
+      nudge_ticks: 40,
+      center_ticks: cfg.steer_center_ticks || 512
+    }, function(){});
+  }
+  doNudge();
+  _nudgeTimer = setInterval(doNudge, 100);
+  setStatus('Nudging ID ' + sid + ' — watch the robot, then click the role that moved.');
+}
+
+function stopNudge() {
+  if (_nudgeTimer) { clearInterval(_nudgeTimer); _nudgeTimer = null; }
+  _nudgeId = null;
+  document.getElementById('nudge-active-id').textContent = 'none';
+  for (var i = 1; i <= 8; i++) {
+    var b = document.getElementById('nudge-btn-' + i);
+    if (b) b.className = 'btn btn-load';
+  }
+  postJSON('/estop', {}, function(){});
+}
+
+function assignRole(role) {
+  if (_nudgeId === null) { setStatus('Click a servo ID first to nudge it.', true); return; }
+  _roleMap[role] = _nudgeId;
+  stopNudge();
+  renderMapTable();
+  setStatus('Assigned ID ' + _roleMap[role] + ' → ' + role + '. Click next servo to nudge.');
+}
+
+function renderMapTable() {
+  var tbody = '';
+  ROLES.forEach(function(role) {
+    var assigned = _roleMap[role] !== undefined ? 'ID ' + _roleMap[role] : '<span style="color:#555">—</span>';
+    var roleColor = role.indexOf('steer') >= 0 ? '#adf' : '#afd';
+    tbody += '<tr><td style="padding:2px 4px;color:' + roleColor + ';">' + role + '</td>' +
+             '<td style="padding:2px 4px;color:#fa0;">' + assigned + '</td></tr>';
+  });
+  // Preserve header row, rebuild body rows
+  var tbl = document.getElementById('map-table');
+  var rows = tbl.querySelectorAll('tr');
+  // Remove old data rows
+  for (var i = rows.length - 1; i >= 1; i--) tbl.removeChild(rows[i]);
+  // Add new rows
+  var tmp = document.createElement('tbody');
+  tmp.innerHTML = tbody;
+  while (tmp.firstChild) tbl.appendChild(tmp.firstChild);
+
+  // Dim role buttons that are already assigned
+  ROLES.forEach(function(role) {
+    var b = document.getElementById('role-btn-' + role);
+    if (b) b.style.opacity = _roleMap[role] !== undefined ? '0.4' : '1.0';
+  });
+}
+
+function applyMap() {
+  var ids = ROLES.map(function(role) { return _roleMap[role] || 0; });
+  document.getElementById('c-sids').value = ids.join(',');
+  setStatus('servo_ids updated: [' + ids.join(', ') + ']. Click Save config to persist.');
+}
+
+function clearMap() {
+  _roleMap = {};
+  stopNudge();
+  renderMapTable();
+  setStatus('Mapper cleared.');
+}
 </script>
 </body>
 </html>"""
+
+
+# ── Keepalive ─────────────────────────────────────────────────────────────────
+
+def _keepalive_loop():
+    """
+    Sends torque-off CMD frames at 5 Hz when the UI is not actively driving.
+    This keeps the firmware in binary mode and STATE frames flowing so the
+    state table and steer calibration always have fresh data.
+    When /drive is active (stamped within the last 0.3s) we stay silent and
+    let the JS 10Hz loop own the bus.
+    """
+    while True:
+        time.sleep(0.2)
+        if _driver is None:
+            continue
+        if time.monotonic() - _last_drive_t > 0.3:
+            _driver.send_estop()
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
@@ -698,14 +1207,14 @@ def main():
         _driver = SerialDriver(port, args.baud)
         _driver.connect()
         _driver.start()
+        # Send one frame immediately to kick firmware into binary mode
+        _driver.send_estop()
+        # Start keepalive so STATE frames flow even when UI is idle
+        t = threading.Thread(target=_keepalive_loop, daemon=True, name='keepalive')
+        t.start()
         print('Robot connected.')
     else:
         print('No serial port found - running in simulation mode (no robot).')
-
-    global _sending
-    _sending = True
-    ka_thread = threading.Thread(target=_keepalive_loop, daemon=True, name='keepalive')
-    ka_thread.start()
 
     print('Open:  http://localhost:{}'.format(args.ui_port))
     server = HTTPServer(('0.0.0.0', args.ui_port), Handler)
@@ -714,7 +1223,6 @@ def main():
     except KeyboardInterrupt:
         print('\nStopped.')
     finally:
-        _sending = False
         if _driver:
             _driver.send_estop()
             _driver.stop()

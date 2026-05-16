@@ -104,6 +104,13 @@ class AckermannConfig:
     # set its offset to −2.0 to cancel the error.
     steer_offset_deg: List[float] = field(default_factory=lambda: [0.0, 0.0, 0.0, 0.0])
 
+    # Physical Dynamixel IDs for each wheel role.
+    # Order: [FL_steer, FR_steer, RL_steer, RR_steer, FL_drive, FR_drive, RL_drive, RR_drive]
+    # Change these to match your actual wiring if servos are not in 1-8 order.
+    # Physical DXL IDs for each wheel role (discovered via dxl_identify.py):
+    # FL_steer=4, FR_steer=2, RL_steer=8, RR_steer=6, FL_drive=3, FR_drive=1, RL_drive=7, RR_drive=5
+    servo_ids: List[int] = field(default_factory=lambda: [4, 2, 8, 6, 3, 1, 7, 5])
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -175,19 +182,21 @@ class Ackermann:
             # Lateral turning radius (vehicle centre to rotation centre)
             R = L2 / math.tan(δ_rad)
 
-            # Per-wheel Ackermann angles (magnitudes, always positive)
-            fl_abs = math.degrees(math.atan2(L2, R + W2))  # outer front
-            fr_abs = math.degrees(math.atan2(L2, R - W2))  # inner front
+            # Outer wheel is further from the rotation centre, inner is closer.
+            # For a right turn (sign=+1): FL/RL are outer, FR/RR are inner.
+            # For a left turn  (sign=-1): FR/RR are outer, FL/RL are inner.
+            outer_abs = math.degrees(math.atan2(L2, R + W2))
+            inner_abs = math.degrees(math.atan2(L2, R - W2))
 
-            # Front: same sign as input; rear: opposite (counter-phase)
-            fl_deg =  sign * fl_abs
-            fr_deg =  sign * fr_abs
-            rl_deg = -sign * fl_abs
-            rr_deg = -sign * fr_abs
+            if sign > 0:  # right turn
+                fl_deg, fr_deg =  outer_abs,  inner_abs
+            else:          # left turn
+                fl_deg, fr_deg = -inner_abs, -outer_abs
+
+            rl_deg = -fl_deg  # counter-phase
+            rr_deg = -fr_deg  # counter-phase
 
             # ── Speed scaling ─────────────────────────────────────────────────
-            # Each wheel's speed is proportional to its distance from the
-            # rotation centre. Outer wheel is always the fastest reference.
             r_outer = math.sqrt(L2 ** 2 + (R + W2) ** 2)
             r_inner = math.sqrt(L2 ** 2 + (R - W2) ** 2)
 
@@ -195,12 +204,20 @@ class Ackermann:
             # centre and must spin backward relative to the outer wheel.
             inner_sign = 1.0 if R >= W2 else -1.0
 
-            speed_scale = [
-                r_outer / r_outer,              # FL outer
-                inner_sign * r_inner / r_outer, # FR inner (may be negative)
-                r_outer / r_outer,              # RL outer (same radius as FL)
-                inner_sign * r_inner / r_outer, # RR inner (same radius as FR)
-            ]
+            if sign > 0:  # right turn: FL/RL outer, FR/RR inner
+                speed_scale = [
+                    1.0,
+                    inner_sign * r_inner / r_outer,
+                    1.0,
+                    inner_sign * r_inner / r_outer,
+                ]
+            else:          # left turn: FR/RR outer, FL/RL inner
+                speed_scale = [
+                    inner_sign * r_inner / r_outer,
+                    1.0,
+                    inner_sign * r_inner / r_outer,
+                    1.0,
+                ]
 
         # ── Build steer ServoCmd objects (IDs 1–4, JOINT mode) ────────────────
         angles = [fl_deg, fr_deg, rl_deg, rr_deg]
