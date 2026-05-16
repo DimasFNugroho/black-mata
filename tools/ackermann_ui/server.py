@@ -27,7 +27,14 @@ from software.robot.ackermann import Ackermann, AckermannConfig
 
 CONFIG_PATH = Path(__file__).parent / 'ackermann_config.json'
 
-_driver = None  # SerialDriver, set in main()
+_driver = None        # SerialDriver, set in main()
+_sending = False      # True while keep-alive loop is active
+
+# Last commanded state — updated by /drive, read by keep-alive thread
+_current_steer = 0.0
+_current_speed = 0.0
+_current_cfg   = None  # AckermannConfig, set on first /drive
+_cmd_lock      = threading.Lock()
 
 
 # ── Ackermann helpers ──────────────────────────────────────────────────────────
@@ -110,6 +117,23 @@ def _compute_result(steer_deg, speed_mps, cfg):
     }
 
 
+def _keepalive_loop():
+    """Send CMD frames at 10 Hz to keep the firmware watchdog fed."""
+    while _sending:
+        if _driver is not None:
+            with _cmd_lock:
+                steer = _current_steer
+                speed = _current_speed
+                cfg   = _current_cfg
+            if cfg is not None:
+                try:
+                    targets = Ackermann(cfg).compute(steer, speed)
+                    _driver.send_frame(targets)
+                except Exception:
+                    pass
+        time.sleep(0.1)
+
+
 def _default_config():
     return {
         'wheelbase': 0.20, 'track_width': 0.15,
@@ -184,7 +208,22 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         data = self._read_json()
 
-        if self.path == '/compute':
+        if self.path == '/drive':
+            # Update stored command — keep-alive thread will apply it continuously
+            global _current_steer, _current_speed, _current_cfg
+            if _driver is None:
+                self._send_json({'error': 'No robot connected'}, 503)
+                return
+            cfg = _build_cfg(data.get('config', {}))
+            with _cmd_lock:
+                _current_steer = float(data.get('steer_deg', 0))
+                _current_speed = float(data.get('speed_mps', 0))
+                _current_cfg   = cfg
+            result = _compute_result(_current_steer, _current_speed, cfg)
+            result['driving'] = True
+            self._send_json(result)
+
+        elif self.path == '/compute':
             cfg    = _build_cfg(data.get('config', {}))
             result = _compute_result(
                 float(data.get('steer_deg', 0)),
@@ -213,6 +252,9 @@ class Handler(BaseHTTPRequestHandler):
             if _driver is None:
                 self._send_json({'error': 'No robot connected'}, 503)
                 return
+            with _cmd_lock:
+                _current_steer = 0.0
+                _current_speed = 0.0
             _driver.send_estop()
             self._send_json({'status': 'e-stop sent'})
 
@@ -420,10 +462,12 @@ var slSpeed = document.getElementById('sl-speed');
 
 slSteer.addEventListener('input', function() {
   document.getElementById('lbl-steer').textContent = parseFloat(slSteer.value).toFixed(1);
+  driveIfActive();
   preview();
 });
 slSpeed.addEventListener('input', function() {
   document.getElementById('lbl-speed').textContent = parseFloat(slSpeed.value).toFixed(2);
+  driveIfActive();
   preview();
 });
 document.querySelectorAll('.cfg-grid input').forEach(function(el){ el.addEventListener('input', function(){
@@ -458,16 +502,29 @@ function preview() {
   });
 }
 
+var _driving = false;
+
 function sendCmd() {
   var body = { steer_deg: parseFloat(slSteer.value), speed_mps: parseFloat(slSpeed.value), config: readConfig() };
-  postJSON('/send', body, function(err, d) {
-    if (err || d.error) { setStatus('Robot: ' + (d && d.error ? d.error : err), true); return; }
-    setStatus('Sent  steer=' + body.steer_deg.toFixed(1) + ' deg  speed=' + body.speed_mps.toFixed(2) + ' m/s');
+  postJSON('/drive', body, function(err, d) {
+    if (err || (d && d.error)) { setStatus('Robot: ' + (d && d.error ? d.error : err), true); return; }
+    _driving = true;
+    setStatus('Driving  steer=' + body.steer_deg.toFixed(1) + ' deg  speed=' + body.speed_mps.toFixed(2) + ' m/s');
+    updateViz(d);
+  });
+}
+
+function driveIfActive() {
+  if (!_driving) return;
+  var body = { steer_deg: parseFloat(slSteer.value), speed_mps: parseFloat(slSpeed.value), config: readConfig() };
+  postJSON('/drive', body, function(err, d) {
+    if (err || (d && d.error)) return;
     updateViz(d);
   });
 }
 
 function sendEstop() {
+  _driving = false;
   postJSON('/estop', {}, function(err) {
     setStatus(err ? 'Estop error: ' + err : 'E-STOP sent.', !!err);
   });
@@ -644,6 +701,11 @@ def main():
     else:
         print('No serial port found - running in simulation mode (no robot).')
 
+    global _sending
+    _sending = True
+    ka_thread = threading.Thread(target=_keepalive_loop, daemon=True, name='keepalive')
+    ka_thread.start()
+
     print('Open:  http://localhost:{}'.format(args.ui_port))
     server = HTTPServer(('0.0.0.0', args.ui_port), Handler)
     try:
@@ -651,6 +713,7 @@ def main():
     except KeyboardInterrupt:
         print('\nStopped.')
     finally:
+        _sending = False
         if _driver:
             _driver.send_estop()
             _driver.stop()
