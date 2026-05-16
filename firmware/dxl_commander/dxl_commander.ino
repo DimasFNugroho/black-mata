@@ -330,7 +330,21 @@ static void processCmdFrame(const uint8_t* buf) {
 
     if (!servoAvail[i]) continue;
 
-    servoMode[i] = mode;
+    // Switch physical mode if it does not match the requested mode.
+    // Must happen before torqueOn — AX-12A requires torque off to change angle limits.
+    if (mode != servoMode[i]) {
+      dxl.torqueOff(id);
+      if (mode == 1) {
+        // Switch to WHEEL: both angle limits = 0
+        dxl.writeControlTableItem(ControlTableItem::CW_ANGLE_LIMIT,  id, 0);
+        dxl.writeControlTableItem(ControlTableItem::CCW_ANGLE_LIMIT, id, 0);
+      } else {
+        // Switch to JOINT: CW=0, CCW=1023
+        dxl.writeControlTableItem(ControlTableItem::CW_ANGLE_LIMIT,  id, 0);
+        dxl.writeControlTableItem(ControlTableItem::CCW_ANGLE_LIMIT, id, 1023);
+      }
+      servoMode[i] = mode;
+    }
 
     if (!enTorque) {
       dxl.torqueOff(id);
