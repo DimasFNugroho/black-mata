@@ -49,6 +49,7 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 - [x] Servo ID identification — nudge each servo and map to wheel role (`tools/dynamixel/dxl_identify.py`)
 - [x] Steer centre calibration — torque-off, physically align, record neutral offsets
 - [x] Trapezoidal steering profile — smooth motion on large angle commands, drag vs. click detection
+- [x] Camera test server — standalone MJPEG stream over stdlib HTTP, no serial port needed (`tools/camera/camera_test.py`)
 
 ---
 
