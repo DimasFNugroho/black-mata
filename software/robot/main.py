@@ -52,7 +52,7 @@ from software.robot.camera import Camera
 
 SERIAL_PORT    = os.getenv('SERIAL_PORT',    '/dev/opencm')
 SERIAL_BAUD    = int(os.getenv('SERIAL_BAUD',    '115200'))
-CAMERA_DEVICE  = int(os.getenv('CAMERA_DEVICE',  '0'))
+CAMERA_DEVICE  = int(os.getenv('CAMERA_DEVICE',  '1'))
 CAMERA_WIDTH   = int(os.getenv('CAMERA_WIDTH',   '640'))
 CAMERA_HEIGHT  = int(os.getenv('CAMERA_HEIGHT',  '480'))
 CAMERA_FPS     = int(os.getenv('CAMERA_FPS',     '30'))

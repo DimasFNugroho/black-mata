@@ -71,7 +71,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser(description='Standalone camera MJPEG test server')
-    parser.add_argument('--device',  '-d', type=int,   default=0,    help='V4L2 device index (default: 0)')
+    parser.add_argument('--device',  '-d', type=int,   default=1,    help='V4L2 device index (default: 1, matches /dev/video1)')
     parser.add_argument('--port',    '-p', type=int,   default=8083, help='HTTP port (default: 8083)')
     parser.add_argument('--width',   '-W', type=int,   default=640,  help='Capture width (default: 640)')
     parser.add_argument('--height',  '-H', type=int,   default=480,  help='Capture height (default: 480)')

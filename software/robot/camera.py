@@ -39,7 +39,7 @@ class Camera:
 
     def __init__(
         self,
-        device:  int = 0,
+        device:  int = 1,
         width:   int = 640,
         height:  int = 480,
         fps:     int = 30,
@@ -67,7 +67,7 @@ class Camera:
         """Open the camera and start the capture thread."""
         if self._running:
             return
-        self._cap = cv2.VideoCapture(self._device, cv2.CAP_V4L2)
+        self._cap = cv2.VideoCapture(self._device)
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH,  self._width)
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._height)
         self._cap.set(cv2.CAP_PROP_FPS,          self._fps)
