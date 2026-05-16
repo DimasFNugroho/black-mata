@@ -99,6 +99,11 @@ class AckermannConfig:
     # drive_dir[i] = −1  →  positive v  sends CW  (raw = 1024 + speed ticks)
     drive_dir: List[int] = field(default_factory=lambda: [1, -1, 1, -1])
 
+    # Per-wheel steering angle offset (degrees) added after Ackermann computation.
+    # Use to correct physical misalignment: if a wheel is physically 2° off neutral,
+    # set its offset to −2.0 to cancel the error.
+    steer_offset_deg: List[float] = field(default_factory=lambda: [0.0, 0.0, 0.0, 0.0])
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -204,7 +209,7 @@ class Ackermann:
                 mode=0,
                 enable_torque=1,
                 target=_angle_to_ticks(
-                    angles[i], cfg.steer_dir[i],
+                    angles[i] + cfg.steer_offset_deg[i], cfg.steer_dir[i],
                     cfg.steer_center_ticks, cfg.ticks_per_deg
                 ),
             )

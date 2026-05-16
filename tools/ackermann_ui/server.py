@@ -40,8 +40,9 @@ def _build_cfg(c):
     cfg.max_speed_mps         = float(c.get('max_speed_mps',         0.5))
     cfg.max_wheel_speed_ticks = int(c.get('max_wheel_speed_ticks',   300))
     cfg.steer_center_ticks    = int(c.get('steer_center_ticks',      512))
-    cfg.steer_dir             = list(c.get('steer_dir',  [1, -1, -1,  1]))
-    cfg.drive_dir             = list(c.get('drive_dir',  [1, -1,  1, -1]))
+    cfg.steer_dir             = list(c.get('steer_dir',        [1, -1, -1,  1]))
+    cfg.drive_dir             = list(c.get('drive_dir',        [1, -1,  1, -1]))
+    cfg.steer_offset_deg      = list(c.get('steer_offset_deg', [0.0, 0.0, 0.0, 0.0]))
     return cfg
 
 
@@ -85,8 +86,24 @@ def _compute_result(steer_deg, speed_mps, cfg):
     else:
         R  = None
 
+    # AX-12A position space per wheel (0-1023 ticks = 0-300 deg)
+    # neutral_tick: where the wheel sits at 0 steer (including offset)
+    # min/max reachable: neutral +/- max_steer range, clamped to 0-1023
+    position_space = []
+    for i in range(4):
+        tpd     = cfg.ticks_per_deg
+        neutral = int(round(cfg.steer_center_ticks + cfg.steer_dir[i] * cfg.steer_offset_deg[i] * tpd))
+        span    = int(round(cfg.max_steer_deg * tpd))
+        position_space.append({
+            'neutral_tick': max(0, min(1023, neutral)),
+            'min_tick':     max(0, neutral - span),
+            'max_tick':     min(1023, neutral + span),
+            'current_tick': wheels[i]['steer_tick'],
+        })
+
     return {
         'wheels':         wheels,
+        'position_space': position_space,
         'turning_radius': R,
         'steer_clamped':  max(-cfg.max_steer_deg, min(cfg.max_steer_deg, steer_deg)),
         'speed_clamped':  max(-1.0, min(1.0, speed_mps / cfg.max_speed_mps)) * cfg.max_speed_mps,
@@ -99,6 +116,7 @@ def _default_config():
         'max_steer_deg': 30.0, 'max_speed_mps': 0.5,
         'max_wheel_speed_ticks': 300, 'steer_center_ticks': 512,
         'steer_dir': [1, -1, -1, 1], 'drive_dir': [1, -1, 1, -1],
+        'steer_offset_deg': [0.0, 0.0, 0.0, 0.0],
     }
 
 
@@ -318,7 +336,15 @@ HTML_PAGE = """<!DOCTYPE html>
       <div class="cfg-row"><label>steer_center_ticks</label>      <input id="c-center"    type="number" step="1"    value="512"></div>
       <div class="cfg-row"><label>steer_dir [FL,FR,RL,RR]</label><input id="c-sdir" type="text" value="1,-1,-1,1"></div>
       <div class="cfg-row"><label>drive_dir [FL,FR,RL,RR]</label><input id="c-ddir" type="text" value="1,-1,1,-1"></div>
+      <div class="cfg-row" style="grid-column:1/-1"><label>steer_offset_deg [FL,FR,RL,RR]</label><input id="c-offset" type="text" value="0,0,0,0" style="width:160px"></div>
     </div>
+
+    <!-- AX-12A position space bars -->
+    <div style="margin-top:12px;">
+      <h3>AX-12A position space (0 - 1023 ticks / 0 - 300 deg)</h3>
+      <div id="pos-bars"></div>
+    </div>
+
     <div class="btn-row">
       <button class="btn btn-save" onclick="saveConfig()">Save config</button>
       <button class="btn btn-load" onclick="loadConfig()">Load config</button>
@@ -346,6 +372,9 @@ function readConfig() {
   function parseDir(id) {
     return document.getElementById(id).value.split(',').map(function(v){ return parseInt(v.trim()); });
   }
+  function parseFloat4(id) {
+    return document.getElementById(id).value.split(',').map(function(v){ return parseFloat(v.trim()); });
+  }
   return {
     wheelbase:             parseFloat(document.getElementById('c-wheelbase').value),
     track_width:           parseFloat(document.getElementById('c-track').value),
@@ -355,6 +384,7 @@ function readConfig() {
     steer_center_ticks:    parseInt(document.getElementById('c-center').value),
     steer_dir:             parseDir('c-sdir'),
     drive_dir:             parseDir('c-ddir'),
+    steer_offset_deg:      parseFloat4('c-offset'),
   };
 }
 
@@ -367,6 +397,22 @@ function fillConfig(c) {
   document.getElementById('c-center').value    = c.steer_center_ticks;
   document.getElementById('c-sdir').value      = c.steer_dir.join(',');
   document.getElementById('c-ddir').value      = c.drive_dir.join(',');
+  var off = c.steer_offset_deg || [0,0,0,0];
+  document.getElementById('c-offset').value    = off.join(',');
+  updateSliderRange(c.max_steer_deg, c.max_speed_mps);
+}
+
+function updateSliderRange(maxSteer, maxSpeed) {
+  var sl = document.getElementById('sl-steer');
+  sl.min = -maxSteer; sl.max = maxSteer;
+  if (parseFloat(sl.value) > maxSteer)  sl.value =  maxSteer;
+  if (parseFloat(sl.value) < -maxSteer) sl.value = -maxSteer;
+  document.getElementById('lbl-steer').textContent = parseFloat(sl.value).toFixed(1);
+  var ss = document.getElementById('sl-speed');
+  ss.min = -maxSpeed; ss.max = maxSpeed;
+  if (parseFloat(ss.value) > maxSpeed)  ss.value =  maxSpeed;
+  if (parseFloat(ss.value) < -maxSpeed) ss.value = -maxSpeed;
+  document.getElementById('lbl-speed').textContent = parseFloat(ss.value).toFixed(2);
 }
 
 var slSteer = document.getElementById('sl-steer');
@@ -380,7 +426,12 @@ slSpeed.addEventListener('input', function() {
   document.getElementById('lbl-speed').textContent = parseFloat(slSpeed.value).toFixed(2);
   preview();
 });
-document.querySelectorAll('.cfg-grid input').forEach(function(el){ el.addEventListener('input', preview); });
+document.querySelectorAll('.cfg-grid input').forEach(function(el){ el.addEventListener('input', function(){
+  var ms = parseFloat(document.getElementById('c-maxsteer').value);
+  var mp = parseFloat(document.getElementById('c-maxspeed').value);
+  if (!isNaN(ms) && !isNaN(mp)) updateSliderRange(ms, mp);
+  preview();
+}); });
 
 function postJSON(url, data, cb) {
   var xhr = new XMLHttpRequest();
@@ -439,6 +490,7 @@ function loadConfig() {
 
 function updateViz(data) {
   var wheels = data.wheels;
+  if (data.position_space) updatePosBars(data.position_space);
   var tbody = document.getElementById('wheel-table');
   tbody.innerHTML = '';
   wheels.forEach(function(w) {
@@ -491,6 +543,45 @@ function updateViz(data) {
   }
 }
 
+function updatePosBars(posSpace) {
+  var labels = ['FL','FR','RL','RR'];
+  var W = 280; // bar width in px
+  var html = '<table style="width:100%;border-collapse:collapse;margin-top:4px;">';
+  html += '<tr><th style="color:#7cf;font-weight:normal;text-align:left;padding:2px 4px;font-size:11px;">Wheel</th>' +
+          '<th style="color:#7cf;font-weight:normal;text-align:left;padding:2px 4px;font-size:11px;">Position space</th>' +
+          '<th style="color:#7cf;font-weight:normal;text-align:left;padding:2px 4px;font-size:11px;">Ticks</th></tr>';
+  posSpace.forEach(function(p, i) {
+    var neutralPx  = Math.round(p.neutral_tick  / 1023 * W);
+    var minPx      = Math.round(p.min_tick      / 1023 * W);
+    var maxPx      = Math.round(p.max_tick      / 1023 * W);
+    var currentPx  = Math.round(p.current_tick  / 1023 * W);
+    var rangePx    = maxPx - minPx;
+    html +=
+      '<tr><td style="padding:4px 4px;color:#7fc;font-weight:bold;">' + labels[i] + '</td>' +
+      '<td style="padding:4px;">' +
+        '<div style="position:relative;width:' + W + 'px;height:14px;background:#222;border-radius:3px;border:1px solid #444;">' +
+          // usable range (blue)
+          '<div style="position:absolute;left:' + minPx + 'px;width:' + rangePx + 'px;height:100%;background:#1a3a5a;border-radius:2px;"></div>' +
+          // neutral marker (white line)
+          '<div style="position:absolute;left:' + neutralPx + 'px;width:2px;height:100%;background:#fff;opacity:0.5;"></div>' +
+          // current tick marker (yellow)
+          '<div style="position:absolute;left:' + (currentPx - 2) + 'px;width:4px;height:100%;background:#fa0;border-radius:2px;"></div>' +
+        '</div>' +
+      '</td>' +
+      '<td style="padding:4px;font-size:11px;color:#888;">' +
+        'neutral=' + p.neutral_tick + ' range=[' + p.min_tick + ',' + p.max_tick + '] now=' +
+        '<span style="color:#fa0">' + p.current_tick + '</span>' +
+      '</td></tr>';
+  });
+  html += '</table>' +
+    '<div style="margin-top:4px;font-size:11px;color:#555;">' +
+    '<span style="display:inline-block;width:12px;height:8px;background:#1a3a5a;border:1px solid #444;vertical-align:middle;"></span> usable range &nbsp;' +
+    '<span style="display:inline-block;width:3px;height:10px;background:#fff;opacity:0.5;vertical-align:middle;"></span> neutral &nbsp;' +
+    '<span style="display:inline-block;width:6px;height:10px;background:#fa0;border-radius:1px;vertical-align:middle;"></span> current' +
+    '</div>';
+  document.getElementById('pos-bars').innerHTML = html;
+}
+
 function refreshState() {
   getJSON('/state', function(err, d) {
     if (err) return;
@@ -534,7 +625,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--port',    '-p', default=None)
     parser.add_argument('--baud',    '-b', type=int, default=115200)
-    parser.add_argument('--ui-port', '-u', type=int, default=8080)
+    parser.add_argument('--ui-port', '-u', type=int, default=8081)
     args = parser.parse_args()
 
     port = args.port
