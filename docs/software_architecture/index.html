@@ -78,21 +78,6 @@
   }
   .overview strong { color: var(--text); }
 
-  .features-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 12px;
-    margin-bottom: 48px;
-  }
-  .feature-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px 20px;
-  }
-  .feature-num { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 4px; letter-spacing: 0.08em; }
-  .feature-name { font-size: 14px; font-weight: 600; color: var(--text); }
-
   h2.section-heading {
     font-size: 13px; font-weight: 700;
     letter-spacing: 0.1em; text-transform: uppercase;
@@ -136,52 +121,62 @@
     background: var(--bg); border: 1px solid var(--border); color: var(--muted);
   }
 
-  /* ── V1 Status table ──────────────────────────────────────────── */
-  .status-section {
+  /* ── Feature accordion ───────────────────────────────────────── */
+  .feature-accordion {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
     margin-bottom: 48px;
   }
-  .status-layer {
+  details.feat {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 10px;
     overflow: hidden;
-    margin-bottom: 12px;
+    transition: border-color 0.15s;
   }
-  .status-layer-header {
-    display: flex; align-items: center; gap: 12px;
-    padding: 14px 20px;
-    border-bottom: 1px solid var(--border);
-    background: #0d1117;
+  details.feat[open] { border-color: var(--accent); }
+  details.feat summary {
+    list-style: none;
+    padding: 16px 20px;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 10px;
+    user-select: none;
   }
-  .status-layer-title {
-    font-size: 13px; font-weight: 700; color: var(--text);
+  details.feat summary::-webkit-details-marker { display: none; }
+  .feat-num  { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.08em; white-space: nowrap; }
+  .feat-name { font-size: 14px; font-weight: 600; color: var(--text); flex: 1; }
+  .feat-chevron {
+    font-size: 12px; color: var(--muted);
+    transition: transform 0.2s;
+    flex-shrink: 0;
   }
-  .status-layer-path {
-    font-size: 11px; color: var(--muted); font-family: 'SFMono-Regular', Consolas, monospace;
-  }
-  .status-layer-pill {
-    margin-left: auto;
-    font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 10px;
+  details.feat[open] .feat-chevron { transform: rotate(90deg); }
+  .feat-pill {
+    font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 8px;
+    flex-shrink: 0;
   }
   .pill-done    { background: #0f2a18; color: var(--green);  border: 1px solid #1f4a28; }
   .pill-partial { background: #2a2000; color: var(--yellow); border: 1px solid #4a3800; }
   .pill-pending { background: #2a0f0f; color: var(--red);    border: 1px solid #4a1f1f; }
-
-  .status-row {
-    display: flex; align-items: flex-start; gap: 12px;
-    padding: 10px 20px;
-    border-bottom: 1px solid #21262d;
-    font-size: 13px;
+  .feat-body {
+    border-top: 1px solid var(--border);
+    padding: 4px 0 8px;
   }
-  .status-row:last-child { border-bottom: none; }
-  .status-icon { flex-shrink: 0; margin-top: 1px; font-size: 14px; width: 18px; text-align: center; }
-  .status-item-text { flex: 1; color: var(--text); }
-  .status-item-text.pending { color: var(--muted); }
-  .status-module {
+  .todo-row {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 8px 20px;
+    font-size: 12px;
+    border-bottom: 1px solid #21262d;
+  }
+  .todo-row:last-child { border-bottom: none; }
+  .todo-icon { flex-shrink: 0; width: 16px; text-align: center; margin-top: 1px; }
+  .todo-text { flex: 1; color: var(--text); line-height: 1.5; }
+  .todo-text.pending { color: var(--muted); }
+  .todo-mod {
     font-family: 'SFMono-Regular', Consolas, monospace;
-    font-size: 11px; color: var(--muted);
-    flex-shrink: 0;
-    margin-top: 2px;
+    font-size: 10px; color: var(--muted);
+    flex-shrink: 0; margin-top: 2px; text-align: right;
   }
 </style>
 </head>
@@ -221,191 +216,93 @@
   </div>
 
   <h2 class="section-heading">Main Features — v1</h2>
-  <div class="features-grid" style="margin-bottom: 48px;">
-    <div class="feature-card"><div class="feature-num">FEATURE 1</div><div class="feature-name">Ackermann Drive (4WS + 4WD)</div></div>
-    <div class="feature-card"><div class="feature-num">FEATURE 2</div><div class="feature-name">Camera Live Stream</div></div>
-    <div class="feature-card"><div class="feature-num">FEATURE 3</div><div class="feature-name">Remote Connection &amp; Communication</div></div>
-    <div class="feature-card"><div class="feature-num">FEATURE 4</div><div class="feature-name">Gamepad / Keyboard Control</div></div>
-    <div class="feature-card"><div class="feature-num">FEATURE 5</div><div class="feature-name">Robot Dashboard UI</div></div>
-  </div>
+  <div class="feature-accordion">
 
-  <h2 class="section-heading">V1 Implementation Status</h2>
-  <div class="status-section">
+    <!-- Feature 1 -->
+    <details class="feat">
+      <summary>
+        <span class="feat-num">FEATURE 1</span>
+        <span class="feat-name">Ackermann Drive (4WS + 4WD)</span>
+        <span class="feat-pill pill-done">Done</span>
+        <span class="feat-chevron">▶</span>
+      </summary>
+      <div class="feat-body">
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Binary CMD/STATE frames — 105/202 bytes, CRC-16 CCITT</span><span class="todo-mod">dxl_commander.ino</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">JOINT / WHEEL mode switching; Dynamixel Protocol 1.0 at 1 Mbaud</span><span class="todo-mod">dxl_commander.ino</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Firmware watchdog — zeros drive speeds if no frame within 500 ms</span><span class="todo-mod">dxl_commander.ino</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">AX-12A Present Speed readback via direct address 38</span><span class="todo-mod">dxl_commander.ino</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Serial driver — frame encode/decode, background recv thread, CRC</span><span class="todo-mod">serial_driver.py</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Ackermann kinematics — 4WS counter-phase, per-wheel speed differential</span><span class="todo-mod">ackermann.py</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Servo ID identification — nudge and map DXL ID to wheel role</span><span class="todo-mod">dxl_identify.py</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Steer centre calibration — torque off, align, record neutral offsets</span><span class="todo-mod">ackermann_ui/</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Trapezoidal steering profile — smooth motion; drag vs. click detection</span><span class="todo-mod">ackermann_ui/</span></div>
+      </div>
+    </details>
 
-    <!-- Firmware -->
-    <div class="status-layer">
-      <div class="status-layer-header">
-        <div class="status-layer-title">Firmware — OpenCM9.04</div>
-        <div class="status-layer-path">firmware/dxl_commander/</div>
-        <span class="status-layer-pill pill-done">Complete</span>
+    <!-- Feature 2 -->
+    <details class="feat">
+      <summary>
+        <span class="feat-num">FEATURE 2</span>
+        <span class="feat-name">Camera Live Stream</span>
+        <span class="feat-pill pill-done">Done</span>
+        <span class="feat-chevron">▶</span>
+      </summary>
+      <div class="feat-body">
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Camera generator — V4L2 capture, MJPEG encode, background thread</span><span class="todo-mod">camera.py</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">MJPEG streaming endpoint (<code>/stream</code>) via FastAPI StreamingResponse</span><span class="todo-mod">main.py</span></div>
+        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Camera feed rendered in operator dashboard (<code>&lt;img src="/stream"&gt;</code>)</span><span class="todo-mod">dashboard/</span></div>
       </div>
-      <div class="status-row">
-        <span class="status-icon">✅</span>
-        <span class="status-item-text">Binary CMD frame receiver &amp; STATE frame transmitter (105 / 202 bytes, CRC-16 CCITT)</span>
-        <span class="status-module">dxl_commander.ino</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">✅</span>
-        <span class="status-item-text">Dual-mode serial — text diagnostic commands + binary frames on the same USB port</span>
-        <span class="status-module">dxl_commander.ino</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">✅</span>
-        <span class="status-item-text">JOINT / WHEEL mode switching per servo; Dynamixel Protocol 1.0 at 1 Mbaud</span>
-        <span class="status-module">dxl_commander.ino</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">✅</span>
-        <span class="status-item-text">Firmware watchdog — zeros all drive speeds if no frame received within 500 ms</span>
-        <span class="status-module">dxl_commander.ino</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">✅</span>
-        <span class="status-item-text">Round-robin temperature &amp; voltage polling; correct AX-12A Present Speed via address 38</span>
-        <span class="status-module">dxl_commander.ino</span>
-      </div>
-    </div>
+    </details>
 
-    <!-- Robot Agent -->
-    <div class="status-layer">
-      <div class="status-layer-header">
-        <div class="status-layer-title">Robot Agent — Jetson</div>
-        <div class="status-layer-path">software/robot/</div>
-        <span class="status-layer-pill pill-done">Complete</span>
+    <!-- Feature 3 -->
+    <details class="feat">
+      <summary>
+        <span class="feat-num">FEATURE 3</span>
+        <span class="feat-name">Remote Connection &amp; Communication</span>
+        <span class="feat-pill pill-partial">Partial</span>
+        <span class="feat-chevron">▶</span>
+      </summary>
+      <div class="feat-body">
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">FastAPI server — WebSocket <code>/ws</code>, MJPEG <code>/stream</code>, JSON <code>/status</code></span><span class="todo-mod">main.py</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">E-stop handler — WebSocket silence detection (500 ms), zero-speed dispatch</span><span class="todo-mod">estop.py</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Remote firmware flash toolchain — compile x86, flash over SSH</span><span class="todo-mod">tools/remote_update/</span></div>
+        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Tailscale VPN setup — stable robot addressing and NAT traversal</span><span class="todo-mod">external</span></div>
+        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Systemd service units — auto-start Robot Agent on Jetson boot</span><span class="todo-mod">scripts/</span></div>
       </div>
-      <div class="status-row">
-        <span class="status-icon">✅</span>
-        <span class="status-item-text">Serial driver — binary frame encode/decode, background recv thread, CRC validation</span>
-        <span class="status-module">serial_driver.py</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">✅</span>
-        <span class="status-item-text">Ackermann kinematics — 4WS counter-phase geometry, per-wheel speed differential</span>
-        <span class="status-module">ackermann.py</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">✅</span>
-        <span class="status-item-text">E-stop handler — WebSocket silence detection (500 ms timeout), zero-speed frame dispatch</span>
-        <span class="status-module">estop.py</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">✅</span>
-        <span class="status-item-text">Camera generator — V4L2 capture, MJPEG encode, background thread</span>
-        <span class="status-module">camera.py</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">✅</span>
-        <span class="status-item-text">FastAPI server — WebSocket <code>/ws</code>, MJPEG <code>/stream</code>, JSON <code>/status</code></span>
-        <span class="status-module">main.py</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">✅</span>
-        <span class="status-item-text">Command translator — gamepad axes [−1…1] → physical (v m/s, δ deg)</span>
-        <span class="status-module">main.py</span>
-      </div>
-    </div>
+    </details>
 
-    <!-- Operator Dashboard -->
-    <div class="status-layer">
-      <div class="status-layer-header">
-        <div class="status-layer-title">Operator Dashboard</div>
-        <div class="status-layer-path">docs/dashboard/</div>
-        <span class="status-layer-pill pill-pending">Not started</span>
+    <!-- Feature 4 -->
+    <details class="feat">
+      <summary>
+        <span class="feat-num">FEATURE 4</span>
+        <span class="feat-name">Gamepad / Keyboard Control</span>
+        <span class="feat-pill pill-partial">Partial</span>
+        <span class="feat-chevron">▶</span>
+      </summary>
+      <div class="feat-body">
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Command translator — gamepad axes [−1…1] → physical (v m/s, δ deg)</span><span class="todo-mod">main.py</span></div>
+        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Gamepad API polling at 50 Hz → WebSocket drive commands</span><span class="todo-mod">dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Keyboard fallback control (arrow keys / WASD)</span><span class="todo-mod">dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">WebSocket reconnect on connection loss</span><span class="todo-mod">dashboard/</span></div>
       </div>
-      <div class="status-row">
-        <span class="status-icon">⬜</span>
-        <span class="status-item-text pending">Single-page HTML dashboard (Vanilla JS, no build step)</span>
-        <span class="status-module">index.html</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">⬜</span>
-        <span class="status-item-text pending">Gamepad API polling at 50 Hz → WebSocket drive commands</span>
-        <span class="status-module">index.html</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">⬜</span>
-        <span class="status-item-text pending">Keyboard fallback control (arrow keys / WASD)</span>
-        <span class="status-module">index.html</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">⬜</span>
-        <span class="status-item-text pending">Live MJPEG camera feed (<code>&lt;img src="/stream"&gt;</code>)</span>
-        <span class="status-module">index.html</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">⬜</span>
-        <span class="status-item-text pending">Servo status panel — voltages, temperatures, positions, modes</span>
-        <span class="status-module">index.html</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">⬜</span>
-        <span class="status-item-text pending">E-stop indicator and manual E-stop button</span>
-        <span class="status-module">index.html</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">⬜</span>
-        <span class="status-item-text pending">WebSocket reconnect on connection loss</span>
-        <span class="status-module">index.html</span>
-      </div>
-    </div>
+    </details>
 
-    <!-- Infrastructure -->
-    <div class="status-layer">
-      <div class="status-layer-header">
-        <div class="status-layer-title">Infrastructure &amp; Deployment</div>
-        <div class="status-layer-path">tools/ · scripts/</div>
-        <span class="status-layer-pill pill-partial">Partial</span>
+    <!-- Feature 5 -->
+    <details class="feat">
+      <summary>
+        <span class="feat-num">FEATURE 5</span>
+        <span class="feat-name">Robot Dashboard UI</span>
+        <span class="feat-pill pill-pending">Not started</span>
+        <span class="feat-chevron">▶</span>
+      </summary>
+      <div class="feat-body">
+        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Single-page HTML dashboard (Vanilla JS, no build step)</span><span class="todo-mod">dashboard/index.html</span></div>
+        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Live MJPEG camera feed</span><span class="todo-mod">dashboard/index.html</span></div>
+        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Servo status panel — voltages, temperatures, positions, modes</span><span class="todo-mod">dashboard/index.html</span></div>
+        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">E-stop indicator and manual E-stop button</span><span class="todo-mod">dashboard/index.html</span></div>
+        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Connection status indicator</span><span class="todo-mod">dashboard/index.html</span></div>
       </div>
-      <div class="status-row">
-        <span class="status-icon">✅</span>
-        <span class="status-item-text">Remote firmware flash toolchain — compile x86, flash OpenCM9.04 over SSH</span>
-        <span class="status-module">tools/remote_update/</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">✅</span>
-        <span class="status-item-text">Serial monitor — stream OpenCM debug output from Jetson to x86 terminal</span>
-        <span class="status-module">tools/monitor/</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">⬜</span>
-        <span class="status-item-text pending">Tailscale VPN setup — stable robot addressing and NAT traversal (manual external step)</span>
-        <span class="status-module">external</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">⬜</span>
-        <span class="status-item-text pending">Systemd service units — auto-start Robot Agent on Jetson boot</span>
-        <span class="status-module">scripts/</span>
-      </div>
-    </div>
-
-    <!-- Calibration tools -->
-    <div class="status-layer">
-      <div class="status-layer-header">
-        <div class="status-layer-title">Calibration &amp; Commissioning Tools</div>
-        <div class="status-layer-path">tools/ackermann_ui/ · tools/dynamixel/</div>
-        <span class="status-layer-pill pill-done">Complete</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">✅</span>
-        <span class="status-item-text">Ackermann UI — browser-based parameter tuning, bird's-eye view, servo state readback</span>
-        <span class="status-module">tools/ackermann_ui/</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">✅</span>
-        <span class="status-item-text">Servo ID identification — nudge each servo and map DXL ID to wheel role</span>
-        <span class="status-module">tools/dynamixel/dxl_identify.py</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">✅</span>
-        <span class="status-item-text">Steer centre calibration — torque off, physically align, record neutral offsets</span>
-        <span class="status-module">tools/ackermann_ui/</span>
-      </div>
-      <div class="status-row">
-        <span class="status-icon">✅</span>
-        <span class="status-item-text">Trapezoidal steering profile — smooth motion on large angle commands; drag vs. click detection</span>
-        <span class="status-module">tools/ackermann_ui/</span>
-      </div>
-    </div>
+    </details>
 
   </div>
 
