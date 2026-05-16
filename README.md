@@ -3,6 +3,55 @@
 x86 build toolchain and Jetson runtime tools for the Black-Mata robot.
 Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson runs Python scripts to communicate with the board.
 
+---
+
+## V1 Feature Status
+
+### Firmware — OpenCM9.04
+
+- [x] Binary CMD frame receiver (105 bytes, CRC-16 CCITT)
+- [x] Binary STATE frame transmitter (202 bytes, CRC-16 CCITT)
+- [x] Dual-mode serial (text commands + binary frames on same port)
+- [x] Dynamixel JOINT / WHEEL mode switching per servo
+- [x] Firmware watchdog — zeros all drive speeds if no frame received within 500 ms
+- [x] Round-robin temperature & voltage polling (one servo per frame)
+- [x] Correct AX-12A Present Speed readback via direct address 38 (not PRESENT_VELOCITY)
+
+### Robot Agent — Jetson (`software/robot/`)
+
+- [x] Serial driver — binary frame encode/decode, background recv thread, CRC validation (`serial_driver.py`)
+- [x] Ackermann kinematics — 4WS counter-phase geometry, per-wheel speed differential (`ackermann.py`)
+- [x] E-stop handler — WebSocket silence detection (500 ms), zero-speed frame dispatch (`estop.py`)
+- [x] Camera generator — V4L2 capture, MJPEG encode, background thread (`camera.py`)
+- [x] Robot Agent server — WebSocket drive commands, MJPEG `/stream`, JSON `/status` (`main.py`)
+- [x] Command translator — gamepad axes [-1…1] → physical (v m/s, δ deg)
+
+### Operator Dashboard (`docs/dashboard/`)
+
+- [ ] Single-page HTML dashboard (Vanilla JS, no build step)
+- [ ] Gamepad API polling at 50 Hz → WebSocket drive commands
+- [ ] Keyboard fallback control (arrow keys / WASD)
+- [ ] Live MJPEG camera feed (`<img src="/stream">`)
+- [ ] Servo status panel (voltages, temperatures, positions, modes)
+- [ ] E-stop indicator and manual E-stop button
+- [ ] WebSocket reconnect on connection loss
+
+### Infrastructure
+
+- [x] Remote firmware flash toolchain — compile x86, flash to OpenCM9.04 over SSH (`tools/remote_update/`)
+- [x] Serial monitor — stream OpenCM debug output from Jetson to x86 (`tools/monitor/`)
+- [ ] Tailscale VPN setup — stable robot addressing, NAT traversal (external, manual step)
+- [ ] Systemd service units — auto-start Robot Agent on Jetson boot
+
+### Calibration & Commissioning Tools (not in v1 architecture, added during development)
+
+- [x] Ackermann UI — browser-based parameter tuning, bird's-eye visualisation, servo state (`tools/ackermann_ui/`)
+- [x] Servo ID identification — nudge each servo and map to wheel role (`tools/dynamixel/dxl_identify.py`)
+- [x] Steer centre calibration — torque-off, physically align, record neutral offsets
+- [x] Trapezoidal steering profile — smooth motion on large angle commands, drag vs. click detection
+
+---
+
 ## Prerequisites
 
 ### 1) arduino-cli binary (x86)
