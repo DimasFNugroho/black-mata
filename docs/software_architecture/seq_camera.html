@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Camera Stream Flow — Black-Mata Architecture</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --accent:  #58a6ff;
+    --green:   #3fb950;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px; line-height: 1.6;
+  }
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 40px; display: flex; align-items: center; gap: 4px; overflow-x: auto;
+  }
+  .nav-brand {
+    font-size: 14px; font-weight: 700; color: var(--text);
+    padding: 14px 16px 14px 0; margin-right: 12px;
+    border-right: 1px solid var(--border); white-space: nowrap; text-decoration: none;
+  }
+  nav a:not(.nav-brand) {
+    display: block; padding: 14px 14px; font-size: 13px; font-weight: 500;
+    color: var(--muted); text-decoration: none; white-space: nowrap;
+    border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+  }
+  nav a:not(.nav-brand):hover { color: var(--text); }
+  nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .sub-nav {
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 0 40px; display: flex; gap: 0; overflow-x: auto;
+  }
+  .sub-nav a {
+    display: block; padding: 10px 16px; font-size: 13px; font-weight: 500;
+    color: var(--muted); text-decoration: none; white-space: nowrap;
+    border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+  }
+  .sub-nav a:hover { color: var(--text); }
+  .sub-nav a.active { color: var(--green); border-bottom-color: var(--green); }
+
+  main { max-width: 1400px; margin: 0 auto; padding: 48px 40px 100px; }
+  .page-header { margin-bottom: 32px; }
+  .page-header h1 { font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+  .page-header p  { font-size: 14px; color: var(--muted); }
+  .freq {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    padding: 3px 10px; border-radius: 4px; margin-bottom: 12px;
+    background: #1f3a2f; color: var(--green); border: 1px solid #2a5a3a;
+  }
+
+  .diagram-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 32px; overflow-x: auto;
+  }
+  .mermaid svg { min-width: 600px; }
+
+  .toolbar {
+    display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .toolbar button {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); font-size: 13px; font-weight: 600;
+    padding: 8px 16px; border-radius: 7px; cursor: pointer;
+    display: flex; align-items: center; gap: 7px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .toolbar button:hover { border-color: var(--accent); background: #1f2d3d; }
+  .toolbar button svg { width: 15px; height: 15px; fill: currentColor; }
+
+  @media print {
+    nav, .sub-nav, .toolbar, .page-header { display: none !important; }
+    body { background: #fff !important; color: #000 !important; }
+    .diagram-card { border: none !important; padding: 0 !important; background: #fff !important; }
+    .mermaid svg { width: 100% !important; max-width: 100% !important; height: auto !important; }
+  }
+</style>
+</head>
+<body>
+<nav>
+  <a href="index.html" class="nav-brand">Black-Mata Arch.</a>
+  <a href="index.html">Overview</a>
+  <a href="c4.html">C4 Diagrams</a>
+  <a href="sequences.html" class="active">Sequences</a>
+  <a href="deployment.html">Deployment</a>
+  <a href="adr.html">ADRs</a>
+</nav>
+<div class="sub-nav">
+  <a href="seq_drive.html">Drive Command</a>
+  <a href="seq_camera.html" class="active">Camera Stream</a>
+  <a href="seq_telemetry.html">Telemetry</a>
+</div>
+<main>
+  <div class="page-header">
+    <div class="freq">~30 fps</div>
+    <h1>Camera Stream Flow</h1>
+    <p>From USB camera frame capture on the Jetson to MJPEG display in the operator browser. Runs continuously until the connection is closed.</p>
+  </div>
+  <div class="toolbar">
+    <button onclick="downloadSVG('camera-stream-flow.svg')">
+      <svg viewBox="0 0 16 16"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-5 2h10v1.5H3V14z"/></svg>
+      Download SVG
+    </button>
+    <button onclick="window.print()">
+      <svg viewBox="0 0 16 16"><path d="M4 1h8v3H4V1zM1 5h14v7h-3v3H4v-3H1V5zm3 6v3h8v-3H4zm9-4h1v1h-1V7z"/></svg>
+      Print / Save as PDF
+    </button>
+  </div>
+  <div class="diagram-card">
+    <div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant B as Browser
+  participant H as MJPEG Handler /stream
+  participant C as Camera Generator
+  participant CAM as USB Camera /dev/video0
+
+  B->>H: HTTP GET /stream
+  H->>C: iterate frame generator
+  activate C
+
+  loop Continuous — until connection closed
+    C->>CAM: cv2.VideoCapture.read()
+    CAM-->>C: raw BGR frame
+    C->>C: cv2.imencode('.jpg', frame)
+    C-->>H: yield JPEG bytes
+    H-->>B: multipart/x-mixed-replace + JPEG frame
+    note over B: Browser renders each incoming frame directly in the img tag. No JavaScript required.
+  end
+
+  B->>H: connection closed
+  deactivate C
+    </div>
+  </div>
+</main>
+<script>
+  function downloadSVG(filename) {
+    const svg = document.querySelector('.mermaid svg');
+    if (!svg) { alert('Diagram not ready — please wait a moment and try again.'); return; }
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.style.background = '#161b22';
+    const data = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([data], { type: 'image/svg+xml' });
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: filename });
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      fontSize: '16px',
+      background: '#161b22',
+      primaryColor: '#1f3a5f',
+      primaryTextColor: '#e6edf3',
+      primaryBorderColor: '#30363d',
+      lineColor: '#58a6ff',
+      fontFamily: 'system-ui, -apple-system, Segoe UI, sans-serif',
+    },
+    sequence: {
+      actorFontSize: 16,
+      actorFontFamily: 'system-ui, -apple-system, Segoe UI, sans-serif',
+      actorMargin: 60,
+      messageFontSize: 15,
+      messageFontFamily: 'system-ui, -apple-system, Segoe UI, sans-serif',
+      noteFontSize: 14,
+      noteMargin: 15,
+      mirrorActors: true,
+      boxMargin: 14,
+      width: 230,
+      height: 46,
+      messageMargin: 38,
+      useMaxWidth: false,
+    }
+  });
+</script>
+</body>
+</html>

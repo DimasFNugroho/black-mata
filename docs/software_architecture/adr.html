@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADRs — Black-Mata Architecture</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --accent:  #58a6ff;
+    --green:   #3fb950;
+    --red:     #f85149;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 40px;
+    display: flex; align-items: center; gap: 4px;
+    overflow-x: auto;
+  }
+  .nav-brand {
+    font-size: 14px; font-weight: 700; color: var(--text);
+    padding: 14px 16px 14px 0; margin-right: 12px;
+    border-right: 1px solid var(--border);
+    white-space: nowrap; text-decoration: none;
+  }
+  nav a:not(.nav-brand) {
+    display: block; padding: 14px 14px;
+    font-size: 13px; font-weight: 500;
+    color: var(--muted); text-decoration: none;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  nav a:not(.nav-brand):hover { color: var(--text); }
+  nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  main { max-width: 860px; margin: 0 auto; padding: 48px 40px 100px; }
+
+  .page-header { margin-bottom: 48px; }
+  .page-header h1 { font-size: 26px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+  .page-header p  { font-size: 15px; color: var(--muted); }
+
+  .adr-index {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 40px;
+    display: flex; flex-wrap: wrap; gap: 10px;
+  }
+  .adr-index a {
+    font-size: 13px; font-weight: 600;
+    color: var(--muted); text-decoration: none;
+    padding: 5px 12px; border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .adr-index a:hover { border-color: var(--red); color: var(--text); }
+
+  .adr-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    scroll-margin-top: 80px;
+  }
+  .adr-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    cursor: pointer; user-select: none;
+  }
+  .adr-header:hover { background: #ffffff05; }
+  .adr-id {
+    font-family: monospace; font-size: 13px; font-weight: 700;
+    color: var(--muted); background: var(--bg);
+    padding: 3px 10px; border-radius: 5px; border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .adr-title-text { font-size: 16px; font-weight: 600; color: var(--text); flex: 1; min-width: 200px; }
+  .adr-meta { display: flex; align-items: center; gap: 10px; }
+  .adr-status {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; padding: 3px 10px; border-radius: 4px;
+    background: #1f3a2f; color: var(--green); border: 1px solid #2a5a3a;
+  }
+  .adr-date { font-size: 12px; color: var(--muted); }
+  .adr-chevron { color: var(--muted); font-size: 13px; transition: transform 0.2s; margin-left: auto; }
+  .adr-chevron.open { transform: rotate(90deg); }
+
+  .adr-body {
+    max-height: 0; overflow: hidden;
+    transition: max-height 0.35s ease, padding 0.2s ease;
+    padding: 0 24px;
+  }
+  .adr-body.open { max-height: 800px; padding: 24px 24px 28px; }
+
+  .field-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--accent);
+    margin-top: 20px; margin-bottom: 8px;
+  }
+  .field-label:first-child { margin-top: 0; }
+  .adr-body p { font-size: 14px; color: var(--muted); line-height: 1.75; }
+  .adr-body code {
+    font-family: 'SFMono-Regular', 'Consolas', monospace;
+    font-size: 13px; background: var(--bg);
+    padding: 2px 6px; border-radius: 4px; color: var(--text);
+  }
+  .cons-list { list-style: none; padding: 0; }
+  .cons-list li {
+    font-size: 14px; line-height: 1.75;
+    padding-left: 22px; position: relative;
+  }
+  .cons-list li::before {
+    position: absolute; left: 0; font-weight: 700; font-size: 15px;
+  }
+  .cons-list li.plus  { color: #5ecf7a; }
+  .cons-list li.plus::before  { content: '+'; color: var(--green); }
+  .cons-list li.minus { color: #c07070; }
+  .cons-list li.minus::before { content: '–'; color: var(--red); }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="index.html" class="nav-brand">Black-Mata Arch.</a>
+  <a href="index.html">Overview</a>
+  <a href="c4.html">C4 Diagrams</a>
+  <a href="sequences.html">Sequences</a>
+  <a href="deployment.html">Deployment</a>
+  <a href="adr.html" class="active">ADRs</a>
+</nav>
+
+<main>
+
+  <div class="page-header">
+    <h1>Architecture Decision Records</h1>
+    <p>Key decisions with their context, rationale, and trade-offs. Click any card to expand.</p>
+  </div>
+
+  <div class="adr-index">
+    <a href="#adr001">ADR-001 WebSocket</a>
+    <a href="#adr002">ADR-002 MJPEG</a>
+    <a href="#adr003">ADR-003 Tailscale</a>
+    <a href="#adr004">ADR-004 dxl_commander</a>
+    <a href="#adr005">ADR-005 FastAPI</a>
+    <a href="#adr006">ADR-006 Vanilla JS</a>
+  </div>
+
+  <!-- ADR-001 -->
+  <div class="adr-card" id="adr001">
+    <div class="adr-header" onclick="toggle(this)">
+      <span class="adr-id">ADR-001</span>
+      <span class="adr-title-text">Use WebSocket for the drive command channel</span>
+      <div class="adr-meta">
+        <span class="adr-status">Accepted</span>
+        <span class="adr-date">2026-05-11</span>
+      </div>
+      <span class="adr-chevron">▶</span>
+    </div>
+    <div class="adr-body">
+      <div class="field-label">Context</div>
+      <p>Drive commands must be sent from the operator browser to the robot at approximately 50 Hz with minimal round-trip latency. The channel must be persistent and low-overhead since a new connection per frame would be impractical. Options evaluated: HTTP polling, Server-Sent Events, WebSocket, MQTT over WebSocket.</p>
+      <div class="field-label">Decision</div>
+      <p>Use a persistent WebSocket connection on a FastAPI <code>/ws</code> route. Each message carries a JSON object: <code>{steer_deg: float, speed_pct: float}</code>.</p>
+      <div class="field-label">Consequences</div>
+      <ul class="cons-list">
+        <li class="plus">Full-duplex persistent connection — no HTTP handshake overhead per control frame.</li>
+        <li class="plus">Native browser <code>WebSocket</code> API — no client library required.</li>
+        <li class="plus">FastAPI supports WebSocket natively with async handlers alongside HTTP routes.</li>
+        <li class="minus">JSON serialization has marginal overhead over a binary protocol; acceptable at 50 Hz.</li>
+        <li class="minus">Requires reconnection logic on the dashboard side for dropped connections.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ADR-002 -->
+  <div class="adr-card" id="adr002">
+    <div class="adr-header" onclick="toggle(this)">
+      <span class="adr-id">ADR-002</span>
+      <span class="adr-title-text">Use MJPEG over HTTP for camera streaming</span>
+      <div class="adr-meta">
+        <span class="adr-status">Accepted</span>
+        <span class="adr-date">2026-05-11</span>
+      </div>
+      <span class="adr-chevron">▶</span>
+    </div>
+    <div class="adr-body">
+      <div class="field-label">Context</div>
+      <p>The operator needs a live camera feed rendered in the browser. Four options were evaluated: WebRTC (peer-to-peer, H.264), HLS (segmented streaming), WebSocket binary frames, and MJPEG over HTTP.</p>
+      <div class="field-label">Decision</div>
+      <p>Serve MJPEG as a <code>multipart/x-mixed-replace</code> HTTP stream via FastAPI's <code>StreamingResponse</code>. The Dashboard consumes it with a plain <code>&lt;img src="/stream"&gt;</code> tag — no JavaScript involved.</p>
+      <div class="field-label">Consequences</div>
+      <ul class="cons-list">
+        <li class="plus">Zero browser-side code — the <code>&lt;img&gt;</code> tag handles the stream natively.</li>
+        <li class="plus">No STUN, TURN, or signalling infrastructure needed (unlike WebRTC).</li>
+        <li class="plus">OpenCV <code>imencode()</code> produces JPEG frames natively — no additional pipeline needed.</li>
+        <li class="minus">Higher bandwidth than H.264. Acceptable over LAN and VPN for v1; revisit in v2.</li>
+        <li class="minus">Latency approximately 100–300 ms. Sufficient for teleoperation.</li>
+        <li class="minus">No audio channel over MJPEG.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ADR-003 -->
+  <div class="adr-card" id="adr003">
+    <div class="adr-header" onclick="toggle(this)">
+      <span class="adr-id">ADR-003</span>
+      <span class="adr-title-text">Use Tailscale for remote connectivity</span>
+      <div class="adr-meta">
+        <span class="adr-status">Accepted</span>
+        <span class="adr-date">2026-05-11</span>
+      </div>
+      <span class="adr-chevron">▶</span>
+    </div>
+    <div class="adr-body">
+      <div class="field-label">Context</div>
+      <p>The robot operates behind NAT — home router, 4G modem, university network — and does not have a static IP. The operator must reach the robot from anywhere without port forwarding. Options evaluated: self-hosted reverse proxy with TURN (nginx), ngrok tunnels, Tailscale, Cloudflare Tunnel.</p>
+      <div class="field-label">Decision</div>
+      <p>Install Tailscale on both the Jetson and the operator machine. The robot receives a stable <code>100.x.x.x</code> VPN address. The operator connects directly to that address. No relay server code is written or maintained.</p>
+      <div class="field-label">Consequences</div>
+      <ul class="cons-list">
+        <li class="plus">Zero infrastructure to build or maintain.</li>
+        <li class="plus">WireGuard encryption by default — end-to-end between operator and robot.</li>
+        <li class="plus">NAT traversal and reconnection handled automatically.</li>
+        <li class="plus">Free tier supports this use case indefinitely.</li>
+        <li class="minus">Third-party dependency — requires a Tailscale account.</li>
+        <li class="minus">Both machines must have Tailscale installed and authenticated before use.</li>
+        <li class="minus">Not fully self-hosted. Can migrate to Headscale (self-hosted Tailscale control plane) in v2 if required.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ADR-004 -->
+  <div class="adr-card" id="adr004">
+    <div class="adr-header" onclick="toggle(this)">
+      <span class="adr-id">ADR-004</span>
+      <span class="adr-title-text">Use dxl_commander firmware instead of host-side DynamixelSDK</span>
+      <div class="adr-meta">
+        <span class="adr-status">Accepted</span>
+        <span class="adr-date">2026-05-11</span>
+      </div>
+      <span class="adr-chevron">▶</span>
+    </div>
+    <div class="adr-body">
+      <div class="field-label">Context</div>
+      <p>AX-12A servos can be controlled from the Jetson using the official Python <code>DynamixelSDK</code> directly over a U2D2 USB adapter, or they can be driven via an OpenCM9.04 running <code>Dynamixel2Arduino</code>, with the Jetson sending higher-level text commands over USB Serial. The OpenCM9.04 hardware is already present in the robot.</p>
+      <div class="field-label">Decision</div>
+      <p>All Dynamixel protocol complexity lives inside the <code>dxl_commander</code> firmware on the OpenCM9.04. The Jetson sends newline-terminated ASCII commands such as <code>SETPOS 1 512</code> and receives structured text responses. No <code>DynamixelSDK</code> is installed on the host.</p>
+      <div class="field-label">Consequences</div>
+      <ul class="cons-list">
+        <li class="plus">Host code is fully decoupled from Dynamixel protocol internals and baud timing.</li>
+        <li class="plus">The firmware is already built and tested — it is an existing asset.</li>
+        <li class="plus">Text protocol is language-agnostic and can be debugged from any serial terminal.</li>
+        <li class="plus">OpenCM9.04 handles half-duplex bus direction switching natively and reliably.</li>
+        <li class="minus">Extra USB-Serial hop adds approximately 1–2 ms latency per command batch.</li>
+        <li class="minus">Adding a new servo operation (e.g. sync write) requires a firmware update cycle.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ADR-005 -->
+  <div class="adr-card" id="adr005">
+    <div class="adr-header" onclick="toggle(this)">
+      <span class="adr-id">ADR-005</span>
+      <span class="adr-title-text">Use FastAPI + uvicorn for the Robot Agent</span>
+      <div class="adr-meta">
+        <span class="adr-status">Accepted</span>
+        <span class="adr-date">2026-05-11</span>
+      </div>
+      <span class="adr-chevron">▶</span>
+    </div>
+    <div class="adr-body">
+      <div class="field-label">Context</div>
+      <p>The Robot Agent must concurrently serve a WebSocket endpoint, an HTTP streaming response (MJPEG), and a JSON REST endpoint — all from a single process on the Jetson. Options evaluated: Flask, aiohttp, FastAPI, and ROS2 (which includes its own communication layer).</p>
+      <div class="field-label">Decision</div>
+      <p>Use FastAPI with uvicorn. All three endpoint types are natively supported within a single async process.</p>
+      <div class="field-label">Consequences</div>
+      <ul class="cons-list">
+        <li class="plus">Async-native: WebSocket, streaming, and REST handlers run concurrently without threads.</li>
+        <li class="plus">WebSocket support is built into FastAPI with no extension needed.</li>
+        <li class="plus"><code>StreamingResponse</code> cleanly wraps the MJPEG generator.</li>
+        <li class="plus">Minimal boilerplate — fast to iterate and easy to read.</li>
+        <li class="minus">ROS2 would provide topic and service infrastructure that will be useful in v2 when odometry, SLAM, and waypoints are added. This is a deliberate deferral for v1 simplicity. FastAPI can coexist with a future ROS2 layer via a bridge node.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ADR-006 -->
+  <div class="adr-card" id="adr006">
+    <div class="adr-header" onclick="toggle(this)">
+      <span class="adr-id">ADR-006</span>
+      <span class="adr-title-text">Use Vanilla JS for the Operator Dashboard</span>
+      <div class="adr-meta">
+        <span class="adr-status">Accepted</span>
+        <span class="adr-date">2026-05-11</span>
+      </div>
+      <span class="adr-chevron">▶</span>
+    </div>
+    <div class="adr-body">
+      <div class="field-label">Context</div>
+      <p>The dashboard must display a live camera stream, read gamepad and keyboard input, maintain a WebSocket connection for sending drive commands, and show a servo status panel. Options evaluated: React, Vue, Svelte, and Vanilla JS with browser built-ins.</p>
+      <div class="field-label">Decision</div>
+      <p>A single HTML file using only built-in browser APIs: <code>Gamepad API</code> for controller input, <code>WebSocket API</code> for the command channel, <code>Fetch API</code> for polling telemetry, and standard DOM manipulation. No build toolchain.</p>
+      <div class="field-label">Consequences</div>
+      <ul class="cons-list">
+        <li class="plus">No build step, no npm, no bundler — the file opens directly from the filesystem or is served as a static file.</li>
+        <li class="plus">Browser <code>Gamepad API</code> natively polls controller state — no library needed.</li>
+        <li class="plus">All five v1 dashboard requirements are satisfied by browser built-ins alone.</li>
+        <li class="plus">Easy to serve as a static file from the Robot Agent's FastAPI instance.</li>
+        <li class="minus">Not suitable if the dashboard grows substantially in v2 (maps, waypoint editor, tuning panels). Revisit with a lightweight framework at that point.</li>
+      </ul>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  function toggle(header) {
+    const body = header.nextElementSibling;
+    const chevron = header.querySelector('.adr-chevron');
+    const open = body.classList.contains('open');
+    body.classList.toggle('open', !open);
+    chevron.classList.toggle('open', !open);
+  }
+
+  // Auto-open if navigated to via anchor
+  window.addEventListener('DOMContentLoaded', () => {
+    const hash = window.location.hash;
+    if (hash) {
+      const card = document.querySelector(hash);
+      if (card) {
+        const header = card.querySelector('.adr-header');
+        if (header) toggle(header);
+      }
+    }
+  });
+</script>
+</body>
+</html>

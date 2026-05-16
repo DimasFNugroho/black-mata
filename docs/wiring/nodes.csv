@@ -4,7 +4,7 @@ adapter,AC Adapter,power,12V · 3A · wall socket
 rail12v,12V Rail,rail,Parallel connection from LiPo and AC adapter
 ubec,UBEC,power,12V in · 5V 5A out
 jetson,Jetson Nano,compute,5V · barrel jack · USB host
-opencm,OpenCM 9.04,compute,5V via USB (logic) · 12V via rail (servo power) · Dynamixel 5V TTL bus controller
+opencm,OpenCM 9.04,compute,12V direct · onboard regulator for logic · master power switch (gates 12V to UBEC and servos) · Dynamixel 5V TTL bus controller
 camera,Camera,peripheral,USB 2.0 High Speed · UVC · 480Mbps
 wifi,WiFi Dongle,peripheral,USB 2.0 High Speed · rtl8192eu · 480Mbps
 bt,Bluetooth Dongle,peripheral,USB 2.0 Full Speed · 12Mbps

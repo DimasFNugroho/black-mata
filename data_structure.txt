@@ -8,7 +8,9 @@ Data package from opencm to jetson
  |    dxl_id_4_available | dxl_id_4_mode | dxl_id_4_current_pos | dxl_id_4_current_speed | dxl_id_4_temperature | dxl_id_4_voltage
  |    dxl_id_5_available | dxl_id_5_mode | dxl_id_5_current_pos | dxl_id_5_current_speed | dxl_id_5_temperature | dxl_id_5_voltage
  |    dxl_id_6_available | dxl_id_6_mode | dxl_id_6_current_pos | dxl_id_6_current_speed | dxl_id_6_temperature | dxl_id_6_voltage
- |    64 byte data response payload (can also be used for flags) 
+ |    dxl_id_7_available | dxl_id_7_mode | dxl_id_7_current_pos | dxl_id_7_current_speed | dxl_id_7_temperature | dxl_id_7_voltage
+ |    dxl_id_8_available | dxl_id_8_mode | dxl_id_8_current_pos | dxl_id_8_current_speed | dxl_id_8_temperature | dxl_id_8_voltage
+ |    64 byte data response payload (can also be used for flags)
  |    crc
  ]
 
@@ -23,6 +25,8 @@ Data package from jetson to opencm
  |    dxl_id_4_mode | dxl_id_4_target_pos or dxl_id_4_target_speed | dxl_id_4_enable_torque
  |    dxl_id_5_mode | dxl_id_5_target_pos or dxl_id_5_target_speed | dxl_id_5_enable_torque
  |    dxl_id_6_mode | dxl_id_6_target_pos or dxl_id_6_target_speed | dxl_id_6_enable_torque
- |    64 byte data command payload 
+ |    dxl_id_7_mode | dxl_id_7_target_pos or dxl_id_7_target_speed | dxl_id_7_enable_torque
+ |    dxl_id_8_mode | dxl_id_8_target_pos or dxl_id_8_target_speed | dxl_id_8_enable_torque
+ |    64 byte data command payload
  |    crc
 ]

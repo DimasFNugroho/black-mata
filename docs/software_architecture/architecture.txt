@@ -1,0 +1,583 @@
+================================================================================
+  BLACK-MATA — Software Architecture
+  Teleoperation v1  |  4-Wheel Steering + 4-Wheel Drive
+================================================================================
+
+  DOCUMENT CONTENTS
+  ─────────────────
+  1. C4 Level 1 — System Context
+  2. C4 Level 2 — Container Diagram
+  3. C4 Level 3 — Component Diagram (Robot Agent)
+  4. Sequence Diagram — Drive Command Flow
+  5. Sequence Diagram — Camera Stream Flow
+  6. Sequence Diagram — Telemetry Flow
+  7. Deployment Diagram
+  8. Architecture Decision Records (ADR-001 … ADR-006)
+
+================================================================================
+  1. C4 LEVEL 1 — SYSTEM CONTEXT
+================================================================================
+
+  Scope : Black-Mata Teleoperation System
+  Purpose: Who uses the system and what external systems does it depend on?
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │                                                                          │
+  │   ╔══════════╗                                       ╔════════════════╗  │
+  │   ║  Person  ║                                       ║ External Sys.  ║  │
+  │   ╠══════════╣                                       ╠════════════════╣  │
+  │   ║ Operator ║                                       ║  Tailscale VPN ║  │
+  │   ║          ║                                       ║                ║  │
+  │   ║ Controls ║                                       ║ WireGuard mesh ║  │
+  │   ║ robot    ║                                       ║ VPN. NAT       ║  │
+  │   ║ remotely ║                                       ║ traversal and  ║  │
+  │   ║ via      ║                                       ║ stable robot   ║  │
+  │   ║ browser  ║                                       ║ addressing.    ║  │
+  │   ╚═════╤════╝                                       ╚═══════╤════════╝  │
+  │         │  Drive cmds, camera feed,                          │           │
+  │         │  status — WS / HTTP                                │ mesh VPN  │
+  │         │  (via Tailscale)                                   │           │
+  │         ▼                                                     │           │
+  │   ┌─────────────────────────────────────────────────────┐    │           │
+  │   │  ╔══════════════════════════════════════════════╗   │◄───┘           │
+  │   │  ║              Black-Mata System               ║   │                │
+  │   │  ╠══════════════════════════════════════════════╣   │                │
+  │   │  ║ 4WS+4WD teleoperated robot platform.        ║   │                │
+  │   │  ║ Accepts remote drive commands and streams   ║   │                │
+  │   │  ║ live camera feed back to the operator.      ║   │                │
+  │   │  ╚══════════════════════════════════════════════╝   │                │
+  │   └─────────────────────────────────────────────────────┘                │
+  │                                                                          │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  Legend:  ╔══╗ = Person or Software System   ┌──┐ = System Boundary
+
+
+================================================================================
+  2. C4 LEVEL 2 — CONTAINER DIAGRAM
+================================================================================
+
+  Scope : Black-Mata System boundary
+  Purpose: What deployable/runnable units exist and how do they communicate?
+
+  ┌── Black-Mata System ─────────────────────────────────────────────────────┐
+  │                                                                          │
+  │  ┌── Operator Machine ──────┐      ┌── Jetson / ARM SBC ───────────────┐│
+  │  │                          │      │                                   ││
+  │  │  ┌────────────────────┐  │      │  ┌────────────────────────────┐  ││
+  │  │  │ [Container]        │  │      │  │ [Container]                │  ││
+  │  │  │ Dashboard          │  │      │  │ Robot Agent                │  ││
+  │  │  │ ─────────────────  │  │      │  │ ──────────────────────────  │  ││
+  │  │  │ HTML / Vanilla JS  │  │      │  │ Python / FastAPI           │  ││
+  │  │  │                    │  │      │  │                            │  ││
+  │  │  │ Single-page UI.    │  │ WS + │  │ WebSocket server.          │  ││
+  │  │  │ Renders camera     ├──┼──────►  │ MJPEG stream proxy.        │  ││
+  │  │  │ stream, reads      │  │ HTTP │  │ Servo telemetry API.       │  ││
+  │  │  │ gamepad/keyboard,  │◄─┼──────┤  │ Ackermann kinematics.      │  ││
+  │  │  │ shows servo status.│  │      │  │ Serial command dispatch.   │  ││
+  │  │  └────────────────────┘  │      │  └──────────────┬─────────────┘  ││
+  │  │                          │      │                  │ USB Serial      ││
+  │  └──────────────────────────┘      │                  │ 115200 baud     ││
+  │                                    │  ┌───────────────▼─────────────┐  ││
+  │                                    │  │ [Container]                 │  ││
+  │                                    │  │ dxl_commander               │  ││
+  │                                    │  │ ───────────────────────────  │  ││
+  │                                    │  │ Arduino C++ / OpenCM9.04   │  ││
+  │                                    │  │                             │  ││
+  │                                    │  │ Binary-frame firmware.      │  ││
+  │                                    │  │ Owns Dynamixel bus.         │  ││
+  │                                    │  │ Decodes fixed-length packet │  ││
+  │                                    │  │ → AX-12A register writes.   │  ││
+  │                                    │  │ Watchdog: zeros all speeds  │  ││
+  │                                    │  │ if no frame received >500ms.│  ││
+  │                                    │  └───────────────┬─────────────┘  ││
+  │                                    │                  │ Dynamixel TTL   ││
+  │                                    │                  │ 1 Mbaud         ││
+  │                                    │  ┌───────────────▼─────────────┐  ││
+  │                                    │  │ [Hardware]                  │  ││
+  │                                    │  │ 8× AX-12A Servos            │  ││
+  │                                    │  │ 4× JOINT (steering)         │  ││
+  │                                    │  │ 4× WHEEL (drive)            │  ││
+  │                                    │  └─────────────────────────────┘  ││
+  │                                    │                                   ││
+  │                                    │  [USB Camera → Robot Agent]       ││
+  │                                    └───────────────────────────────────┘│
+  │                                                                          │
+  │  All operator ↔ robot traffic routes through: [Tailscale VPN]           │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  Interfaces:
+    Dashboard    → Robot Agent  :  WebSocket  ws://<robot>/ws
+                                   JSON  { steer_deg: float, speed_pct: float }
+                                   Watchdog: 500 ms silence → Robot Agent sends e-stop
+    Dashboard    → Robot Agent  :  HTTP GET   /stream   (MJPEG multipart)
+    Dashboard    → Robot Agent  :  HTTP GET   /status   (JSON telemetry, served from cache)
+    Robot Agent  → dxl_commander:  USB Serial binary frames, 115200 baud
+                                   Jetson→OpenCM fixed-length packet:
+                                     header | seq | timestamp_ms | 8× (mode, target, enable_torque) | payload | CRC
+    dxl_commander→ Robot Agent  :  USB Serial binary frames, 115200 baud
+                                   OpenCM→Jetson fixed-length packet:
+                                     header | seq | timestamp_ms | e-stop_state | IMU (reserved) | 8× (available, mode, pos, speed, temp, voltage) | payload | CRC
+    dxl_commander→ AX-12A       :  Dynamixel Protocol 1.0, 1 Mbaud
+
+
+================================================================================
+  3. C4 LEVEL 3 — COMPONENT DIAGRAM (Robot Agent)
+================================================================================
+
+  Scope : Robot Agent container (software/robot/)
+  Purpose: What are the major structural components inside Robot Agent?
+
+  ┌── Robot Agent  [Python / FastAPI]  software/robot/ ──────────────────────┐
+  │                                                                           │
+  │  ┌─────────────────────────────────────────────────────────────────────┐ │
+  │  │ [Component]  WebSocket Handler           main.py :: /ws route       │ │
+  │  │  Accepts {steer_deg, speed_pct} from Dashboard.                     │ │
+  │  │  Calls Command Translator on each message.                          │ │
+  │  └───────────────────────────────┬─────────────────────────────────────┘ │
+  │                                  │                                        │
+  │  ┌───────────────────────────────▼─────────────────────────────────────┐ │
+  │  │ [Component]  Command Translator              main.py :: translate() │ │
+  │  │  Maps normalised gamepad axes [-1…1] to physical (v m/s, δ deg).    │ │
+  │  │  Applies max_speed and max_steer_angle from config.                 │ │
+  │  └───────────────────────────────┬─────────────────────────────────────┘ │
+  │                                  │                                        │
+  │  ┌───────────────────────────────▼─────────────────────────────────────┐ │
+  │  │ [Component]  Ackermann Kinematics (4WS)       ackermann.py          │ │
+  │  │  Input  : v (m/s), δ (steering angle deg)                           │ │
+  │  │  Config : wheelbase L, track width W, max_steer_angle               │ │
+  │  │  Front  : inner/outer angles via Ackermann geometry                 │ │
+  │  │  Rear   : counter-phase steer (opposite sign, proportional)         │ │
+  │  │  Drive  : per-wheel speed differential from turning radius          │ │
+  │  │  Output : 4× (servo_id, ticks) for steer + 4× (servo_id, spd)      │ │
+  │  └───────────────────────────────┬─────────────────────────────────────┘ │
+  │                                  │                                        │
+  │  ┌───────────────────────────────▼─────────────────────────────────────┐ │
+  │  │ [Component]  Serial Driver                  serial_driver.py        │ │
+  │  │  pyserial wrapper for dxl_commander binary frame protocol.          │ │
+  │  │  send_frame(packet) → None   (fire-and-forget at 50 Hz)            │ │
+  │  │  recv_loop() background task → updates telemetry cache              │ │
+  │  │  build_cmd_frame(targets[8]) / parse_state_frame() → dict          │ │
+  │  └───────────────────────────────┬─────────────────────────────────────┘ │
+  │                                  │ USB Serial /dev/ttyACM0               │
+  │                                  ▼                                        │
+  │              [dxl_commander container]                                    │
+  │                                                                           │
+  │  ┌──────────────────────────────────────────────────────────────────────┐ │
+  │  │ [Component]  E-Stop Handler                 estop.py                │ │
+  │  │  Monitors WebSocket last-seen timestamp.                             │ │
+  │  │  If >500 ms silence: sends zero-speed frame via Serial Driver.      │ │
+  │  │  Publishes e-stop_state flag in next outbound frame.                │ │
+  │  │  OpenCM is powered directly from 12V rail (master switch on board), │ │
+  │  │  independent of Jetson, so firmware watchdog fires even if Jetson   │ │
+  │  │  crashes or reboots.                                                │ │
+  │  └──────────────────────────────────────────────────────────────────────┘ │
+  │                                                                           │
+  │  ┌──────────────────────────────────────────────────────────────────────┐ │
+  │  │ [Component]  Camera Generator               camera.py               │ │
+  │  │  cv2.VideoCapture(0) → JPEG encode → multipart MJPEG byte stream    │ │
+  │  └──────────────┬───────────────────────────────────────────────────────┘ │
+  │                 │                                                          │
+  │  ┌──────────────▼───────────────────────────────────────────────────────┐ │
+  │  │ [Component]  MJPEG Stream Handler            main.py :: /stream      │ │
+  │  │  FastAPI StreamingResponse. Consumes Camera Generator output.        │ │
+  │  └──────────────────────────────────────────────────────────────────────┘ │
+  │                                                                           │
+  │  ┌──────────────────────────────────────────────────────────────────────┐ │
+  │  │ [Component]  Status Handler                  main.py :: /status      │ │
+  │  │  FastAPI HTTP GET. Calls Serial Driver for latest servo telemetry.   │ │
+  │  │  Returns JSON: {voltages, temperatures, positions, modes}            │ │
+  │  └──────────────────────────────────────────────────────────────────────┘ │
+  └───────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+  4. SEQUENCE DIAGRAM — DRIVE COMMAND FLOW  (~50 Hz)
+================================================================================
+
+  Browser           FastAPI /ws       Cmd Translator    Ackermann         Serial Driver     dxl_commander     AX-12A
+  ─────────         ──────────────    ──────────────    ─────────         ─────────────     ─────────────     ──────
+     │                   │                 │               │                   │                 │               │
+     │  poll Gamepad API │                 │               │                   │                 │               │
+     │  @50 Hz           │                 │               │                   │                 │               │
+     │                   │                 │               │                   │                 │               │
+     │── WS send ───────►│                 │               │                   │                 │               │
+     │  {steer_deg,      │  update last-   │               │                   │                 │               │
+     │   speed_pct}      │  seen timestamp │               │                   │                 │               │
+     │                   │── translate() ─►│               │                   │                 │               │
+     │                   │                 │── compute() ─►│                   │                 │               │
+     │                   │                 │               │                   │                 │               │
+     │                   │                 │               │── build_cmd_     ►│                 │               │
+     │                   │                 │               │   frame(          │                 │               │
+     │                   │                 │               │   targets[8])     │                 │               │
+     │                   │                 │               │                   │── binary frame ►│               │
+     │                   │                 │               │                   │  [hdr|seq|ts|   │               │
+     │                   │                 │               │                   │   8×servo|CRC]  │               │
+     │                   │                 │               │                   │  (single write) │── DXL write ─►│
+     │                   │                 │               │                   │                 │  ×8 servos    │
+     │                   │                 │               │                   │                 │◄─────────────│
+     │                   │                 │               │                   │◄── state frame ─│               │
+     │                   │                 │               │                   │  [hdr|seq|ts|   │               │
+     │                   │                 │               │                   │  estop|IMU(rsv) │               │
+     │                   │                 │               │                   │  |8×servo|CRC]  │               │
+     │                   │                 │               │     (cache update)│                 │               │
+     │                   │                 │               │                   │                 │               │
+  [E-Stop Handler]        │                 │               │                   │                 │               │
+     │  if >500 ms since last WS message   │               │                   │                 │               │
+     │──────────────────────────────────────────────────── zero-speed frame ──►│                 │               │
+     │                   │                 │               │                   │── binary frame ►│               │
+     │                   │                 │               │                   │  (all speed=0)  │── DXL write ─►│
+     │                   │                 │               │                   │                 │               │
+
+
+================================================================================
+  5. SEQUENCE DIAGRAM — CAMERA STREAM FLOW  (~30 fps)
+================================================================================
+
+  Browser            FastAPI /stream    Camera Generator    USB Camera
+  ─────────          ───────────────    ────────────────    ──────────
+     │                    │                  │                  │
+     │── GET /stream ────►│                  │                  │
+     │                    │── iter frames ──►│                  │
+     │                    │                  │── VideoCapture ─►│
+     │                    │                  │◄── raw frame ────│
+     │                    │                  │── JPEG encode    │
+     │                    │◄── JPEG bytes ───│                  │
+     │◄── multipart/x- ───│                  │                  │
+     │    mixed frame      │                  │                  │
+     │    (rendered in     │                  │                  │
+     │     <img> tag)      │                  │── VideoCapture ─►│
+     │                    │                  │◄── raw frame ────│
+     │                    │                  │── JPEG encode    │
+     │◄── next frame ─────│◄── JPEG bytes ───│                  │
+     │    (continuous      │                  │                  │
+     │     stream)         │   ... repeats until connection closed ...
+
+
+================================================================================
+  6. SEQUENCE DIAGRAM — TELEMETRY FLOW  (~1 Hz poll / continuous background)
+================================================================================
+
+  [Startup — background recv_loop]
+
+  Serial Driver     dxl_commander     AX-12A
+  ─────────────     ─────────────     ──────
+       │                 │               │
+       │  recv_loop()    │               │
+       │  (background    │               │
+       │   asyncio task) │               │
+       │◄── state frame ─│  (arrives as  │
+       │  [hdr|seq|ts|   │   reply to    │
+       │  estop|8×servo  │   each cmd    │
+       │  |CRC]          │   frame)      │
+       │── parse &        │               │
+       │   update cache  │               │
+       │   (servo_state  │               │
+       │    dict, keyed  │               │
+       │    by ID 1–8)   │               │
+
+  [Operator polling /status at ~1 Hz]
+
+  Browser            FastAPI /status    Serial Driver (cache)
+  ─────────          ───────────────    ─────────────────────
+     │                    │                  │
+     │── GET /status ────►│                  │
+     │                    │── read cache() ─►│
+     │                    │◄── servo_state[] │  (no serial I/O — instant)
+     │◄── 200 OK JSON ────│                  │
+     │    {servos:[…]}     │                  │
+
+
+================================================================================
+  7. DEPLOYMENT DIAGRAM
+================================================================================
+
+  Physical nodes, software deployed to each, and communication links.
+
+  ╔══════════════════════════╗
+  ║  <<device>>              ║         Internet / LAN
+  ║  Operator Machine        ║   ◄────────────────────────►
+  ║  (PC / Laptop)           ║          [Tailscale VPN]
+  ║ ┌──────────────────────┐ ║       WireGuard encrypted
+  ║ │ <<artifact>>         │ ║
+  ║ │ Dashboard            │ ║
+  ║ │ index.html (browser) │ ║
+  ║ └──────────────────────┘ ║
+  ╚══════════════════════════╝
+            │
+            │  ws://<tailscale-ip>:8000/ws
+            │  http://<tailscale-ip>:8000/stream
+            │  http://<tailscale-ip>:8000/status
+            ▼
+  ╔══════════════════════════════════════════════╗
+  ║  <<device>>                                  ║
+  ║  Jetson / ARM SBC  (on robot)                ║
+  ║                                              ║
+  ║ ┌──────────────────────────────────────────┐ ║
+  ║ │ <<artifact>>                             │ ║
+  ║ │ Robot Agent                              │ ║
+  ║ │ main.py  (uvicorn, port 8000)            │ ║
+  ║ │ ackermann.py  serial_driver.py           │ ║
+  ║ │ camera.py                                │ ║
+  ║ └──────────────────────────────────────────┘ ║
+  ║                 │ USB-A                       ║
+  ║                 │ /dev/ttyACM0  115200 baud   ║
+  ║ ┌───────────────▼──────────────────────────┐ ║
+  ║ │ <<device>>  USB Camera                   │ ║
+  ║ │ /dev/video0                              │ ║
+  ║ └──────────────────────────────────────────┘ ║
+  ╚══════════════════╤═══════════════════════════╝
+                     │ USB-B (data only — serial)
+                     │ /dev/ttyACM0 → OpenCM USB
+                     ▼
+  ╔══════════════════════════════════════════════╗
+  ║  <<device>>                                  ║
+  ║  OpenCM9.04 Microcontroller                  ║
+  ║  12V direct · master power switch on board   ║
+  ║  (switching off kills Jetson + servos too)   ║
+  ║                                              ║
+  ║ ┌──────────────────────────────────────────┐ ║
+  ║ │ <<artifact>>                             │ ║
+  ║ │ dxl_commander.ino                        │ ║
+  ║ │ (Dynamixel2Arduino, 115200 USB baud)      │ ║
+  ║ └──────────────────────────────────────────┘ ║
+  ╚══════════════════╤═══════════════════════════╝
+                     │ 3-pin TTL Dynamixel connector
+                     │ 1 Mbaud, Protocol 1.0
+                     ▼
+  ╔══════════════════════════════════════════════╗
+  ║  <<device chain>>                            ║
+  ║  8× AX-12A Dynamixel Servos                  ║
+  ║                                              ║
+  ║  ID 1 FL-steer JOINT   ID 2 FR-steer JOINT   ║
+  ║  ID 3 RL-steer JOINT   ID 4 RR-steer JOINT   ║
+  ║  ID 5 FL-drive WHEEL   ID 6 FR-drive WHEEL   ║
+  ║  ID 7 RL-drive WHEEL   ID 8 RR-drive WHEEL   ║
+  ╚══════════════════════════════════════════════╝
+
+
+================================================================================
+  8. ARCHITECTURE DECISION RECORDS
+================================================================================
+
+  ──────────────────────────────────────────────────────────────────────────
+  ADR-001  Use WebSocket for drive command channel
+  ──────────────────────────────────────────────────────────────────────────
+  Status  : Accepted
+  Date    : 2026-05-11
+
+  Context
+    Drive commands must be sent from the operator browser to the robot at
+    ~50 Hz with minimal latency. The robot does not need to respond to each
+    command (fire-and-forget); however the channel must be persistent and
+    low-overhead.
+
+  Decision
+    Use a persistent WebSocket connection (JSON messages) on FastAPI's
+    native WebSocket route.
+
+  Consequences
+    + Full-duplex persistent connection — no HTTP handshake overhead per frame.
+    + Native browser API (no library needed).
+    + FastAPI natively supports WebSocket with async handlers.
+    - JSON parsing has marginal overhead vs. binary; acceptable at 50 Hz.
+    - Requires connection-loss handling logic on the dashboard.
+
+  ──────────────────────────────────────────────────────────────────────────
+  ADR-002  Use MJPEG over HTTP for camera streaming
+  ──────────────────────────────────────────────────────────────────────────
+  Status  : Accepted
+  Date    : 2026-05-11
+
+  Context
+    The operator needs a live camera feed rendered in the browser.
+    Options evaluated: WebRTC, HLS, WebSocket binary, MJPEG over HTTP.
+
+  Decision
+    Serve MJPEG as a multipart HTTP stream from FastAPI's StreamingResponse.
+    Consume it in the browser via a plain <img src="..."> tag.
+
+  Consequences
+    + Zero browser-side code required (native <img> support).
+    + No signalling server or STUN/TURN infrastructure (unlike WebRTC).
+    + OpenCV's imencode() produces JPEG frames natively.
+    - One-way stream only; no audio.
+    - Higher bandwidth than H.264 (WebRTC). Acceptable for LAN/VPN.
+    - Latency ~100–300 ms. Sufficient for teleoperation; revisit for v2.
+
+  ──────────────────────────────────────────────────────────────────────────
+  ADR-003  Use Tailscale for remote connectivity
+  ──────────────────────────────────────────────────────────────────────────
+  Status  : Accepted
+  Date    : 2026-05-11
+
+  Context
+    The robot operates behind NAT (home router, 4G modem, etc.). The operator
+    must be able to reach the robot over the internet without a static IP or
+    port-forwarding. Options: self-hosted relay (nginx+TURN), ngrok, Tailscale.
+
+  Decision
+    Use Tailscale on both the Jetson and the operator machine. The robot
+    gets a stable 100.x.x.x VPN IP. The operator connects to that IP directly.
+
+  Consequences
+    + No server infrastructure to build or maintain.
+    + WireGuard encryption by default.
+    + NAT traversal handled automatically.
+    + Free tier supports this use case.
+    - Requires Tailscale account (third-party dependency).
+    - Both machines must have Tailscale installed and authenticated.
+    - Not fully self-hosted (can migrate to Headscale in v2 if needed).
+
+  ──────────────────────────────────────────────────────────────────────────
+  ADR-004  Use dxl_commander firmware (text serial) over host-side SDK
+  ──────────────────────────────────────────────────────────────────────────
+  Status  : Accepted
+  Date    : 2026-05-11
+
+  Context
+    Dynamixel servos can be controlled from the host (Jetson) using the
+    official DynamixelSDK (Python), or controlled via a microcontroller
+    running Dynamixel2Arduino, with the host sending higher-level commands.
+
+  Decision
+    All Dynamixel complexity lives in the dxl_commander firmware on the
+    OpenCM9.04. The host (Jetson) sends newline-terminated text commands
+    over USB Serial and receives structured text responses. No DynamixelSDK
+    on the host.
+
+  Consequences
+    + Host code is decoupled from Dynamixel protocol details.
+    + Firmware already built and tested.
+    + Text protocol is language-agnostic and debuggable with any serial terminal.
+    + OpenCM9.04 handles half-duplex bus timing natively.
+    - Extra USB-Serial hop adds ~1–2 ms latency per command.
+    - Firmware update required to add new servo operations.
+
+  ──────────────────────────────────────────────────────────────────────────
+  ADR-005  Use FastAPI + uvicorn for the Robot Agent
+  ──────────────────────────────────────────────────────────────────────────
+  Status  : Accepted
+  Date    : 2026-05-11
+
+  Context
+    The Robot Agent needs to serve: a WebSocket endpoint, an HTTP streaming
+    response (MJPEG), and a JSON REST endpoint — all concurrently.
+    Options evaluated: Flask, aiohttp, FastAPI, ROS2.
+
+  Decision
+    Use FastAPI with uvicorn. All three endpoint types are natively supported
+    in a single async process.
+
+  Consequences
+    + Async-native: WebSocket and streaming run concurrently without threads.
+    + WebSocket support built-in (no extension needed, unlike Flask).
+    + StreamingResponse handles MJPEG cleanly.
+    + Minimal boilerplate.
+    - ROS2 would provide topic/service infrastructure useful in v2 (SLAM,
+      odometry). This is a deliberate deferral — FastAPI is simpler for v1
+      and can coexist with ROS2 in a future version.
+
+  ──────────────────────────────────────────────────────────────────────────
+  ADR-006  Use Vanilla JS for the Operator Dashboard
+  ──────────────────────────────────────────────────────────────────────────
+  Status  : Accepted
+  Date    : 2026-05-11
+
+  Context
+    The dashboard needs: live video display, gamepad polling, keyboard input,
+    WebSocket client, and a simple status panel. Options: React, Vue, Svelte,
+    Vanilla JS.
+
+  Decision
+    Single HTML file using only built-in browser APIs: Gamepad API,
+    WebSocket API, Fetch API, DOM manipulation.
+
+  Consequences
+    + No build step, no npm, no bundler.
+    + Opens directly from filesystem or served as a static file.
+    + Browser Gamepad API natively polls gamepad state — no library needed.
+    + Sufficient for the 5 UI requirements of v1.
+    - Not suitable if dashboard grows beyond ~500 LOC (revisit for v2 GUI).
+
+  ──────────────────────────────────────────────────────────────────────────
+  ADR-007  Use binary fixed-length frames for Jetson ↔ OpenCM serial link
+  ──────────────────────────────────────────────────────────────────────────
+  Status  : Accepted
+  Date    : 2026-05-16
+
+  Context
+    The original text-based serial protocol (SETPOS, SETSPEED, GETPOS …)
+    sends one command per servo per direction per tick. At 50 Hz with 8
+    servos, this produces up to 400 serial round-trips per second at
+    115200 baud, saturating the link and adding per-command ACK overhead.
+    The data_structure.txt already described a binary packet design that
+    bundles all 8 servo targets in one frame.
+
+  Decision
+    Replace the text protocol with a fixed-length binary frame pair:
+      Jetson → OpenCM : header | seq | timestamp_ms | 8× (mode, target,
+                         enable_torque) | 64-byte payload | CRC
+      OpenCM → Jetson : header | seq | timestamp_ms | e-stop_state |
+                         IMU fields (reserved) | 8× (available, mode,
+                         current_pos, current_speed, temp, voltage) |
+                         64-byte payload | CRC
+    The Robot Agent sends one frame per control tick (~50 Hz). The OpenCM
+    replies with one state frame per received command. The Serial Driver
+    runs recv_loop() as a background asyncio task and caches the latest
+    state, making /status instant.
+
+  Consequences
+    + Bus utilisation drops from ~400 round-trips/s to ~50 writes/s.
+    + All servo targets dispatched atomically in one write.
+    + State cache eliminates serial blocking from /status handler.
+    + CRC catches bit errors on the USB-serial link.
+    - Firmware must be updated to parse/emit binary frames (replaces
+      text command parser in dxl_commander).
+    - Binary protocol is less debuggable without tooling (add a debug
+      mode that echoes frames as hex if needed).
+    - Requires agreed frame layout documented in data_structure.txt.
+
+  ──────────────────────────────────────────────────────────────────────────
+  ADR-008  WebSocket watchdog and dual-layer e-stop
+  ──────────────────────────────────────────────────────────────────────────
+  Status  : Accepted
+  Date    : 2026-05-16
+
+  Context
+    If the operator's WebSocket connection drops (VPN hiccup, browser
+    crash, network loss), the robot holds its last commanded state:
+    wheels spinning at speed, steering held at angle. There is no
+    mechanism in v1 to detect this and bring the robot to a safe stop.
+
+  Decision
+    Implement a two-layer e-stop:
+
+    Layer 1 — Robot Agent (software watchdog):
+      The E-Stop Handler component monitors the timestamp of the last
+      received WebSocket message. If >500 ms elapse with no message,
+      it sends a zero-speed binary frame via the Serial Driver and sets
+      the e-stop_state flag in the outbound packet.
+
+    Layer 2 — dxl_commander (firmware watchdog):
+      The firmware tracks time since the last valid received frame. If
+      >500 ms elapse with no frame, it independently sets all drive
+      speeds to zero and all steering to neutral. This layer fires even
+      if the Jetson crashes or reboots.
+
+    OpenCM is powered directly from the 12V rail via its onboard power
+    switch (the system master switch). This is independent of Jetson power,
+    so Layer 2 fires correctly even on a Jetson crash or reboot. The
+    Jetson→OpenCM USB cable carries serial data only — no power.
+
+  Consequences
+    + Robot stops safely on any network or software fault.
+    + Layer 2 protects against Jetson-level crashes.
+    + e-stop_state flag in state frame allows dashboard to show alert.
+    - 500 ms threshold must be tuned: too short → false trips on jitter;
+      too long → robot travels further before stopping.
+    - Firmware update required to implement Layer 2 watchdog.
+
+================================================================================
+  END OF DOCUMENT
+================================================================================

@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Black-Mata — Software Architecture v1</title>
+<style>
+  :root {
+    --bg:        #0f1117;
+    --surface:   #1a1d27;
+    --border:    #2e3347;
+    --accent:    #4f8ef7;
+    --green:     #3ecf6a;
+    --yellow:    #f5c842;
+    --red:       #e05c5c;
+    --purple:    #a57cf7;
+    --orange:    #f0854a;
+    --text:      #e2e6f0;
+    --muted:     #7a8099;
+    --arrow:     #4f8ef7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 32px 24px;
+  }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: #fff;
+    margin-bottom: 4px;
+  }
+  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 32px; }
+
+  /* ── feature chips ── */
+  .features {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-bottom: 36px;
+  }
+  .chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: var(--text);
+  }
+  .chip span { color: var(--accent); font-weight: 600; margin-right: 4px; }
+
+  /* ── section labels ── */
+  .zone-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+    padding-left: 4px;
+    border-left: 3px solid var(--border);
+    padding-left: 8px;
+  }
+
+  /* ── zone wrappers ── */
+  .zone {
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 8px;
+  }
+  .zone-operator  { border-color: #2a4a7a; background: #111827; }
+  .zone-jetson    { border-color: #2a5a3a; background: #0f1f17; }
+  .zone-opencm    { border-color: #4a3a1a; background: #1a1508; }
+  .zone-hw        { border-color: #3a2a4a; background: #130f1a; }
+  .zone-vpn       { border-color: #555; background: transparent; }
+
+  /* ── blocks ── */
+  .blocks-row {
+    display: flex; gap: 12px; flex-wrap: wrap;
+  }
+  .block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    flex: 1;
+    min-width: 180px;
+    position: relative;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    cursor: default;
+  }
+  .block:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent)44;
+  }
+  .block-num {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+  .block-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .block-file {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    background: #0d1926;
+    padding: 2px 6px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-bottom: 8px;
+  }
+  .block-desc {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .block-desc code {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    background: #1e2233;
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: var(--text);
+  }
+
+  /* block accent colors */
+  .b1 .block-title { color: var(--orange); }
+  .b2 .block-title { color: var(--yellow); }
+  .b3 .block-title { color: var(--green);  }
+  .b4 .block-title { color: var(--purple); }
+  .b5 .block-title { color: var(--accent); }
+  .b6 .block-title { color: var(--accent); }
+  .b7 .block-title { color: var(--green);  }
+  .b8 .block-title { color: var(--red);    }
+
+  /* ── arrow connectors ── */
+  .arrow-col {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 4px 0;
+  }
+  .arrow-down {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+  .arrow-line {
+    width: 2px;
+    height: 24px;
+    background: var(--border);
+  }
+  .arrow-label {
+    font-size: 10px;
+    color: var(--muted);
+    font-family: 'Courier New', monospace;
+    background: var(--bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .arrow-tip {
+    width: 0; height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 7px solid var(--border);
+  }
+  .arrow-tip-up {
+    border-top: none;
+    border-bottom: 7px solid var(--border);
+  }
+
+  /* ── servo grid ── */
+  .servo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .servo-axle { grid-column: 1/-1; }
+  .axle-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    margin-top: 8px;
+  }
+  .servo-card {
+    background: #1a1508;
+    border: 1px solid #3a2a1a;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  .servo-id { color: var(--orange); font-weight: 700; font-family: monospace; }
+  .servo-name { font-weight: 600; color: var(--text); }
+  .servo-mode {
+    display: inline-block;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    margin-left: 4px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+  .mode-joint { background: #1a3a2a; color: var(--green); border: 1px solid #2a5a3a; }
+  .mode-wheel { background: #2a1a3a; color: var(--purple); border: 1px solid #3a2a5a; }
+
+  /* ── data flow table ── */
+  .flows { margin-top: 36px; }
+  .flows h2 { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 14px; }
+  .flow-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .flow-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    min-width: 100px;
+    padding-top: 1px;
+  }
+  .flow-chain {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    flex: 1;
+    line-height: 1.7;
+  }
+  .flow-chain b { color: var(--text); }
+
+  /* ── tech decisions ── */
+  .tech-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 36px;
+    font-size: 13px;
+  }
+  .tech-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: var(--surface);
+    border-bottom: 2px solid var(--border);
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .tech-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .tech-table tr:hover td { background: #ffffff06; }
+  .tech-chosen { color: var(--green); font-weight: 600; font-family: monospace; }
+  .tech-alt    { color: var(--muted); font-family: monospace; text-decoration: line-through; }
+
+  /* ── dir tree ── */
+  .tree {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-top: 36px;
+    line-height: 1.9;
+    color: var(--muted);
+  }
+  .tree .dir  { color: var(--accent); font-weight: 700; }
+  .tree .file { color: var(--text); }
+  .tree .tag  {
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 11px;
+    color: var(--muted);
+    margin-left: 8px;
+  }
+  .tree .built { color: var(--green); }
+
+  h2.section { font-size: 15px; font-weight: 700; color: #fff; margin: 36px 0 14px; }
+</style>
+</head>
+<body>
+
+<h1>Black-Mata — Software Architecture</h1>
+<p class="subtitle">Teleoperation v1 &nbsp;·&nbsp; 4-Wheel Steering + 4-Wheel Drive &nbsp;·&nbsp; 8× AX-12A via OpenCM9.04</p>
+
+<!-- Features -->
+<div class="features">
+  <div class="chip"><span>[1]</span> Ackermann Drive (4WS+4WD)</div>
+  <div class="chip"><span>[2]</span> Camera Live Stream</div>
+  <div class="chip"><span>[3]</span> Remote Connection</div>
+  <div class="chip"><span>[4]</span> Gamepad / Keyboard Control</div>
+  <div class="chip"><span>[5]</span> Robot Dashboard UI</div>
+</div>
+
+<!-- ═══ OPERATOR ZONE ═══ -->
+<div class="zone zone-operator">
+  <div class="zone-label">Operator Machine — Browser</div>
+  <div class="blocks-row">
+    <div class="block b7">
+      <div class="block-num">BLOCK 7</div>
+      <div class="block-title">Operator Dashboard</div>
+      <div class="block-file">docs/dashboard/index.html</div>
+      <div class="block-desc">
+        <b>Video panel</b> — <code>&lt;img&gt;</code> tag pointed at <code>/stream</code> (MJPEG)<br>
+        <b>Gamepad input</b> — <code>navigator.getGamepads()</code> polled @50 Hz<br>
+        <b>Keyboard fallback</b> — <code>keydown/keyup</code> events<br>
+        <b>Status panel</b> — polls <code>/status</code> JSON every 1s<br>
+        Sends <code>{steer_deg, speed_pct}</code> JSON over WebSocket
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- arrow -->
+<div class="arrow-col">
+  <div class="arrow-down">
+    <div class="arrow-line" style="height:10px"></div>
+    <div class="arrow-label">Tailscale VPN — WireGuard encrypted</div>
+    <div class="arrow-line" style="height:10px"></div>
+    <div class="arrow-tip"></div>
+  </div>
+</div>
+
+<!-- ═══ JETSON ZONE ═══ -->
+<div class="zone zone-jetson">
+  <div class="zone-label">Jetson / ARM SBC — On Robot</div>
+
+  <!-- Block 5 -->
+  <div class="blocks-row" style="margin-bottom:12px">
+    <div class="block b5">
+      <div class="block-num">BLOCK 5</div>
+      <div class="block-title">Robot Agent</div>
+      <div class="block-file">software/robot/main.py</div>
+      <div class="block-desc">
+        FastAPI + uvicorn &nbsp;·&nbsp; single process<br>
+        <code>WS  /ws</code> — receives drive commands → Block 6<br>
+        <code>GET /stream</code> — proxies MJPEG from Block 4<br>
+        <code>GET /status</code> — servo telemetry JSON from Block 2<br>
+      </div>
+    </div>
+  </div>
+
+  <!-- Blocks 6 + 4 -->
+  <div class="blocks-row" style="margin-bottom:12px">
+    <div class="block b6">
+      <div class="block-num">BLOCK 6</div>
+      <div class="block-title">Command Translator</div>
+      <div class="block-file">inside main.py</div>
+      <div class="block-desc">
+        Gamepad axes <code>[-1…1]</code> → physical <code>(v, δ)</code><br>
+        Applies <code>max_speed</code>, <code>max_steer_angle</code> config<br>
+        Feeds Block 3
+      </div>
+    </div>
+    <div class="block b4">
+      <div class="block-num">BLOCK 4</div>
+      <div class="block-title">Camera Stream</div>
+      <div class="block-file">software/robot/camera.py</div>
+      <div class="block-desc">
+        <code>cv2.VideoCapture(0)</code> USB cam<br>
+        JPEG-encodes frames<br>
+        Yields multipart MJPEG byte stream
+      </div>
+    </div>
+  </div>
+
+  <!-- Block 3 -->
+  <div class="blocks-row" style="margin-bottom:12px">
+    <div class="block b3">
+      <div class="block-num">BLOCK 3</div>
+      <div class="block-title">Ackermann Kinematics (4WS)</div>
+      <div class="block-file">software/robot/ackermann.py</div>
+      <div class="block-desc">
+        Input: <code>v</code> (speed), <code>δ</code> (steer angle)<br>
+        Config: wheelbase <code>L</code>, track width <code>W</code><br>
+        <b>Front axle</b> — inner/outer angles via Ackermann geometry<br>
+        <b>Rear axle</b> — counter-phase steer (opposite sign)<br>
+        <b>All 4 drives</b> — per-wheel speed differential<br>
+        Output: 4× <code>SETPOS</code> + 4× <code>SETSPEED</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- Block 2 -->
+  <div class="blocks-row">
+    <div class="block b2">
+      <div class="block-num">BLOCK 2</div>
+      <div class="block-title">Serial Driver</div>
+      <div class="block-file">software/robot/serial_driver.py</div>
+      <div class="block-desc">
+        <code>pyserial</code> → <code>/dev/ttyACM0</code> @115200 baud<br>
+        <code>send_command(cmd) → response</code><br>
+        <code>set_steering(id, deg)</code><br>
+        <code>set_drive_speed(id, ticks)</code><br>
+        <code>get_status(id) → dict</code>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- arrow -->
+<div class="arrow-col">
+  <div class="arrow-down">
+    <div class="arrow-line" style="height:10px"></div>
+    <div class="arrow-label">USB Serial  /dev/ttyACM0  @115200</div>
+    <div class="arrow-line" style="height:10px"></div>
+    <div class="arrow-tip"></div>
+  </div>
+</div>
+
+<!-- ═══ OpenCM ZONE ═══ -->
+<div class="zone zone-opencm">
+  <div class="zone-label">OpenCM9.04 — Microcontroller</div>
+  <div class="blocks-row">
+    <div class="block b1">
+      <div class="block-num">BLOCK 1</div>
+      <div class="block-title">dxl_commander Firmware</div>
+      <div class="block-file">firmware/dxl_commander/dxl_commander.ino</div>
+      <div class="block-desc">
+        Library: <code>Dynamixel2Arduino</code><br>
+        Text command protocol over USB Serial<br>
+        Commands: <code>SETPOS SETSPEED SETMODE GETPOS MONITOR PING SCAN …</code><br>
+        DXL bus: 1 Mbaud · Protocol 1.0 · half-duplex TTL<br>
+        <span style="color:#3ecf6a;font-size:11px;font-weight:700">✓ already built</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- arrow -->
+<div class="arrow-col">
+  <div class="arrow-down">
+    <div class="arrow-line" style="height:10px"></div>
+    <div class="arrow-label">Dynamixel TTL bus  @1 Mbaud</div>
+    <div class="arrow-line" style="height:10px"></div>
+    <div class="arrow-tip"></div>
+  </div>
+</div>
+
+<!-- ═══ HARDWARE ZONE ═══ -->
+<div class="zone zone-hw">
+  <div class="zone-label">Hardware — 8× AX-12A Servos</div>
+
+  <div class="axle-label">Front Axle</div>
+  <div class="servo-grid">
+    <div class="servo-card">
+      <div><span class="servo-id">ID 1</span> <span class="servo-name">FL-steer</span> <span class="servo-mode mode-joint">JOINT</span></div>
+    </div>
+    <div class="servo-card">
+      <div><span class="servo-id">ID 2</span> <span class="servo-name">FR-steer</span> <span class="servo-mode mode-joint">JOINT</span></div>
+    </div>
+    <div class="servo-card">
+      <div><span class="servo-id">ID 5</span> <span class="servo-name">FL-drive</span> <span class="servo-mode mode-wheel">WHEEL</span></div>
+    </div>
+    <div class="servo-card">
+      <div><span class="servo-id">ID 6</span> <span class="servo-name">FR-drive</span> <span class="servo-mode mode-wheel">WHEEL</span></div>
+    </div>
+  </div>
+
+  <div class="axle-label">Rear Axle</div>
+  <div class="servo-grid">
+    <div class="servo-card">
+      <div><span class="servo-id">ID 3</span> <span class="servo-name">RL-steer</span> <span class="servo-mode mode-joint">JOINT</span></div>
+    </div>
+    <div class="servo-card">
+      <div><span class="servo-id">ID 4</span> <span class="servo-name">RR-steer</span> <span class="servo-mode mode-joint">JOINT</span></div>
+    </div>
+    <div class="servo-card">
+      <div><span class="servo-id">ID 7</span> <span class="servo-name">RL-drive</span> <span class="servo-mode mode-wheel">WHEEL</span></div>
+    </div>
+    <div class="servo-card">
+      <div><span class="servo-id">ID 8</span> <span class="servo-name">RR-drive</span> <span class="servo-mode mode-wheel">WHEEL</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ DATA FLOWS ═══ -->
+<div class="flows">
+  <h2>Data Flows</h2>
+
+  <div class="flow-row">
+    <div class="flow-label" style="color:var(--accent)">Drive Cmd<br>~50 Hz</div>
+    <div class="flow-chain">
+      <b>Gamepad axis</b> → B7 JS → <b>WebSocket JSON</b> → B5 /ws
+      → B6 translate → B3 Ackermann math
+      → B2 pyserial → B1 <code>SETPOS/SETSPEED</code> → AX-12A
+    </div>
+  </div>
+
+  <div class="flow-row">
+    <div class="flow-label" style="color:var(--purple)">Camera<br>~30 fps</div>
+    <div class="flow-chain">
+      <b>USB Cam</b> → B4 OpenCV → JPEG frames → B5 /stream
+      → <b>HTTP multipart</b> → B7 <code>&lt;img&gt;</code> tag → operator screen
+    </div>
+  </div>
+
+  <div class="flow-row">
+    <div class="flow-label" style="color:var(--yellow)">Telemetry<br>1 Hz</div>
+    <div class="flow-chain">
+      AX-12A → B1 <code>STATUS</code> response → B2 parse → B5 cache
+      → B7 <code>fetch /status</code> → status panel display
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TECH DECISIONS ═══ -->
+<h2 class="section">Technology Decisions</h2>
+<table class="tech-table">
+  <thead>
+    <tr>
+      <th>Decision</th>
+      <th>Chosen</th>
+      <th>Instead of</th>
+      <th>Reason</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Robot comms protocol</td>
+      <td><span class="tech-chosen">WebSocket (JSON)</span></td>
+      <td><span class="tech-alt">REST / MQTT</span></td>
+      <td>Low latency, full-duplex, realtime control</td>
+    </tr>
+    <tr>
+      <td>Camera streaming</td>
+      <td><span class="tech-chosen">MJPEG over HTTP</span></td>
+      <td><span class="tech-alt">WebRTC / HLS</span></td>
+      <td>Trivial to implement, works in any &lt;img&gt; tag</td>
+    </tr>
+    <tr>
+      <td>Remote connectivity</td>
+      <td><span class="tech-chosen">Tailscale</span></td>
+      <td><span class="tech-alt">self-hosted relay</span></td>
+      <td>Zero infrastructure, NAT traversal built-in, encrypted</td>
+    </tr>
+    <tr>
+      <td>Web framework</td>
+      <td><span class="tech-chosen">FastAPI + uvicorn</span></td>
+      <td><span class="tech-alt">Flask / aiohttp</span></td>
+      <td>Async-native, WebSocket built-in, minimal boilerplate</td>
+    </tr>
+    <tr>
+      <td>Frontend</td>
+      <td><span class="tech-chosen">Vanilla JS / HTML</span></td>
+      <td><span class="tech-alt">React / Vue</span></td>
+      <td>No build step, no npm, sufficient for v1</td>
+    </tr>
+    <tr>
+      <td>Gamepad input</td>
+      <td><span class="tech-chosen">Browser Gamepad API</span></td>
+      <td><span class="tech-alt">external library</span></td>
+      <td>Built into every modern browser, zero dependencies</td>
+    </tr>
+    <tr>
+      <td>Servo protocol</td>
+      <td><span class="tech-chosen">dxl_commander (text serial)</span></td>
+      <td><span class="tech-alt">DynamixelSDK on host</span></td>
+      <td>Complexity stays on OpenCM, host is SDK-free</td>
+    </tr>
+    <tr>
+      <td>Middleware</td>
+      <td><span class="tech-chosen">none (direct)</span></td>
+      <td><span class="tech-alt">ROS2 / MQTT broker</span></td>
+      <td>Unnecessary for single-operator teleoperation v1</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ═══ REPO LAYOUT ═══ -->
+<h2 class="section">Repository Layout (proposed)</h2>
+<div class="tree">
+<span class="dir">black-mata/</span><br>
+├── <span class="dir">firmware/</span><br>
+│   └── <span class="dir">dxl_commander/</span>          <span class="tag built">BLOCK 1 — ✓ already built</span><br>
+├── <span class="dir">software/</span><br>
+│   └── <span class="dir">robot/</span>                   <span class="tag">BLOCKS 2–6 — to build</span><br>
+│       ├── <span class="file">main.py</span>             <span class="tag">FastAPI app, WebSocket, MJPEG proxy</span><br>
+│       ├── <span class="file">ackermann.py</span>        <span class="tag">4WS kinematics</span><br>
+│       ├── <span class="file">serial_driver.py</span>    <span class="tag">pyserial wrapper for dxl_commander</span><br>
+│       ├── <span class="file">camera.py</span>           <span class="tag">OpenCV MJPEG generator</span><br>
+│       └── <span class="file">requirements.txt</span>    <span class="tag">fastapi uvicorn pyserial opencv-python</span><br>
+├── <span class="dir">docs/</span><br>
+│   ├── <span class="dir">dashboard/</span><br>
+│   │   └── <span class="file">index.html</span>          <span class="tag">BLOCK 7 — operator UI (vanilla JS)</span><br>
+│   ├── <span class="file">architecture.txt</span>        <span class="tag">CLI diagram</span><br>
+│   └── <span class="file">architecture.html</span>       <span class="tag">this file</span><br>
+└── <span class="dir">tools/</span><br>
+    └── <span class="dir">remote_update/</span>           <span class="tag built">SSH flash toolchain — ✓ already built</span><br>
+</div>
+
+</body>
+</html>

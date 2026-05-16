@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C4 Diagrams — Black-Mata Architecture</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --accent:  #58a6ff;
+    --green:   #3fb950;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px; line-height: 1.6;
+  }
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 40px; display: flex; align-items: center; gap: 4px; overflow-x: auto;
+  }
+  .nav-brand {
+    font-size: 14px; font-weight: 700; color: var(--text);
+    padding: 14px 16px 14px 0; margin-right: 12px;
+    border-right: 1px solid var(--border); white-space: nowrap; text-decoration: none;
+  }
+  nav a:not(.nav-brand) {
+    display: block; padding: 14px 14px; font-size: 13px; font-weight: 500;
+    color: var(--muted); text-decoration: none; white-space: nowrap;
+    border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+  }
+  nav a:not(.nav-brand):hover { color: var(--text); }
+  nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  main { max-width: 860px; margin: 0 auto; padding: 48px 40px 100px; }
+  .page-header { margin-bottom: 48px; }
+  .page-header h1 { font-size: 26px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+  .page-header p  { font-size: 15px; color: var(--muted); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+  .card {
+    display: block; text-decoration: none;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 28px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .card:hover { border-color: var(--accent); box-shadow: 0 0 0 1px #58a6ff33; }
+  .level-badge {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    padding: 3px 10px; border-radius: 4px; display: inline-block; margin-bottom: 14px;
+    background: #1f3a5f; color: var(--accent); border: 1px solid #2a5a8f;
+  }
+  .card h2 { font-size: 17px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+  .card p  { font-size: 13px; color: var(--muted); line-height: 1.6; }
+</style>
+</head>
+<body>
+<nav>
+  <a href="index.html" class="nav-brand">Black-Mata Arch.</a>
+  <a href="index.html">Overview</a>
+  <a href="c4.html" class="active">C4 Diagrams</a>
+  <a href="sequences.html">Sequences</a>
+  <a href="deployment.html">Deployment</a>
+  <a href="adr.html">ADRs</a>
+</nav>
+<main>
+  <div class="page-header">
+    <h1>C4 Diagrams</h1>
+    <p>Three levels of progressive zoom into the Black-Mata system — from external context down to internal components.</p>
+  </div>
+  <div class="cards">
+    <a href="c4_context.html" class="card">
+      <span class="level-badge">C4 Level 1</span>
+      <h2>System Context</h2>
+      <p>Who uses the system and what external systems does it interact with?</p>
+    </a>
+    <a href="c4_containers.html" class="card">
+      <span class="level-badge">C4 Level 2</span>
+      <h2>Container Diagram</h2>
+      <p>What are the deployable units and how do they communicate?</p>
+    </a>
+    <a href="c4_components.html" class="card">
+      <span class="level-badge">C4 Level 3</span>
+      <h2>Component Diagram</h2>
+      <p>What are the major structural components inside the Robot Agent?</p>
+    </a>
+  </div>
+</main>
+</body>
+</html>

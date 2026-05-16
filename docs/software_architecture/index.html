@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Black-Mata — Software Architecture</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --accent:  #58a6ff;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --purple:  #bc8cff;
+    --orange:  #ffa657;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 40px;
+    display: flex; align-items: center; gap: 4px;
+    overflow-x: auto;
+  }
+  .nav-brand {
+    font-size: 14px; font-weight: 700; color: var(--text);
+    padding: 14px 16px 14px 0; margin-right: 12px;
+    border-right: 1px solid var(--border);
+    white-space: nowrap; text-decoration: none;
+  }
+  nav a:not(.nav-brand) {
+    display: block; padding: 14px 14px;
+    font-size: 13px; font-weight: 500;
+    color: var(--muted); text-decoration: none;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  nav a:not(.nav-brand):hover { color: var(--text); }
+  nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  main { max-width: 960px; margin: 0 auto; padding: 60px 40px 100px; }
+
+  .hero { margin-bottom: 60px; }
+  .hero h1 { font-size: 32px; font-weight: 800; color: #fff; margin-bottom: 8px; letter-spacing: -0.02em; }
+  .hero p  { font-size: 16px; color: var(--muted); margin-bottom: 20px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge {
+    font-size: 12px; font-weight: 600;
+    padding: 4px 12px; border-radius: 20px;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--muted);
+  }
+
+  .overview {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin-bottom: 48px;
+    font-size: 15px;
+    color: var(--muted);
+    line-height: 1.8;
+  }
+  .overview strong { color: var(--text); }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+    margin-bottom: 48px;
+  }
+  .feature-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+  .feature-num { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 4px; letter-spacing: 0.08em; }
+  .feature-name { font-size: 14px; font-weight: 600; color: var(--text); }
+
+  h2.section-heading {
+    font-size: 13px; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .nav-card {
+    display: block; text-decoration: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 28px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .nav-card:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent)33;
+  }
+  .card-tag {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; padding: 3px 8px; border-radius: 4px;
+    display: inline-block; margin-bottom: 12px;
+  }
+  .tag-c4     { background: #1f3a5f; color: var(--accent); }
+  .tag-seq    { background: #1f3a2f; color: var(--green); }
+  .tag-deploy { background: #3a2f1f; color: var(--orange); }
+  .tag-adr    { background: #3a1f1f; color: var(--red); }
+  .card-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+  .card-desc  { font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .card-items { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .card-item  {
+    font-size: 11px; padding: 2px 8px; border-radius: 4px;
+    background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="nav-brand">Black-Mata Arch.</span>
+  <a href="index.html" class="active">Overview</a>
+  <a href="c4.html">C4 Diagrams</a>
+  <a href="sequences.html">Sequences</a>
+  <a href="deployment.html">Deployment</a>
+  <a href="adr.html">ADRs</a>
+</nav>
+
+<main>
+
+  <div class="hero">
+    <h1>Software Architecture</h1>
+    <p>Black-Mata Teleoperation v1 &nbsp;·&nbsp; 4-Wheel Steering + 4-Wheel Drive &nbsp;·&nbsp; 8× AX-12A via OpenCM9.04</p>
+    <div class="badges">
+      <span class="badge">C4 Model</span>
+      <span class="badge">UML Sequence Diagrams</span>
+      <span class="badge">Deployment Diagram</span>
+      <span class="badge">6 ADRs</span>
+    </div>
+  </div>
+
+  <div class="overview">
+    <strong>Black-Mata</strong> is a 4-wheel-steering, 4-wheel-drive teleoperated robot platform. Version 1 focuses on remote
+    operation: an operator controls the robot from a browser over an encrypted VPN connection.
+    The software stack is designed to reuse existing SDKs at every layer —
+    <strong>Dynamixel2Arduino</strong> on the microcontroller, <strong>OpenCV</strong> for the camera,
+    <strong>FastAPI</strong> for the server, and the <strong>Browser Gamepad API</strong> for input —
+    rather than building from scratch. The <strong>dxl_commander</strong> firmware already exists and abstracts
+    all Dynamixel protocol complexity, so the host (Jetson) communicates with servos via a simple
+    text command protocol over USB Serial.
+  </div>
+
+  <h2 class="section-heading">Main Features — v1</h2>
+  <div class="features-grid" style="margin-bottom: 48px;">
+    <div class="feature-card"><div class="feature-num">FEATURE 1</div><div class="feature-name">Ackermann Drive (4WS + 4WD)</div></div>
+    <div class="feature-card"><div class="feature-num">FEATURE 2</div><div class="feature-name">Camera Live Stream</div></div>
+    <div class="feature-card"><div class="feature-num">FEATURE 3</div><div class="feature-name">Remote Connection &amp; Communication</div></div>
+    <div class="feature-card"><div class="feature-num">FEATURE 4</div><div class="feature-name">Gamepad / Keyboard Control</div></div>
+    <div class="feature-card"><div class="feature-num">FEATURE 5</div><div class="feature-name">Robot Dashboard UI</div></div>
+  </div>
+
+  <h2 class="section-heading">Architecture Documents</h2>
+  <div class="nav-cards">
+
+    <a href="c4.html" class="nav-card">
+      <span class="card-tag tag-c4">C4 Model</span>
+      <div class="card-title">C4 Diagrams</div>
+      <div class="card-desc">Three levels of zoom into the system — from high-level context down to internal components of the Robot Agent.</div>
+      <div class="card-items">
+        <span class="card-item">Level 1 · System Context</span>
+        <span class="card-item">Level 2 · Containers</span>
+        <span class="card-item">Level 3 · Components</span>
+      </div>
+    </a>
+
+    <a href="sequences.html" class="nav-card">
+      <span class="card-tag tag-seq">UML Sequence</span>
+      <div class="card-title">Sequence Diagrams</div>
+      <div class="card-desc">End-to-end interaction flows for every major runtime path in the system.</div>
+      <div class="card-items">
+        <span class="card-item">Drive Command ~50 Hz</span>
+        <span class="card-item">Camera Stream ~30 fps</span>
+        <span class="card-item">Telemetry ~1 Hz</span>
+      </div>
+    </a>
+
+    <a href="deployment.html" class="nav-card">
+      <span class="card-tag tag-deploy">Deployment</span>
+      <div class="card-title">Deployment Diagram</div>
+      <div class="card-desc">Physical and virtual nodes, software artifacts deployed to each, and all communication links between them.</div>
+      <div class="card-items">
+        <span class="card-item">Operator Machine</span>
+        <span class="card-item">Jetson SBC</span>
+        <span class="card-item">OpenCM9.04</span>
+        <span class="card-item">AX-12A Servos</span>
+      </div>
+    </a>
+
+    <a href="adr.html" class="nav-card">
+      <span class="card-tag tag-adr">ADR</span>
+      <div class="card-title">Architecture Decision Records</div>
+      <div class="card-desc">Key architectural decisions with context, rationale, and trade-offs documented for future reference.</div>
+      <div class="card-items">
+        <span class="card-item">ADR-001 WebSocket</span>
+        <span class="card-item">ADR-002 MJPEG</span>
+        <span class="card-item">ADR-003 Tailscale</span>
+        <span class="card-item">ADR-004 dxl_commander</span>
+        <span class="card-item">ADR-005 FastAPI</span>
+        <span class="card-item">ADR-006 Vanilla JS</span>
+      </div>
+    </a>
+
+  </div>
+
+</main>
+</body>
+</html>
