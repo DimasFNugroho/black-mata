@@ -32,6 +32,12 @@ _driver         = None   # SerialDriver, set in main()
 _current_cfg    = None   # last AckermannConfig used for a drive command
 _last_drive_t   = 0.0   # monotonic time of last /drive POST
 
+# ── Steering profile state ─────────────────────────────────────────────────────
+_profile_lock   = threading.Lock()
+_profile_active = False   # True while a trapezoidal profile is executing
+_profile_steer  = 0.0    # continuously updated steer angle during profile
+_current_steer  = 0.0    # steer angle after the last send/profile completes
+
 
 # ── Ackermann helpers ──────────────────────────────────────────────────────────
 
@@ -50,6 +56,9 @@ def _build_cfg(c):
     cfg.drive_dir             = _l('drive_dir',        [1, -1,  1, -1])
     cfg.steer_offset_deg      = _l('steer_offset_deg', [0.0, 0.0, 0.0, 0.0])
     cfg.servo_ids             = _l('servo_ids',        [4, 2, 8, 6, 3, 1, 7, 5])
+    # Profile parameters (not AckermannConfig fields — stored alongside)
+    cfg._steer_rate_deg_s     = _f('steer_rate_deg_s',   30.0)
+    cfg._steer_accel_deg_s2   = _f('steer_accel_deg_s2', 60.0)
     return cfg
 
 
@@ -142,7 +151,86 @@ def _default_config():
         'steer_dir': [1, -1, -1, 1], 'drive_dir': [1, -1, 1, -1],
         'steer_offset_deg': [0.0, 0.0, 0.0, 0.0],
         'servo_ids': [4, 2, 8, 6, 3, 1, 7, 5],
+        'steer_rate_deg_s': 30.0, 'steer_accel_deg_s2': 60.0,
     }
+
+
+# ── Trapezoidal steering profile ──────────────────────────────────────────────
+
+def _trap_pos(t, d, t_ramp, t_flat, accel, rate):
+    """Return distance covered along trapezoidal profile at time t."""
+    if t <= t_ramp:
+        return 0.5 * accel * t * t
+    elif t <= t_ramp + t_flat:
+        d_ramp = 0.5 * accel * t_ramp * t_ramp
+        return d_ramp + rate * (t - t_ramp)
+    else:
+        t_down = t - t_ramp - t_flat
+        d_ramp = 0.5 * accel * t_ramp * t_ramp
+        d_flat = rate * t_flat
+        return d_ramp + d_flat + rate * t_down - 0.5 * accel * t_down * t_down
+
+
+def _run_profile(start_steer, target_steer, speed_mps, cfg):
+    """
+    Execute a trapezoidal steering profile in a background thread.
+    Sends CMD frames at 25 Hz, stamps _last_drive_t to feed the watchdog.
+    Sets _profile_active = False when done.
+    """
+    global _profile_active, _profile_steer, _current_steer, _last_drive_t
+
+    rate  = max(1.0, cfg._steer_rate_deg_s)
+    accel = max(1.0, cfg._steer_accel_deg_s2)
+    delta = target_steer - start_steer
+    d     = abs(delta)
+    sign  = 1.0 if delta >= 0 else -1.0
+
+    if d < 0.5:
+        with _profile_lock:
+            _current_steer  = target_steer
+            _profile_steer  = target_steer
+            _profile_active = False
+        return
+
+    d_ramp = rate * rate / (2.0 * accel)
+    if d < 2.0 * d_ramp:
+        # Triangle profile — cannot reach max rate
+        t_ramp = math.sqrt(d / accel)
+        t_flat = 0.0
+    else:
+        t_ramp = rate / accel
+        t_flat = (d - 2.0 * d_ramp) / rate
+
+    t_total = 2.0 * t_ramp + t_flat
+    dt      = 0.04   # 25 Hz
+
+    ack = Ackermann(cfg)
+    t   = 0.0
+    while True:
+        with _profile_lock:
+            if not _profile_active:
+                return  # aborted by estop
+        pos    = _trap_pos(min(t, t_total), d, t_ramp, t_flat, accel, rate)
+        steer  = max(-cfg.max_steer_deg,
+                     min(cfg.max_steer_deg, start_steer + sign * pos))
+
+        with _profile_lock:
+            _profile_steer = steer
+        _last_drive_t = time.monotonic()
+        _driver.send_frame(ack.compute(steer, speed_mps), servo_ids=cfg.servo_ids)
+
+        if t >= t_total:
+            break
+        time.sleep(dt)
+        t += dt
+
+    # Ensure exact target on final frame
+    with _profile_lock:
+        _profile_steer  = target_steer
+        _current_steer  = target_steer
+        _profile_active = False
+    _last_drive_t = time.monotonic()
+    _driver.send_frame(ack.compute(target_steer, speed_mps), servo_ids=cfg.servo_ids)
 
 
 # ── HTTP handler ───────────────────────────────────────────────────────────────
@@ -234,24 +322,82 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({'error': 'not found'}, 404)
 
     def do_POST(self):
+        global _current_cfg, _last_drive_t, _current_steer, _profile_active, _profile_steer
         data = self._read_json()
 
         if self.path == '/drive':
-            # Send CMD frame directly — JS polls this at 10Hz to feed the watchdog
-            global _current_cfg, _last_drive_t
+            # Watchdog feed — JS calls this at 10 Hz while driving is active
             if _driver is None:
                 self._send_json({'error': 'No robot connected'}, 503)
+                return
+            with _profile_lock:
+                profiling = _profile_active
+            if profiling:
+                # Profile thread is in charge; just acknowledge
+                self._send_json({'driving': True, 'profiling': True})
                 return
             cfg = _build_cfg(data.get('config', {}))
             _current_cfg = cfg
             _last_drive_t = time.monotonic()
             steer_deg = float(data.get('steer_deg', 0))
             speed_mps = float(data.get('speed_mps', 0))
+            _current_steer = steer_deg
             targets = Ackermann(cfg).compute(steer_deg, speed_mps)
             _driver.send_frame(targets, servo_ids=cfg.servo_ids)
             result = _compute_result(steer_deg, speed_mps, cfg)
             result['driving'] = True
             self._send_json(result)
+
+        elif self.path == '/send_profile':
+            if _driver is None:
+                self._send_json({'error': 'No robot connected'}, 503)
+                return
+            with _profile_lock:
+                if _profile_active:
+                    self._send_json({'error': 'Profile already running'}, 409)
+                    return
+                _profile_active = True
+
+            cfg         = _build_cfg(data.get('config', {}))
+            _current_cfg = cfg
+            target_steer = float(data.get('steer_deg', 0))
+            speed_mps    = float(data.get('speed_mps', 0))
+
+            with _profile_lock:
+                start_steer = _current_steer
+
+            # Compute expected duration for the UI progress bar
+            rate  = max(1.0, cfg._steer_rate_deg_s)
+            accel = max(1.0, cfg._steer_accel_deg_s2)
+            d     = abs(target_steer - start_steer)
+            d_ramp = rate * rate / (2.0 * accel)
+            if d < 0.5:
+                duration_ms = 0
+            elif d < 2.0 * d_ramp:
+                duration_ms = int(2.0 * math.sqrt(d / accel) * 1000)
+            else:
+                t_ramp = rate / accel
+                t_flat = (d - 2.0 * d_ramp) / rate
+                duration_ms = int((2.0 * t_ramp + t_flat) * 1000)
+
+            threading.Thread(
+                target=_run_profile,
+                args=(start_steer, target_steer, speed_mps, cfg),
+                daemon=True, name='steer-profile'
+            ).start()
+
+            self._send_json({
+                'active': True,
+                'from_deg': round(start_steer, 2),
+                'to_deg':   round(target_steer, 2),
+                'duration_ms': duration_ms,
+            })
+
+        elif self.path == '/profile_status':
+            with _profile_lock:
+                active = _profile_active
+                steer  = _profile_steer
+            self._send_json({'active': active, 'steer_deg': round(steer, 2)})
 
         elif self.path == '/compute':
             cfg    = _build_cfg(data.get('config', {}))
@@ -282,6 +428,8 @@ class Handler(BaseHTTPRequestHandler):
             if _driver is None:
                 self._send_json({'error': 'No robot connected'}, 503)
                 return
+            with _profile_lock:
+                _profile_active = False  # signal profile thread to stop feeding
             _driver.send_estop()
             self._send_json({'status': 'e-stop sent'})
 
@@ -399,6 +547,20 @@ HTML_PAGE = """<!DOCTYPE html>
 </style>
 </head>
 <body>
+
+<!-- Profile splash overlay -->
+<div id="profile-splash" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#1c1c2e;border:1px solid #555;border-radius:10px;padding:32px 36px;text-align:center;min-width:300px;box-shadow:0 8px 32px #000a;">
+    <div style="color:#fa8;font-size:17px;font-weight:bold;margin-bottom:8px;">Applying Steering Profile</div>
+    <div style="color:#aaa;font-size:13px;margin-bottom:18px;">
+      <span id="prof-from">0.0</span>° &rarr; <span id="prof-to">0.0</span>°
+    </div>
+    <div style="background:#333;border-radius:6px;height:10px;margin-bottom:10px;overflow:hidden;">
+      <div id="prof-bar" style="background:linear-gradient(90deg,#f84,#fa8);height:100%;width:0%;transition:width 0.1s linear;border-radius:6px;"></div>
+    </div>
+    <div style="color:#666;font-size:12px;"><span id="prof-elapsed">0.0</span> / <span id="prof-total">0.0</span> s</div>
+  </div>
+</div>
 
 <div style="padding:10px 12px 0; display:flex; align-items:center; gap:16px;">
   <h2>Ackermann Config UI</h2>
@@ -560,6 +722,14 @@ HTML_PAGE = """<!DOCTYPE html>
         <input id="c-sids" type="text" value="4,2,8,6,3,1,7,5" style="width:200px">
         <span style="font-size:11px;color:#888;margin-left:6px;">DXL IDs for each wheel role</span>
       </div>
+      <div class="cfg-row"><label>steer_rate (°/s)</label>
+        <input id="c-steer-rate"  type="number" step="5" min="1" max="180" value="30">
+        <span style="font-size:11px;color:#888;margin-left:6px;">max steering rate during profile</span>
+      </div>
+      <div class="cfg-row"><label>steer_accel (°/s²)</label>
+        <input id="c-steer-accel" type="number" step="10" min="1" max="360" value="60">
+        <span style="font-size:11px;color:#888;margin-left:6px;">ramp acceleration during profile</span>
+      </div>
     </div>
 
     <!-- Steer calibration -->
@@ -624,6 +794,8 @@ function readConfig() {
     drive_dir:             parseDir('c-ddir'),
     steer_offset_deg:      parseFloat4('c-offset'),
     servo_ids:             parseDir('c-sids'),
+    steer_rate_deg_s:      parseFloat(document.getElementById('c-steer-rate').value)  || 30,
+    steer_accel_deg_s2:    parseFloat(document.getElementById('c-steer-accel').value) || 60,
   };
 }
 
@@ -659,14 +831,66 @@ function updateSliderRange(maxSteer, maxSpeed) {
 var slSteer = document.getElementById('sl-steer');
 var slSpeed = document.getElementById('sl-speed');
 
+// ── Steer slider press / drag / release logic ─────────────────────────────────
+// While the slider is held down  → live real-time control (drag case).
+// On release after a large instant jump (no drag) → trapezoidal profile.
+// Threshold: jumps > CLICK_JUMP_THRESHOLD degrees with no dragging steps trigger a profile.
+var CLICK_JUMP_THRESHOLD = 3.0;
+var _sliderHeld    = false;
+var _pressSteer    = 0.0;   // _sentSteer at the moment the slider was pressed
+var _hasDragged    = false;
+var _pendingJump   = false;
+
+function onSteerPress() {
+  _sliderHeld  = true;
+  _pressSteer  = _sentSteer;
+  _hasDragged  = false;
+  _pendingJump = false;
+}
+function onSteerRelease() {
+  if (!_sliderHeld) return;
+  _sliderHeld = false;
+  if (_pendingJump) {
+    _pendingJump = false;
+    if (_driving && !_profiling) sendCmd();  // profile from _sentSteer to slider value
+  } else {
+    _sentSteer = parseFloat(slSteer.value);  // drag or tiny click — already live
+  }
+  _hasDragged = false;
+}
+slSteer.addEventListener('mousedown',  onSteerPress);
+slSteer.addEventListener('touchstart', onSteerPress, {passive: true});
+slSteer.addEventListener('mouseup',    onSteerRelease);
+slSteer.addEventListener('touchend',   onSteerRelease);
+document.addEventListener('mouseup',   onSteerRelease);  // catch release outside slider
+
 slSteer.addEventListener('input', function() {
   document.getElementById('lbl-steer').textContent = parseFloat(slSteer.value).toFixed(1);
-  driveIfActive();
   preview();
+  if (!_driving || _profiling) return;
+
+  var delta = Math.abs(parseFloat(slSteer.value) - _pressSteer);
+  if (!_hasDragged && !_pendingJump) {
+    if (delta > CLICK_JUMP_THRESHOLD) {
+      // Large instant jump — defer until mouseup confirms it's a click
+      _pendingJump = true;
+    } else {
+      // Small step — start of a drag, send live
+      _hasDragged = true;
+      _sentSteer  = parseFloat(slSteer.value);
+      doDrive();
+    }
+  } else if (_hasDragged) {
+    // Continuing drag — send live
+    _sentSteer = parseFloat(slSteer.value);
+    doDrive();
+  }
+  // If _pendingJump, hold off sending until mouseup
 });
+
 slSpeed.addEventListener('input', function() {
   document.getElementById('lbl-speed').textContent = parseFloat(slSpeed.value).toFixed(2);
-  driveIfActive();
+  driveIfActive();  // speed is fine to send immediately — no steering jerk
   preview();
 });
 document.querySelectorAll('.cfg-grid input').forEach(function(el){ el.addEventListener('input', function(){
@@ -701,22 +925,89 @@ function preview() {
   });
 }
 
-var _driving  = false;
-var _torqueOn = true;
+var _driving      = false;
+var _torqueOn     = true;
+var _profiling      = false;
+var _profStart      = 0;
+var _profDuration   = 0;
+var _profTargetSteer = 0.0;  // target steer stored at profile start — not read from DOM
+var _sentSteer    = 0.0;   // steer the robot is currently at (updated after each profile or live drag)
+
+// ── Profile splash ─────────────────────────────────────────────────────────────
+
+function showProfileSplash(fromDeg, toDeg, durationMs) {
+  _profiling       = true;
+  _profStart       = Date.now();
+  _profDuration    = durationMs;
+  _profTargetSteer = toDeg;  // store as number — avoids DOM text parseFloat(0) falsy bug
+  document.getElementById('prof-from').textContent    = fromDeg.toFixed(1);
+  document.getElementById('prof-to').textContent      = toDeg.toFixed(1);
+  document.getElementById('prof-total').textContent   = (durationMs / 1000).toFixed(1);
+  document.getElementById('prof-elapsed').textContent = '0.0';
+  document.getElementById('prof-bar').style.width     = '0%';
+  var el = document.getElementById('profile-splash');
+  el.style.display = 'flex';
+  pollProfile();
+}
+
+function hideProfileSplash() {
+  _profiling = false;
+  document.getElementById('profile-splash').style.display = 'none';
+}
+
+function pollProfile() {
+  if (!_profiling) return;
+  var elapsed = Date.now() - _profStart;
+  var pct = _profDuration > 0 ? Math.min(100, elapsed / _profDuration * 100) : 100;
+  document.getElementById('prof-bar').style.width     = pct.toFixed(1) + '%';
+  document.getElementById('prof-elapsed').textContent = (elapsed / 1000).toFixed(1);
+
+  postJSON('/profile_status', {}, function(err, d) {
+    if (err || (d && d.active)) {
+      setTimeout(pollProfile, 100);
+    } else {
+      document.getElementById('prof-bar').style.width = '100%';
+      hideProfileSplash();
+      // Record the steer angle the robot has now reached
+      _sentSteer = _profTargetSteer;  // use stored number, not DOM text (avoids 0.0 falsy bug)
+      // Resume normal drive loop — watchdog uses _sentSteer, not raw slider
+      _driving = true;
+      doDrive();
+    }
+  });
+}
+
+// ── Drive loop ─────────────────────────────────────────────────────────────────
 
 function sendCmd() {
-  _driving = true;
   if (!_torqueOn) { setTorqueUI(true); }
-  doDrive();
+  var steer_deg = parseFloat(slSteer.value);
+  var speed_mps = parseFloat(slSpeed.value);
+  var cfg       = readConfig();
+  postJSON('/send_profile', { steer_deg: steer_deg, speed_mps: speed_mps, config: cfg },
+    function(err, d) {
+      if (err || (d && d.error)) {
+        setStatus('Profile error: ' + (d && d.error ? d.error : err), true);
+        return;
+      }
+      setStatus('Profile: ' + d.from_deg.toFixed(1) + '° → ' + d.to_deg.toFixed(1) +
+                '°  (' + (d.duration_ms / 1000).toFixed(1) + ' s)');
+      _driving = false;  // pause watchdog loop while profile runs
+      showProfileSplash(d.from_deg, d.to_deg, d.duration_ms);
+    }
+  );
 }
 
 function doDrive() {
   if (!_driving) return;
-  var body = { steer_deg: parseFloat(slSteer.value), speed_mps: parseFloat(slSpeed.value), config: readConfig() };
+  // Use _sentSteer (last profiled steer) — never jump raw slider value directly to robot
+  var body = { steer_deg: _sentSteer, speed_mps: parseFloat(slSpeed.value), config: readConfig() };
   postJSON('/drive', body, function(err, d) {
     if (err || (d && d.error)) { setStatus('Robot: ' + (d && d.error ? d.error : err), true); return; }
-    setStatus('Sent  steer=' + body.steer_deg.toFixed(1) + ' deg  speed=' + body.speed_mps.toFixed(2) + ' m/s');
-    updateViz(d);
+    if (d && !d.profiling) {
+      setStatus('Holding  steer=' + _sentSteer.toFixed(1) + '°  speed=' + body.speed_mps.toFixed(2) + ' m/s');
+      updateViz(d);
+    }
   });
 }
 
@@ -725,11 +1016,13 @@ function driveIfActive() {
   doDrive();
 }
 
-// Feed the firmware watchdog at 10 Hz while driving is active
-setInterval(function() { if (_driving) doDrive(); }, 100);
+// Feed the firmware watchdog at 10 Hz while driving (not during profile — profile thread feeds it)
+setInterval(function() { if (_driving && !_profiling) doDrive(); }, 100);
 
 function sendEstop() {
   _driving = false;
+  _pendingJump = false;
+  hideProfileSplash();
   postJSON('/estop', {}, function(err) {
     setStatus(err ? 'Estop error: ' + err : 'E-STOP sent.', !!err);
     if (!err) setTorqueUI(false);

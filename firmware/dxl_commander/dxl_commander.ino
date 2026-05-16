@@ -256,12 +256,15 @@ static void refreshServoState() {
     uint8_t id = SERVO_IDS[i];
 
     int32_t pos = dxl.readControlTableItem(ControlTableItem::PRESENT_POSITION, id);
-    int32_t spd = dxl.readControlTableItem(ControlTableItem::PRESENT_VELOCITY, id);
+    // AX-12A Present Speed is at address 38 (2 bytes, 0-2047).
+    // PRESENT_VELOCITY is a Protocol 2.0 item and returns -1 for AX series.
+    uint8_t spdBuf[2] = {0, 0};
+    bool spdOk = dxl.read(id, 38, 2, spdBuf, sizeof(spdBuf));
 
     // On a single read failure, keep last known values — do NOT mark unavailable.
     // A transient bus hiccup should not cause the next CMD frame to skip this servo.
     if (pos >= 0) servoPos[i]   = (uint16_t)pos;
-    if (spd >= 0) servoSpeed[i] = (uint16_t)(spd & 0x7FFF);
+    if (spdOk)   servoSpeed[i]  = (uint16_t)spdBuf[0] | ((uint16_t)spdBuf[1] << 8);
   }
 
   // Round-robin: one servo's temp+volt per frame.
@@ -457,7 +460,9 @@ void cmdMonitor(const char* args) {
     if (USB_SERIAL.available()) { while (USB_SERIAL.available()) USB_SERIAL.read(); break; }
     uint32_t ts    = millis() - t0;
     int32_t posVal = dxl.readControlTableItem(ControlTableItem::PRESENT_POSITION, id);
-    int32_t spd    = dxl.readControlTableItem(ControlTableItem::PRESENT_VELOCITY, id);
+    uint8_t spdBuf2[2] = {0, 0};
+    dxl.read(id, 38, 2, spdBuf2, sizeof(spdBuf2));
+    int32_t spd = (int32_t)((uint16_t)spdBuf2[0] | ((uint16_t)spdBuf2[1] << 8));
     int32_t load   = dxl.readControlTableItem(ControlTableItem::PRESENT_LOAD, id);
     int32_t volt   = dxl.readControlTableItem(ControlTableItem::PRESENT_INPUT_VOLTAGE, id);
     int32_t temp   = dxl.readControlTableItem(ControlTableItem::PRESENT_TEMPERATURE, id);
@@ -551,7 +556,9 @@ void cmdGetSpeed(const char* args) {
   int32_t id = tokenInt(args, pos, -1);
   if (id < 1 || id > 252) { USB_SERIAL.println("ERR,GETSPEED,INVALID_ID"); return; }
   if (!dxl.ping(id)) { USB_SERIAL.print("ERR,GETSPEED,"); USB_SERIAL.print(id); USB_SERIAL.println(",NOT_FOUND"); return; }
-  int32_t spd = dxl.readControlTableItem(ControlTableItem::PRESENT_VELOCITY, id);
+  uint8_t spdBuf[2] = {0, 0};
+  dxl.read(id, 38, 2, spdBuf, sizeof(spdBuf));
+  int32_t spd = (int32_t)((uint16_t)spdBuf[0] | ((uint16_t)spdBuf[1] << 8));
   USB_SERIAL.print("OK,GETSPEED,"); USB_SERIAL.print(id);
   USB_SERIAL.print(",");            USB_SERIAL.print(spd);
   USB_SERIAL.print(",");            USB_SERIAL.println(TICKS_TO_RPM(spd), 2);
