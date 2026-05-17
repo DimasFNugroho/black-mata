@@ -17,6 +17,10 @@ import argparse
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
+
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -88,7 +92,7 @@ def main():
         print('Try --device 1 or check: ls /dev/video*')
         sys.exit(1)
 
-    server = HTTPServer(('0.0.0.0', args.port), Handler)
+    server = ThreadingHTTPServer(('0.0.0.0', args.port), Handler)
     print(f'Camera device {args.device} — {args.width}×{args.height} @ {args.fps} fps')
     print(f'Stream : http://0.0.0.0:{args.port}/stream')
     print(f'Browser: http://0.0.0.0:{args.port}/')

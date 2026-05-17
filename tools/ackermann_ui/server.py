@@ -49,8 +49,7 @@ def _build_cfg(c):
     cfg.wheelbase             = _f('wheelbase',             0.20)
     cfg.track_width           = _f('track_width',           0.15)
     cfg.max_steer_deg         = _f('max_steer_deg',         30.0)
-    cfg.max_speed_mps         = _f('max_speed_mps',         0.5)
-    cfg.max_wheel_speed_ticks = _i('max_wheel_speed_ticks', 300)
+    cfg.max_wheel_speed_ticks = min(_i('max_wheel_speed_ticks', 300), 1023)
     cfg.steer_center_ticks    = _i('steer_center_ticks',    512)
     cfg.steer_dir             = _l('steer_dir',        [1, -1, -1,  1])
     cfg.drive_dir             = _l('drive_dir',        [1, -1,  1, -1])
@@ -139,14 +138,14 @@ def _compute_result(steer_deg, speed_mps, cfg):
         'position_space': position_space,
         'turning_radius': R,
         'steer_clamped':  max(-cfg.max_steer_deg, min(cfg.max_steer_deg, steer_deg)),
-        'speed_clamped':  max(-1.0, min(1.0, speed_mps / cfg.max_speed_mps)) * cfg.max_speed_mps,
+        'speed_clamped':  max(-1.0, min(1.0, speed_mps)),
     }
 
 
 def _default_config():
     return {
         'wheelbase': 0.20, 'track_width': 0.15,
-        'max_steer_deg': 30.0, 'max_speed_mps': 0.5,
+        'max_steer_deg': 30.0,
         'max_wheel_speed_ticks': 300, 'steer_center_ticks': 512,
         'steer_dir': [1, -1, -1, 1], 'drive_dir': [1, -1, 1, -1],
         'steer_offset_deg': [0.0, 0.0, 0.0, 0.0],
@@ -297,13 +296,16 @@ class Handler(BaseHTTPRequestHandler):
                     fl_d = s.servos[cfg.servo_ids[4] - 1]
                     if fl_d.available:
                         raw = fl_d.speed  # 0-2047 AX-12A PRESENT_SPEED encoding
+                        # In WHEEL mode PRESENT_SPEED unit is 0.1% output (not RPM).
+                        # Divide by 1023 (absolute max) to get a 0.0-1.0 output fraction,
+                        # then scale to m/s assuming output% is proportional to speed.
                         if raw == 0 or raw == 1024:
                             frac = 0.0
                         elif raw < 1024:
-                            frac = (raw / float(cfg.max_wheel_speed_ticks)) * cfg.drive_dir[0]
+                            frac =  (raw / 1023.0) * cfg.drive_dir[0]
                         else:
-                            frac = -((raw - 1024) / float(cfg.max_wheel_speed_ticks)) * cfg.drive_dir[0]
-                        speed_fb = max(-cfg.max_speed_mps, min(cfg.max_speed_mps, frac * cfg.max_speed_mps))
+                            frac = -((raw - 1024) / 1023.0) * cfg.drive_dir[0]
+                        speed_fb = max(-1.0, min(1.0, frac))
                     else:
                         speed_fb = 0.0
                     feedback = {'steer_deg': round(steer_fb, 2), 'speed_mps': round(speed_fb, 3)}
@@ -665,9 +667,9 @@ HTML_PAGE = """<!DOCTYPE html>
       actual: <span id="fb-steer" style="color:#fa0">—</span>
     </div>
     <div class="slider-row">
-      <label>Speed (m/s)</label>
-      <input type="range" id="sl-speed" min="-0.5" max="0.5" step="0.01" value="0">
-      <span class="val"><span id="lbl-speed">0.00</span></span>
+      <label>Output (%)</label>
+      <input type="range" id="sl-speed" min="-1.0" max="1.0" step="0.01" value="0">
+      <span class="val"><span id="lbl-speed">0</span>%</span>
     </div>
     <div style="font-size:11px;color:#666;margin:-6px 0 8px 98px;">
       actual: <span id="fb-speed" style="color:#fa0">—</span>
@@ -710,9 +712,10 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="cfg-grid">
       <div class="cfg-row"><label>wheelbase (m)</label>           <input id="c-wheelbase" type="number" step="0.01" value="0.20"></div>
       <div class="cfg-row"><label>track_width (m)</label>         <input id="c-track"     type="number" step="0.01" value="0.15"></div>
-      <div class="cfg-row"><label>max_steer_deg</label>           <input id="c-maxsteer"  type="number" step="1"    value="30"></div>
-      <div class="cfg-row"><label>max_speed_mps</label>           <input id="c-maxspeed"  type="number" step="0.05" value="0.5"></div>
-      <div class="cfg-row"><label>max_wheel_ticks</label>         <input id="c-maxticks"  type="number" step="10"   value="300"></div>
+      <div class="cfg-row"><label>max_steer_deg</label>           <input id="c-maxsteer"  type="number" step="1"   value="30"></div>
+      <div class="cfg-row"><label>max_wheel_ticks (0–1023)</label><input id="c-maxticks"  type="number" step="10"  value="300" min="0" max="1023">
+        <span id="c-maxticks-pct" style="font-size:11px;color:#fa0;margin-left:6px;">29%</span>
+      </div>
       <div class="cfg-row"><label>steer_center_ticks</label>      <input id="c-center"    type="number" step="1"    value="512"></div>
       <div class="cfg-row"><label>steer_dir [FL,FR,RL,RR]</label><input id="c-sdir" type="text" value="1,-1,-1,1"></div>
       <div class="cfg-row"><label>drive_dir [FL,FR,RL,RR]</label><input id="c-ddir" type="text" value="1,-1,1,-1"></div>
@@ -787,8 +790,7 @@ function readConfig() {
     wheelbase:             parseFloat(document.getElementById('c-wheelbase').value),
     track_width:           parseFloat(document.getElementById('c-track').value),
     max_steer_deg:         parseFloat(document.getElementById('c-maxsteer').value),
-    max_speed_mps:         parseFloat(document.getElementById('c-maxspeed').value),
-    max_wheel_speed_ticks: parseInt(document.getElementById('c-maxticks').value),
+    max_wheel_speed_ticks: Math.min(parseInt(document.getElementById('c-maxticks').value) || 300, 1023),
     steer_center_ticks:    parseInt(document.getElementById('c-center').value),
     steer_dir:             parseDir('c-sdir'),
     drive_dir:             parseDir('c-ddir'),
@@ -803,8 +805,7 @@ function fillConfig(c) {
   document.getElementById('c-wheelbase').value = c.wheelbase;
   document.getElementById('c-track').value     = c.track_width;
   document.getElementById('c-maxsteer').value  = c.max_steer_deg;
-  document.getElementById('c-maxspeed').value  = c.max_speed_mps;
-  document.getElementById('c-maxticks').value  = c.max_wheel_speed_ticks;
+  document.getElementById('c-maxticks').value  = Math.min(c.max_wheel_speed_ticks || 300, 1023);
   document.getElementById('c-center').value    = c.steer_center_ticks;
   document.getElementById('c-sdir').value      = c.steer_dir.join(',');
   document.getElementById('c-ddir').value      = c.drive_dir.join(',');
@@ -812,20 +813,22 @@ function fillConfig(c) {
   document.getElementById('c-offset').value    = off.join(',');
   var ids = c.servo_ids || [1,2,3,4,5,6,7,8];
   document.getElementById('c-sids').value      = ids.join(',');
-  updateSliderRange(c.max_steer_deg, c.max_speed_mps);
+  updateSliderRange(c.max_steer_deg);
+  updateTicksPct();
 }
 
-function updateSliderRange(maxSteer, maxSpeed) {
+function updateSliderRange(maxSteer) {
   var sl = document.getElementById('sl-steer');
   sl.min = -maxSteer; sl.max = maxSteer;
   if (parseFloat(sl.value) > maxSteer)  sl.value =  maxSteer;
   if (parseFloat(sl.value) < -maxSteer) sl.value = -maxSteer;
   document.getElementById('lbl-steer').textContent = parseFloat(sl.value).toFixed(1);
-  var ss = document.getElementById('sl-speed');
-  ss.min = -maxSpeed; ss.max = maxSpeed;
-  if (parseFloat(ss.value) > maxSpeed)  ss.value =  maxSpeed;
-  if (parseFloat(ss.value) < -maxSpeed) ss.value = -maxSpeed;
-  document.getElementById('lbl-speed').textContent = parseFloat(ss.value).toFixed(2);
+}
+
+function updateTicksPct() {
+  var ticks = Math.min(parseInt(document.getElementById('c-maxticks').value) || 0, 1023);
+  var pct   = (ticks / 1023 * 100).toFixed(1);
+  document.getElementById('c-maxticks-pct').textContent = pct + '%';
 }
 
 var slSteer = document.getElementById('sl-steer');
@@ -889,14 +892,14 @@ slSteer.addEventListener('input', function() {
 });
 
 slSpeed.addEventListener('input', function() {
-  document.getElementById('lbl-speed').textContent = parseFloat(slSpeed.value).toFixed(2);
+  document.getElementById('lbl-speed').textContent = Math.round(parseFloat(slSpeed.value) * 100);
   driveIfActive();  // speed is fine to send immediately — no steering jerk
   preview();
 });
 document.querySelectorAll('.cfg-grid input').forEach(function(el){ el.addEventListener('input', function(){
   var ms = parseFloat(document.getElementById('c-maxsteer').value);
-  var mp = parseFloat(document.getElementById('c-maxspeed').value);
-  if (!isNaN(ms) && !isNaN(mp)) updateSliderRange(ms, mp);
+  if (!isNaN(ms)) updateSliderRange(ms);
+  updateTicksPct();
   preview();
 }); });
 
@@ -1005,7 +1008,7 @@ function doDrive() {
   postJSON('/drive', body, function(err, d) {
     if (err || (d && d.error)) { setStatus('Robot: ' + (d && d.error ? d.error : err), true); return; }
     if (d && !d.profiling) {
-      setStatus('Holding  steer=' + _sentSteer.toFixed(1) + '°  speed=' + body.speed_mps.toFixed(2) + ' m/s');
+      setStatus('Holding  steer=' + _sentSteer.toFixed(1) + '°  output=' + Math.round(body.speed_mps * 100) + '%');
       updateViz(d);
     }
   });
@@ -1195,7 +1198,7 @@ function refreshState() {
     // Update actual-value feedback labels only — sliders are user-controlled
     if (d.feedback) {
       document.getElementById('fb-steer').textContent = d.feedback.steer_deg.toFixed(1) + ' deg';
-      document.getElementById('fb-speed').textContent = d.feedback.speed_mps.toFixed(3) + ' m/s';
+      document.getElementById('fb-speed').textContent = Math.round(d.feedback.speed_mps * 100) + '%';
     }
 
     var tbody = document.getElementById('state-table');

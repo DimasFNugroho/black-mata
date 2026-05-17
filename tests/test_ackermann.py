@@ -131,10 +131,13 @@ class TestTurning:
     def test_left_turn_mirrors_right(self):
         right = self._steer_angles(15.0)
         left  = self._steer_angles(-15.0)
-        # Symmetric: each tick should mirror around 512
-        for r, l in zip(right, left):
-            assert abs((r - 512) + (l - 512)) <= 1, \
-                f'Not symmetric: right={r}, left={l}'
+        # Ackermann symmetry: FL↔FR and RL↔RR swap between left and right turns.
+        # The inner and outer angles differ, so ticks do NOT mirror around 512 —
+        # instead each wheel's right-turn tick equals the opposing wheel's left-turn tick.
+        assert right[0] == left[1], f'FL right {right[0]} should equal FR left {left[1]}'
+        assert right[1] == left[0], f'FR right {right[1]} should equal FL left {left[0]}'
+        assert right[2] == left[3], f'RL right {right[2]} should equal RR left {left[3]}'
+        assert right[3] == left[2], f'RR right {right[3]} should equal RL left {left[2]}'
 
     def test_inner_front_turns_more_than_outer(self):
         # |FR angle| > |FL angle| for a right turn (inner wheel sweeps tighter arc)

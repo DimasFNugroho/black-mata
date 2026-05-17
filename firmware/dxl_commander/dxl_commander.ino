@@ -467,11 +467,19 @@ void cmdMonitor(const char* args) {
     int32_t volt   = dxl.readControlTableItem(ControlTableItem::PRESENT_INPUT_VOLTAGE, id);
     int32_t temp   = dxl.readControlTableItem(ControlTableItem::PRESENT_TEMPERATURE, id);
     if (posVal < 0) { USB_SERIAL.println("ERR,MONITOR,LOST_CONNECTION"); break; }
+    String modeStr = getMode(id);
+    // PRESENT_SPEED unit differs by mode:
+    //   JOINT: 0.111 rpm/tick  |  WHEEL: 0.1 %/tick (output power, not RPM)
     USB_SERIAL.print("STATUS,"); USB_SERIAL.print(ts);           USB_SERIAL.print(",");
     USB_SERIAL.print(id);        USB_SERIAL.print(",");
-    USB_SERIAL.print(getMode(id));  USB_SERIAL.print(",");
+    USB_SERIAL.print(modeStr);  USB_SERIAL.print(",");
     USB_SERIAL.print(TICKS_TO_DEG(posVal), 2); USB_SERIAL.print(",");
-    USB_SERIAL.print(TICKS_TO_RPM(spd), 2);    USB_SERIAL.print(",");
+    if (modeStr == "WHEEL") {
+      USB_SERIAL.print(((spd & 0x3FF) * 0.1f), 1); USB_SERIAL.print("%");
+    } else {
+      USB_SERIAL.print(TICKS_TO_RPM(spd), 2);       USB_SERIAL.print("rpm");
+    }
+    USB_SERIAL.print(",");
     USB_SERIAL.print(TICKS_TO_LOAD(load), 2);  USB_SERIAL.print(",");
     USB_SERIAL.print(volt * 0.1f, 1);           USB_SERIAL.print(",");
     USB_SERIAL.println(temp);

@@ -82,8 +82,7 @@ class AckermannConfig:
 
     # Motion limits
     max_steer_deg:        float = 30.0   # clamp on input δ
-    max_speed_mps:        float = 0.5    # maps speed_pct ±1.0 to ±this value
-    max_wheel_speed_ticks: int  = 300    # DXL WHEEL ticks at full speed (0–1023)
+    max_wheel_speed_ticks: int  = 300    # DXL WHEEL output cap (0–1023); 1023 = 100% output
 
     # Steer servo parameters (AX-12A: 300° range, 1023 ticks)
     steer_center_ticks: int   = 512              # tick at physical neutral
@@ -116,10 +115,13 @@ class AckermannConfig:
 
 def _encode_wheel_speed(fraction: float, direction: int, max_ticks: int) -> int:
     """
-    Encode a signed speed fraction (−1.0 … +1.0) into AX-12A WHEEL ticks.
-    direction : +1 or −1 (servo mounting direction)
+    Encode a signed output fraction (−1.0 … +1.0) into AX-12A WHEEL mode value.
+    fraction  : −1.0 … +1.0  (output level; sign sets forward/backward)
+    direction : +1 or −1     (servo mounting direction)
+    max_ticks : output cap, 0–1023 (hardware limit; values above 1023 are clamped)
     Returns   : 0–2047 as required by WHEEL mode.
     """
+    max_ticks = min(max_ticks, 1023)
     effective = fraction * direction
     raw = min(int(abs(effective) * max_ticks), 1023)
     if effective >= 0:
@@ -151,20 +153,21 @@ class Ackermann:
     def __init__(self, config: AckermannConfig = None):
         self.cfg = config or AckermannConfig()
 
-    def compute(self, steer_deg: float, speed_mps: float) -> List[ServoCmd]:
+    def compute(self, steer_deg: float, speed_frac: float) -> List[ServoCmd]:
         """
-        Compute 8 servo targets from steering angle and speed.
+        Compute 8 servo targets from steering angle and drive output fraction.
 
-        steer_deg : desired steering angle in degrees (+right, −left)
-        speed_mps : desired speed in m/s (+forward, −backward)
-        Returns   : list of 8 ServoCmd — indices 0–3 are steer (IDs 1–4),
-                    indices 4–7 are drive (IDs 5–8).
+        steer_deg  : desired steering angle in degrees (+right, −left)
+        speed_frac : drive output fraction −1.0 … +1.0
+                     (+1.0 = max_wheel_speed_ticks output forward,
+                      −1.0 = max_wheel_speed_ticks output reverse)
+        Returns    : list of 8 ServoCmd — indices 0–3 are steer, indices 4–7 are drive.
         """
         cfg = self.cfg
 
         # ── Clamp inputs ───────────────────────────────────────────────────────
-        δ_deg = max(-cfg.max_steer_deg, min(cfg.max_steer_deg, steer_deg))
-        v_frac = max(-1.0, min(1.0, speed_mps / cfg.max_speed_mps))
+        δ_deg  = max(-cfg.max_steer_deg, min(cfg.max_steer_deg, steer_deg))
+        v_frac = max(-1.0, min(1.0, speed_frac))
 
         L2 = cfg.wheelbase   / 2.0
         W2 = cfg.track_width / 2.0
@@ -250,15 +253,5 @@ class Ackermann:
         return steer_cmds + drive_cmds
 
     def estop_targets(self) -> List[ServoCmd]:
-        """Return 8 targets that zero drive speed and centre steering."""
-        cfg = self.cfg
-        neutral_ticks = cfg.steer_center_ticks
-        steer_cmds = [
-            ServoCmd(mode=0, enable_torque=1, target=neutral_ticks)
-            for _ in range(4)
-        ]
-        drive_cmds = [
-            ServoCmd(mode=1, enable_torque=1, target=0)
-            for _ in range(4)
-        ]
-        return steer_cmds + drive_cmds
+        """Return 8 targets that zero drive speed and centre steering (offsets applied)."""
+        return self.compute(0.0, 0.0)
