@@ -231,8 +231,9 @@
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">JOINT / WHEEL mode switching; Dynamixel Protocol 1.0 at 1 Mbaud</span><span class="todo-mod">dxl_commander.ino</span></div>
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Firmware watchdog — zeros drive speeds if no frame within 500 ms</span><span class="todo-mod">dxl_commander.ino</span></div>
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">AX-12A Present Speed readback via direct address 38</span><span class="todo-mod">dxl_commander.ino</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">cmdMonitor shows output % for WHEEL mode, rpm for JOINT mode <em>(needs reflash)</em></span><span class="todo-mod">dxl_commander.ino</span></div>
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Serial driver — frame encode/decode, background recv thread, CRC</span><span class="todo-mod">serial_driver.py</span></div>
-        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Ackermann kinematics — 4WS counter-phase, per-wheel speed differential</span><span class="todo-mod">ackermann.py</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Ackermann kinematics — 4WS counter-phase, per-wheel speed differential, output fraction API (−1.0…+1.0)</span><span class="todo-mod">ackermann.py</span></div>
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Servo ID identification — nudge and map DXL ID to wheel role</span><span class="todo-mod">dxl_identify.py</span></div>
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Steer centre calibration — torque off, align, record neutral offsets</span><span class="todo-mod">ackermann_ui/</span></div>
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Trapezoidal steering profile — smooth motion; drag vs. click detection</span><span class="todo-mod">ackermann_ui/</span></div>
@@ -251,7 +252,7 @@
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Camera generator — V4L2 capture, MJPEG encode, background thread</span><span class="todo-mod">camera.py</span></div>
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">MJPEG streaming endpoint (<code>/stream</code>) via FastAPI StreamingResponse</span><span class="todo-mod">main.py</span></div>
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Standalone camera test server — MJPEG over stdlib HTTP, no serial port needed</span><span class="todo-mod">tools/camera/</span></div>
-        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Camera feed rendered in operator dashboard (<code>&lt;img src="/stream"&gt;</code>)</span><span class="todo-mod">dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Camera feed rendered in operator dashboard (<code>&lt;img src="/stream"&gt;</code>)</span><span class="todo-mod">tools/dashboard/</span></div>
       </div>
     </details>
 
@@ -281,10 +282,9 @@
         <span class="feat-chevron">▶</span>
       </summary>
       <div class="feat-body">
-        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Command translator — gamepad axes [−1…1] → physical (v m/s, δ deg)</span><span class="todo-mod">main.py</span></div>
-        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Gamepad API polling at 50 Hz → WebSocket drive commands</span><span class="todo-mod">dashboard/</span></div>
-        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Keyboard fallback control (arrow keys / WASD)</span><span class="todo-mod">dashboard/</span></div>
-        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">WebSocket reconnect on connection loss</span><span class="todo-mod">dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Keyboard WASD drive control</span><span class="todo-mod">tools/dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Gamepad API polling at 50 Hz → drive commands</span><span class="todo-mod">tools/dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">⚠️</span><span class="todo-text pending"><strong>Fix <code>main.py</code> stale API</strong> — <code>ack.compute(speed_mps=…)</code> kwarg renamed to <code>speed_frac</code>; WebSocket message schema uses <code>m/s</code> but should be output fraction −1.0…+1.0</span><span class="todo-mod">main.py</span></div>
       </div>
     </details>
 
@@ -293,15 +293,15 @@
       <summary>
         <span class="feat-num">FEATURE 5</span>
         <span class="feat-name">Robot Dashboard UI</span>
-        <span class="feat-pill pill-pending">Not started</span>
+        <span class="feat-pill pill-partial">Partial</span>
         <span class="feat-chevron">▶</span>
       </summary>
       <div class="feat-body">
-        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Single-page HTML dashboard (Vanilla JS, no build step)</span><span class="todo-mod">dashboard/index.html</span></div>
-        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Live MJPEG camera feed</span><span class="todo-mod">dashboard/index.html</span></div>
-        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Servo status panel — voltages, temperatures, positions, modes</span><span class="todo-mod">dashboard/index.html</span></div>
-        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">E-stop indicator and manual E-stop button</span><span class="todo-mod">dashboard/index.html</span></div>
-        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Connection status indicator</span><span class="todo-mod">dashboard/index.html</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Single-page HTML dashboard (Vanilla JS, stdlib HTTP — no build step)</span><span class="todo-mod">tools/dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Live MJPEG camera feed</span><span class="todo-mod">tools/dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">E-stop button</span><span class="todo-mod">tools/dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Live config display — reads <code>ackermann_config.json</code>, refreshes every 5 s</span><span class="todo-mod">tools/dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Servo status panel — per-servo voltages, temperatures, positions, modes</span><span class="todo-mod">tools/dashboard/</span></div>
       </div>
     </details>
 
