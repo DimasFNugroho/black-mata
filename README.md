@@ -16,25 +16,26 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 - [x] Firmware watchdog — zeros all drive speeds if no frame received within 500 ms
 - [x] Round-robin temperature & voltage polling (one servo per frame)
 - [x] Correct AX-12A Present Speed readback via direct address 38 (not PRESENT_VELOCITY)
+- [x] `cmdMonitor` shows output % for WHEEL mode servos, rpm for JOINT mode *(needs reflash)*
 
 ### Robot Agent — Jetson (`software/robot/`)
 
 - [x] Serial driver — binary frame encode/decode, background recv thread, CRC validation (`serial_driver.py`)
-- [x] Ackermann kinematics — 4WS counter-phase geometry, per-wheel speed differential (`ackermann.py`)
+- [x] Ackermann kinematics — 4WS counter-phase, per-wheel speed differential, output fraction API (`ackermann.py`)
 - [x] E-stop handler — WebSocket silence detection (500 ms), zero-speed frame dispatch (`estop.py`)
 - [x] Camera generator — V4L2 capture, MJPEG encode, background thread (`camera.py`)
 - [x] Robot Agent server — WebSocket drive commands, MJPEG `/stream`, JSON `/status` (`main.py`)
-- [x] Command translator — gamepad axes [-1…1] → physical (v m/s, δ deg)
+- [ ] **Fix `main.py` stale API** — `ack.compute(speed_mps=...)` kwarg renamed to `speed_frac`; WebSocket message doc says `speed: float m/s` but should be output fraction −1.0…+1.0
 
-### Operator Dashboard (`docs/dashboard/`)
+### Operator Dashboard (`tools/dashboard/`)
 
-- [ ] Single-page HTML dashboard (Vanilla JS, no build step)
-- [ ] Gamepad API polling at 50 Hz → WebSocket drive commands
-- [ ] Keyboard fallback control (arrow keys / WASD)
-- [ ] Live MJPEG camera feed (`<img src="/stream">`)
-- [ ] Servo status panel (voltages, temperatures, positions, modes)
-- [ ] E-stop indicator and manual E-stop button
-- [ ] WebSocket reconnect on connection loss
+- [x] Single-page HTML dashboard (Vanilla JS, no build step)
+- [x] Keyboard WASD drive control
+- [x] Live MJPEG camera feed
+- [x] E-stop button
+- [x] Live config display — reads `ackermann_config.json`, refreshes every 5 s
+- [ ] Gamepad API polling → drive commands
+- [ ] Servo status panel (per-servo voltages, temperatures, positions, modes)
 
 ### Infrastructure
 
@@ -147,6 +148,13 @@ firmware/
     <sketch_name>.ino          Arduino sketch
     build/                     Compiled artifacts — gitignored
 tools/
+  ackermann_ui/
+    server.py                  Browser config tool — parameter tuning, steer calibration, servo state
+    ackermann_config.json      Saved robot config (read by dashboard at runtime)
+  dashboard/
+    server.py                  Operator dashboard — WASD drive, camera feed, e-stop, live config
+  camera/
+    camera_test.py             Standalone MJPEG test stream (no serial port needed)
   dynamixel/                   Jetson-side Python tools (scan, nudge, monitor servos)
   remote_update/
     flash.conf                 Default arguments for the flash script
