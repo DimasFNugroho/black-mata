@@ -151,6 +151,7 @@ def _default_config():
         'steer_offset_deg': [0.0, 0.0, 0.0, 0.0],
         'servo_ids': [4, 2, 8, 6, 3, 1, 7, 5],
         'steer_rate_deg_s': 30.0, 'steer_accel_deg_s2': 60.0,
+        'batt_max_v': 12.6, 'batt_ok_v': 11.0, 'batt_low_v': 10.2, 'batt_critical_v': 9.6,
     }
 
 
@@ -516,9 +517,10 @@ HTML_PAGE = """<!DOCTYPE html>
   body { font-family: monospace; background: #111; color: #ddd; font-size: 14px; }
   h2 { color: #7cf; margin-bottom: 8px; }
   h3 { color: #adf; margin-bottom: 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
-  #layout { display: grid; grid-template-columns: 420px 1fr; grid-template-rows: auto auto auto; gap: 12px; padding: 12px; }
+  #layout { display: grid; grid-template-columns: 420px 1fr 240px; grid-template-rows: auto auto auto; gap: 12px; padding: 12px; }
   .card { background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 14px; }
   #viz-card { grid-row: 1 / 4; }
+  #servo-status-card { grid-column: 3; grid-row: 1 / 4; }
   svg { display: block; margin: 0 auto; }
   .slider-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
   .slider-row label { width: 90px; color: #aaa; }
@@ -597,26 +599,34 @@ HTML_PAGE = """<!DOCTYPE html>
       <polygon points="0,-70 -7,-55 7,-55" fill="#4af" opacity="0.7"/>
       <text x="0" y="-82" text-anchor="middle" font-size="10" fill="#4af">FWD</text>
 
-      <!-- Wheels: rect + axis line (rotates with wheel) + label -->
+      <!-- Wheels: rect (drive, heat-coloured) + joint circle (steer, heat-coloured) + axis + label + ID badge -->
       <g id="wheel-FL">
-        <rect x="-9" y="-16" width="18" height="32" rx="3" fill="#336"/>
+        <rect id="wheel-rect-FL" x="-9" y="-16" width="18" height="32" rx="3" fill="#336"/>
+        <circle id="wheel-joint-FL" cx="0" cy="0" r="4" fill="#4af" stroke="#111" stroke-width="1.2"/>
         <line x1="0" y1="-20" x2="0" y2="20" stroke="#6af" stroke-width="1" opacity="0.8"/>
         <text x="0" y="28" text-anchor="middle" font-size="9" fill="#99f">FL</text>
+        <text id="wheel-ids-FL" x="0" y="38" text-anchor="middle" font-size="7" fill="#556">S? D?</text>
       </g>
       <g id="wheel-FR">
-        <rect x="-9" y="-16" width="18" height="32" rx="3" fill="#336"/>
+        <rect id="wheel-rect-FR" x="-9" y="-16" width="18" height="32" rx="3" fill="#336"/>
+        <circle id="wheel-joint-FR" cx="0" cy="0" r="4" fill="#4af" stroke="#111" stroke-width="1.2"/>
         <line x1="0" y1="-20" x2="0" y2="20" stroke="#6af" stroke-width="1" opacity="0.8"/>
         <text x="0" y="28" text-anchor="middle" font-size="9" fill="#99f">FR</text>
+        <text id="wheel-ids-FR" x="0" y="38" text-anchor="middle" font-size="7" fill="#556">S? D?</text>
       </g>
       <g id="wheel-RL">
-        <rect x="-9" y="-16" width="18" height="32" rx="3" fill="#336"/>
+        <rect id="wheel-rect-RL" x="-9" y="-16" width="18" height="32" rx="3" fill="#336"/>
+        <circle id="wheel-joint-RL" cx="0" cy="0" r="4" fill="#4af" stroke="#111" stroke-width="1.2"/>
         <line x1="0" y1="-20" x2="0" y2="20" stroke="#6af" stroke-width="1" opacity="0.8"/>
         <text x="0" y="-20" text-anchor="middle" font-size="9" fill="#99f">RL</text>
+        <text id="wheel-ids-RL" x="0" y="-30" text-anchor="middle" font-size="7" fill="#556">S? D?</text>
       </g>
       <g id="wheel-RR">
-        <rect x="-9" y="-16" width="18" height="32" rx="3" fill="#336"/>
+        <rect id="wheel-rect-RR" x="-9" y="-16" width="18" height="32" rx="3" fill="#336"/>
+        <circle id="wheel-joint-RR" cx="0" cy="0" r="4" fill="#4af" stroke="#111" stroke-width="1.2"/>
         <line x1="0" y1="-20" x2="0" y2="20" stroke="#6af" stroke-width="1" opacity="0.8"/>
         <text x="0" y="-20" text-anchor="middle" font-size="9" fill="#99f">RR</text>
+        <text id="wheel-ids-RR" x="0" y="-30" text-anchor="middle" font-size="7" fill="#556">S? D?</text>
       </g>
 
       <!-- Steer angle labels (fixed world position, updated by JS) -->
@@ -735,6 +745,17 @@ HTML_PAGE = """<!DOCTYPE html>
       </div>
     </div>
 
+    <!-- Battery thresholds -->
+    <div style="margin-top:12px;border-top:1px solid #333;padding-top:10px;">
+      <h3>Battery thresholds (V)</h3>
+      <div class="cfg-grid">
+        <div class="cfg-row"><label>Max / 100% (V)</label>         <input id="c-batt-max"  type="number" step="0.1" value="12.6"></div>
+        <div class="cfg-row"><label>Full / OK (V)</label>          <input id="c-batt-ok"   type="number" step="0.1" value="11.0"></div>
+        <div class="cfg-row"><label>Almost empty (V)</label>       <input id="c-batt-low"  type="number" step="0.1" value="10.2"></div>
+        <div class="cfg-row"><label>Critical / empty (V)</label>   <input id="c-batt-crit" type="number" step="0.1" value="9.6"></div>
+      </div>
+    </div>
+
     <!-- Steer calibration -->
     <div style="margin-top:14px;border-top:1px solid #333;padding-top:12px;">
       <h3>Steer centre calibration</h3>
@@ -763,9 +784,37 @@ HTML_PAGE = """<!DOCTYPE html>
     <div style="margin-top:14px;">
       <h3>Robot state <span style="font-size:11px;color:#555;font-weight:normal">(auto-refreshes)</span></h3>
       <table>
-        <tr><th>ID</th><th>Mode</th><th>Pos</th><th>Speed</th><th>Temp</th><th>Volt</th></tr>
-        <tbody id="state-table"><tr><td colspan="6" style="color:#555;padding:6px;">-</td></tr></tbody>
+        <tr><th>ID</th><th>Role</th><th>Mode</th><th>Pos°</th><th>RPM</th><th>Temp°C</th><th>V</th></tr>
+        <tbody id="state-table"><tr><td colspan="7" style="color:#555;padding:6px;">-</td></tr></tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- Right column: battery -->
+  <div class="card" id="servo-status-card">
+    <h3>Battery</h3>
+    <div id="batt-pct"     style="font-size:42px;font-weight:bold;color:#aaa;text-align:center;line-height:1.1;">—</div>
+    <div id="batt-voltage" style="font-size:15px;color:#666;text-align:center;margin-bottom:6px;">— V</div>
+    <div id="batt-status"  style="font-size:11px;color:#666;text-align:center;margin-bottom:12px;">no data</div>
+    <!-- Battery bar with terminal nub -->
+    <div style="display:flex;align-items:center;gap:4px;">
+      <div style="flex:1;position:relative;height:26px;background:#222;border-radius:4px;border:1px solid #444;overflow:hidden;">
+        <div id="batt-bar" style="height:100%;width:0%;border-radius:3px;transition:width 0.6s,background 0.6s;"></div>
+      </div>
+      <div style="width:6px;height:14px;background:#444;border-radius:0 2px 2px 0;flex-shrink:0;"></div>
+    </div>
+    <div style="font-size:10px;color:#555;text-align:center;margin-top:5px;">avg of available servos</div>
+    <!-- Heatmap legend -->
+    <div style="margin-top:22px;border-top:1px solid #2a2a2a;padding-top:10px;">
+      <h3>Wheel temp heatmap</h3>
+      <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;font-size:11px;">
+        <div style="display:flex;align-items:center;gap:6px;"><div style="width:14px;height:10px;background:#1a4a8a;border-radius:2px;"></div><span style="color:#888;">&lt; 35 °C — cool</span></div>
+        <div style="display:flex;align-items:center;gap:6px;"><div style="width:14px;height:10px;background:#1a6a3a;border-radius:2px;"></div><span style="color:#888;">35–44 °C — warm</span></div>
+        <div style="display:flex;align-items:center;gap:6px;"><div style="width:14px;height:10px;background:#7a6a10;border-radius:2px;"></div><span style="color:#888;">45–54 °C — hot</span></div>
+        <div style="display:flex;align-items:center;gap:6px;"><div style="width:14px;height:10px;background:#8a4010;border-radius:2px;"></div><span style="color:#888;">55–64 °C — very hot</span></div>
+        <div style="display:flex;align-items:center;gap:6px;"><div style="width:14px;height:10px;background:#8a1515;border-radius:2px;"></div><span style="color:#888;">≥ 65 °C — critical</span></div>
+      </div>
+      <div style="margin-top:8px;font-size:10px;color:#555;">Wheel body = drive servo · Joint dot = steer servo</div>
     </div>
   </div>
 </div>
@@ -798,6 +847,10 @@ function readConfig() {
     servo_ids:             parseDir('c-sids'),
     steer_rate_deg_s:      parseFloat(document.getElementById('c-steer-rate').value)  || 30,
     steer_accel_deg_s2:    parseFloat(document.getElementById('c-steer-accel').value) || 60,
+    batt_max_v:            parseFloat(document.getElementById('c-batt-max').value)  || 12.6,
+    batt_ok_v:             parseFloat(document.getElementById('c-batt-ok').value)   || 11.0,
+    batt_low_v:            parseFloat(document.getElementById('c-batt-low').value)  || 10.2,
+    batt_critical_v:       parseFloat(document.getElementById('c-batt-crit').value) || 9.6,
   };
 }
 
@@ -813,6 +866,12 @@ function fillConfig(c) {
   document.getElementById('c-offset').value    = off.join(',');
   var ids = c.servo_ids || [1,2,3,4,5,6,7,8];
   document.getElementById('c-sids').value      = ids.join(',');
+  if (c.steer_rate_deg_s  !== undefined) document.getElementById('c-steer-rate').value  = c.steer_rate_deg_s;
+  if (c.steer_accel_deg_s2 !== undefined) document.getElementById('c-steer-accel').value = c.steer_accel_deg_s2;
+  document.getElementById('c-batt-max').value  = c.batt_max_v      !== undefined ? c.batt_max_v      : 12.6;
+  document.getElementById('c-batt-ok').value   = c.batt_ok_v       !== undefined ? c.batt_ok_v       : 11.0;
+  document.getElementById('c-batt-low').value  = c.batt_low_v      !== undefined ? c.batt_low_v      : 10.2;
+  document.getElementById('c-batt-crit').value = c.batt_critical_v !== undefined ? c.batt_critical_v : 9.6;
   updateSliderRange(c.max_steer_deg);
   updateTicksPct();
 }
@@ -918,6 +977,14 @@ function getJSON(url, cb) {
   xhr.onload = function() { try { cb(null, JSON.parse(xhr.responseText)); } catch(e){ cb(e); } };
   xhr.onerror = function() { cb(new Error('network error')); };
   xhr.send();
+}
+
+function tempColor(t) {
+  if (t < 35)  return '#1a4a8a';  // cool   — blue
+  if (t < 45)  return '#1a6a3a';  // warm   — green
+  if (t < 55)  return '#7a6a10';  // hot    — yellow
+  if (t < 65)  return '#8a4010';  // very hot — orange
+  return '#8a1515';               // critical — red
 }
 
 function preview() {
@@ -1076,6 +1143,8 @@ function updateViz(data) {
     var sign  = w.steer_angle >= 0 ? '+' : '';
     var steerId = sids[i] !== undefined ? sids[i] : (i+1);
     var driveId = sids[i+4] !== undefined ? sids[i+4] : (i+5);
+    var idsEl = document.getElementById('wheel-ids-' + w.label);
+    if (idsEl) idsEl.textContent = 'S' + steerId + ' D' + driveId;
     tbody.innerHTML +=
       '<tr><td class="hl">' + w.label + '</td>' +
       '<td style="color:#888;font-size:11px;">S:ID' + steerId + ' D:ID' + driveId + '</td>' +
@@ -1202,13 +1271,77 @@ function refreshState() {
     }
 
     var tbody = document.getElementById('state-table');
-    if (!d.state) { tbody.innerHTML = '<tr><td colspan="6" style="color:#555">waiting...</td></tr>'; return; }
-    tbody.innerHTML = d.state.servos.map(function(s) {
-      if (!s.available) return '<tr><td>' + s.id + '</td><td colspan="5" style="color:#555">UNAVAIL</td></tr>';
-      return '<tr><td>' + s.id + '</td><td>' + s.mode + '</td><td>' + s.pos + '</td>' +
-             '<td>' + s.speed + '</td><td>' + s.temp_c + 'C</td><td>' + s.volt_v.toFixed(1) + 'V</td></tr>';
-    }).join('');
+    if (!d.state) {
+      tbody.innerHTML = '<tr><td colspan="7" style="color:#555">waiting...</td></tr>';
+      return;
+    }
     if (d.state.e_stop) { setStatus('E-STOP active on robot', true); setTorqueUI(false); }
+
+    // ── Battery indicator ──────────────────────────────────────────────────────
+    var cfg   = readConfig();
+    var maxV  = cfg.batt_max_v      || 12.6;
+    var okV   = cfg.batt_ok_v       || 11.0;
+    var lowV  = cfg.batt_low_v      || 10.2;
+    var critV = cfg.batt_critical_v || 9.6;
+    var avail = d.state.servos.filter(function(s) { return s.available; });
+    if (avail.length > 0) {
+      var avgV = avail.reduce(function(sum, s) { return sum + s.volt_v; }, 0) / avail.length;
+      var bColor, bText;
+      if (avgV >= okV)        { bColor = '#4f4';  bText = 'Full'; }
+      else if (avgV >= lowV)  { bColor = '#af4';  bText = 'Nominal'; }
+      else if (avgV >= critV) { bColor = '#fa4';  bText = 'Low'; }
+      else                    { bColor = '#f44';  bText = 'Critical'; }
+      var pct = Math.max(0, Math.min(100, (avgV - critV) / (maxV - critV) * 100));
+      document.getElementById('batt-pct').textContent     = pct.toFixed(0) + '%';
+      document.getElementById('batt-pct').style.color     = bColor;
+      document.getElementById('batt-voltage').textContent = avgV.toFixed(2) + ' V';
+      document.getElementById('batt-voltage').style.color = bColor;
+      document.getElementById('batt-status').textContent  = bText;
+      document.getElementById('batt-status').style.color  = bColor;
+      document.getElementById('batt-bar').style.width      = pct.toFixed(1) + '%';
+      document.getElementById('batt-bar').style.background = bColor;
+    }
+
+    // ── Wheel temperature heatmap ──────────────────────────────────────────────
+    var sids = cfg.servo_ids || [4,2,8,6,3,1,7,5];
+    var WHEEL_ROLES = ['FL','FR','RL','RR'];
+    WHEEL_ROLES.forEach(function(lbl, i) {
+      var steerSv = d.state.servos[sids[i]     - 1];
+      var driveSv = d.state.servos[sids[i + 4] - 1];
+      var rectEl  = document.getElementById('wheel-rect-'  + lbl);
+      var jointEl = document.getElementById('wheel-joint-' + lbl);
+      if (rectEl  && driveSv && driveSv.available) rectEl.setAttribute('fill',  tempColor(driveSv.temp_c));
+      if (jointEl && steerSv && steerSv.available) jointEl.setAttribute('fill', tempColor(steerSv.temp_c));
+    });
+
+    // ── Combined servo state table ─────────────────────────────────────────────
+    var ROLE_LABELS = ['FL_s','FR_s','RL_s','RR_s','FL_d','FR_d','RL_d','RR_d'];
+    var roleMap = {};
+    sids.forEach(function(sid, i) { if (sid) roleMap[sid] = ROLE_LABELS[i]; });
+
+    tbody.innerHTML = d.state.servos.map(function(s) {
+      var role = roleMap[s.id] || '—';
+      if (!s.available) {
+        return '<tr><td>' + s.id + '</td><td style="color:#555;font-size:11px;">' + role +
+               '</td><td colspan="5" style="color:#555;">UNAVAIL</td></tr>';
+      }
+      var posDeg = (s.pos * 300 / 1023).toFixed(1);
+      var rawSpd = s.speed;
+      var rpm;
+      if (rawSpd === 0 || rawSpd === 1024) { rpm = '0'; }
+      else if (rawSpd < 1024)              { rpm = '+' + (rawSpd * 0.111).toFixed(1); }
+      else                                 { rpm = '−' + ((rawSpd - 1024) * 0.111).toFixed(1); }
+      var tCol = tempColor(s.temp_c);
+      return '<tr>' +
+        '<td>' + s.id + '</td>' +
+        '<td style="color:#8af;font-size:11px;">' + role + '</td>' +
+        '<td>' + s.mode + '</td>' +
+        '<td>' + posDeg + '</td>' +
+        '<td>' + rpm + '</td>' +
+        '<td style="color:' + tCol + ';">' + s.temp_c + '</td>' +
+        '<td>' + s.volt_v.toFixed(1) + '</td>' +
+        '</tr>';
+    }).join('');
   });
 }
 

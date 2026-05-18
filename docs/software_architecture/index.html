@@ -293,15 +293,19 @@
       <summary>
         <span class="feat-num">FEATURE 5</span>
         <span class="feat-name">Robot Dashboard UI</span>
-        <span class="feat-pill pill-partial">Partial</span>
+        <span class="feat-pill pill-done">Done</span>
         <span class="feat-chevron">▶</span>
       </summary>
       <div class="feat-body">
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Single-page HTML dashboard (Vanilla JS, stdlib HTTP — no build step)</span><span class="todo-mod">tools/dashboard/</span></div>
-        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Live MJPEG camera feed</span><span class="todo-mod">tools/dashboard/</span></div>
-        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">E-stop button</span><span class="todo-mod">tools/dashboard/</span></div>
-        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Live config display — reads <code>ackermann_config.json</code>, refreshes every 5 s</span><span class="todo-mod">tools/dashboard/</span></div>
-        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Servo status panel — per-servo voltages, temperatures, positions, modes</span><span class="todo-mod">tools/dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Live MJPEG camera feed — static frame viewport, camera scales within, WASD always visible</span><span class="todo-mod">tools/dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">E-stop button — integrated in WASD card; also triggered by Space / Escape</span><span class="todo-mod">tools/dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Live config display — reads <code>ackermann_config.json</code>, refreshes every 5 s; max steer &amp; max output shown in WASD card</span><span class="todo-mod">tools/dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">10 Hz state polling — servo positions, speeds, voltages, temperatures</span><span class="todo-mod">tools/dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Bird's-eye SVG — live Ackermann arcs, per-wheel steer angle, drive speed arrows, rotation-centre dot</span><span class="todo-mod">tools/dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Per-wheel temperature overlay — S/D °C labels on bird's-eye wheel icons, heatmap colour coding (blue→green→yellow→orange→red)</span><span class="todo-mod">tools/dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Battery indicator — colour-coded fill bar, 3 s sliding-window voltage average, display refresh every 3 s</span><span class="todo-mod">tools/dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Steer &amp; output gauge bars — visual feedback of current drive command</span><span class="todo-mod">tools/dashboard/</span></div>
       </div>
     </details>
 
