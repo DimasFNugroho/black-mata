@@ -23,15 +23,16 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 - [x] Serial driver — binary frame encode/decode, background recv thread, CRC validation (`serial_driver.py`)
 - [x] Ackermann kinematics — 4WS counter-phase, per-wheel speed differential, output fraction API (`ackermann.py`)
 - [x] E-stop handler — WebSocket silence detection (500 ms), zero-speed frame dispatch (`estop.py`)
-- [x] Camera generator — V4L2 capture, MJPEG encode, background thread (`camera.py`)
+- [x] Camera — V4L2 capture, MJPEG encode, background thread, auto-reconnect on hardware disconnect (`camera.py`)
 - [x] Robot Agent server — WebSocket drive commands, MJPEG `/stream`, JSON `/status` (`main.py`)
-- [ ] **Fix `main.py` stale API** — `ack.compute(speed_mps=...)` kwarg renamed to `speed_frac`; WebSocket message doc says `speed: float m/s` but should be output fraction −1.0…+1.0
+- [ ] **Fix `main.py` stale API** — `ack.compute(speed_mps=...)` kwarg renamed to `speed_frac`; WebSocket message doc says `speed: float m/s` but should be output fraction −1.0…+1.0; `CAMERA_DEVICE` hardcoded to `1` instead of `/dev/robot_camera`
 
 ### Operator Dashboard (`tools/dashboard/`)
 
 - [x] Single-page HTML dashboard (Vanilla JS, no build step)
 - [x] Keyboard WASD drive control
-- [x] Live MJPEG camera feed
+- [x] Live MJPEG camera feed — proxied from `camera_test.py`
+- [x] Camera auto-reconnect — dashboard detects hardware and software disconnections without page refresh
 - [x] E-stop button
 - [x] Live config display — reads `ackermann_config.json`, refreshes every 5 s
 - [ ] Gamepad API polling → drive commands
@@ -51,6 +52,33 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 - [x] Steer centre calibration — torque-off, physically align, record neutral offsets
 - [x] Trapezoidal steering profile — smooth motion on large angle commands, drag vs. click detection
 - [x] Camera test server — standalone MJPEG stream over stdlib HTTP, no serial port needed (`tools/camera/camera_test.py`)
+- [x] Camera udev setup — installs stable `/dev/robot_camera` symlink tied to USB vendor/product ID (`tools/camera/setup_udev.py`)
+
+---
+
+## Running the Operator Dashboard
+
+The dashboard requires two processes running on the Jetson:
+
+**First time only — set up stable camera device path:**
+```bash
+sudo python3 tools/camera/setup_udev.py
+```
+This installs a udev rule so the camera always appears at `/dev/robot_camera` regardless of USB enumeration order.
+
+**Terminal 1 — camera stream:**
+```bash
+python3 tools/camera/camera_test.py
+```
+
+**Terminal 2 — dashboard:**
+```bash
+python3 tools/dashboard/server.py
+```
+
+Then open `http://<jetson-ip>:8082` in a browser.
+
+The dashboard polls the camera's `/health` endpoint every 2 seconds and auto-reconnects the stream on both hardware and software disconnections without requiring a page refresh.
 
 ---
 
@@ -154,7 +182,8 @@ tools/
   dashboard/
     server.py                  Operator dashboard — WASD drive, camera feed, e-stop, live config
   camera/
-    camera_test.py             Standalone MJPEG test stream (no serial port needed)
+    camera_test.py             Standalone MJPEG stream server with /health endpoint
+    setup_udev.py              One-time udev rule installer — stable /dev/robot_camera symlink
   dynamixel/                   Jetson-side Python tools (scan, nudge, monitor servos)
   remote_update/
     flash.conf                 Default arguments for the flash script
