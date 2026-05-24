@@ -15,52 +15,11 @@
   8. Deployment Diagram
   9. Architecture Decision Records (ADR-001 … ADR-011)
 
+  Feature status and TODO list: see README.md
+
   NOTE: The HTML diagram files in this directory reflect the original design
   (FastAPI / WebSocket / Tailscale) and are now outdated. This text file is
   the authoritative reference for the current architecture.
-
-================================================================================
-  V1 FEATURE STATUS
-================================================================================
-
-  Firmware — OpenCM9.04
-  ──────────────────────
-  [x] Binary CMD frame receiver (105 bytes, CRC-16 CCITT)
-  [x] Binary STATE frame transmitter (202 bytes, CRC-16 CCITT)
-  [x] Dual-mode serial (text commands + binary frames on same port)
-  [x] Dynamixel JOINT / WHEEL mode switching per servo
-  [x] Firmware watchdog — zeros all drive speeds if no frame received >500 ms
-  [x] Round-robin temperature & voltage polling (one servo per frame)
-  [x] Correct AX-12A Present Speed readback via direct address 38
-
-  Robot Agent — Jetson (software/robot/)
-  ──────────────────────────────────────
-  [x] Serial driver — binary frame encode/decode, background recv thread, CRC
-  [x] Ackermann kinematics — 4WS counter-phase, per-wheel differential, output fraction API
-  [x] E-stop handler — keepalive loop (500 ms silence), zero-speed frame dispatch
-  [x] Camera — V4L2 capture, MJPEG encode, background thread, auto-reconnect
-
-  Operator Dashboard (tools/dashboard/)
-  ──────────────────────────────────────
-  [x] Single-page HTML dashboard (Vanilla JS, no build step)
-  [x] Keyboard WASD drive control
-  [x] Live MJPEG camera feed — proxied from camera_test.py
-  [x] Camera auto-reconnect — blanks on disconnect, recovers without page refresh
-  [x] E-stop button
-  [x] Live config display — reads ackermann_config.json, refreshes every 5 s
-  [x] Bird's-eye view — live per-wheel steer angles and drive direction arrows
-  [x] Per-wheel temperature heatmap — colour-coded overlaid on bird's-eye view
-  [x] Battery gauge — live voltage with colour-coded fill bar
-  [ ] Gamepad API polling → drive commands
-  [ ] Servo status panel (per-servo voltages, temperatures, positions, modes)
-
-  Infrastructure
-  ──────────────
-  [x] Remote firmware flash toolchain — compile x86, flash over SSH
-  [x] Serial monitor — stream OpenCM debug output from Jetson to x86
-  [x] ngrok tunnel — share dashboard publicly for demos
-  [x] udev symlink — stable /dev/robot_camera tied to USB vendor/product ID
-  [ ] Systemd service units — auto-start Dashboard Server + Camera Server on boot
 
 ================================================================================
   1. C4 LEVEL 1 — SYSTEM CONTEXT
