@@ -62,7 +62,10 @@ fi
 # ── Done ───────────────────────────────────────────────────────────────────────
 
 echo ""
-echo "Setup complete. To expose the dashboard:"
+echo "Setup complete. To expose the dashboard for a demo:"
 echo "  ngrok http 8082"
 echo ""
-echo "ngrok will print a public URL — share that with anyone."
+echo "ngrok will print a temporary public HTTPS URL."
+echo "Share it with anyone for the duration of the demo."
+echo "The URL changes every time ngrok restarts (free tier)."
+echo "Stop the tunnel with Ctrl+C when the demo is done."

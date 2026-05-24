@@ -54,24 +54,26 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 
 ---
 
-## Sharing the Dashboard Publicly (ngrok)
+## Sharing the Dashboard for a Demo (ngrok)
 
-To give someone outside your network a URL to view the dashboard:
+ngrok creates a temporary public HTTPS URL that forwards to the dashboard.
+The URL is valid for the duration of one session — it changes every time ngrok restarts.
+This is intentional: the robot is only accessible while you are actively running a demo.
 
 **First time only — install ngrok on the Jetson:**
 ```bash
 bash tools/setup/ngrok_setup.sh
 ```
-You will need a free account at [dashboard.ngrok.com](https://dashboard.ngrok.com/signup).
+Requires a free account at [dashboard.ngrok.com](https://dashboard.ngrok.com/signup).
 
-**Start the tunnel (after camera and dashboard are running):**
+**Each demo session (after camera and dashboard are running):**
 ```bash
 ngrok http 8082
 ```
 
-ngrok prints a public HTTPS URL — share that with anyone. The URL changes each time ngrok restarts (free tier). Stop the tunnel with `Ctrl+C`.
+ngrok prints the session URL — copy and share it with your audience. Stop with `Ctrl+C` when the demo ends.
 
-> **Note:** Anyone with the URL can access the drive controls. Only share it when you intend to demo the robot.
+> **Warning:** Anyone with the URL can operate the drive controls. Only share it with people you trust, and stop the tunnel immediately after the demo.
 
 ---
 
