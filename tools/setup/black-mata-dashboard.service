@@ -1,0 +1,15 @@
+[Unit]
+Description=Black-Mata Dashboard Server
+After=black-mata-camera.service
+Wants=black-mata-camera.service
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__REPO_DIR__
+ExecStart=/usr/bin/python3 tools/dashboard/server.py --ui-port 8082 --camera-url http://localhost:8083/stream
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
