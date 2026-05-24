@@ -6,8 +6,9 @@ Tests the camera in isolation — no serial port or robot stack required.
 
 Usage:
     python3 tools/camera/camera_test.py
-    python3 tools/camera/camera_test.py --device 1
-    python3 tools/camera/camera_test.py --device 1 --port 8083 --width 1280 --height 720
+    python3 tools/camera/camera_test.py --device /dev/robot_camera
+    python3 tools/camera/camera_test.py --device /dev/video0
+    python3 tools/camera/camera_test.py --device 0 --port 8083 --width 1280 --height 720
 
 Then open in any browser:
     http://<host-ip>:<port>/stream
@@ -35,7 +36,14 @@ class Handler(BaseHTTPRequestHandler):
         pass  # suppress per-request access log
 
     def do_GET(self):
-        if self.path == '/stream':
+        if self.path == '/health':
+            if _camera.is_healthy():
+                self.send_response(200)
+            else:
+                self.send_response(503)
+            self.end_headers()
+
+        elif self.path == '/stream':
             self.send_response(200)
             self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=frame')
             self.send_header('Cache-Control', 'no-cache')
@@ -73,9 +81,17 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
 
 
+def _device_arg(value: str):
+    """Accept either an integer index ('0', '1') or a device path ('/dev/video0')."""
+    try:
+        return int(value)
+    except ValueError:
+        return value
+
+
 def main():
     parser = argparse.ArgumentParser(description='Standalone camera MJPEG test server')
-    parser.add_argument('--device',  '-d', type=int,   default=1,    help='V4L2 device index (default: 1, matches /dev/video1)')
+    parser.add_argument('--device',  '-d', type=_device_arg, default='/dev/robot_camera', help='Device path or index (default: /dev/robot_camera)')
     parser.add_argument('--port',    '-p', type=int,   default=8083, help='HTTP port (default: 8083)')
     parser.add_argument('--width',   '-W', type=int,   default=320,  help='Capture width (default: 320)')
     parser.add_argument('--height',  '-H', type=int,   default=240,  help='Capture height (default: 240)')
@@ -89,7 +105,7 @@ def main():
         _camera.start()
     except Exception as e:
         print(f'ERROR: Could not open camera device {args.device}: {e}')
-        print('Try --device 1 or check: ls /dev/video*')
+        print('Try --device /dev/video0 or check: ls /dev/video*')
         sys.exit(1)
 
     server = ThreadingHTTPServer(('0.0.0.0', args.port), Handler)

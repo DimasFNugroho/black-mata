@@ -97,6 +97,7 @@ class Handler(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(length)) if length else {}
 
     def do_GET(self):
+        self.path = self.path.split('?')[0]
         if self.path == '/':
             body = _build_html(_camera_url).encode()
             self.send_response(200)
@@ -104,6 +105,17 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header('Content-Length', len(body))
             self.end_headers()
             self.wfile.write(body)
+
+        elif self.path == '/camera/ping':
+            try:
+                health_url = _camera_url.replace('/stream', '/health')
+                req = urllib.request.urlopen(health_url, timeout=2)
+                req.close()
+                self.send_response(200)
+                self.end_headers()
+            except Exception:
+                self.send_response(503)
+                self.end_headers()
 
         elif self.path == '/camera':
             try:
@@ -385,8 +397,7 @@ tr:nth-child(even) td { background: #181818; }
       <h3>Camera</h3>
       <div id="cam-wrap" style="flex:1;min-height:0;overflow:hidden;">
         <img id="cam-img" src="/camera" alt=""
-             style="width:100%;height:100%;object-fit:contain;display:block;"
-             onerror="this.style.display='none';document.getElementById('cam-placeholder').style.display='block'">
+             style="width:100%;height:100%;object-fit:contain;display:block;">
         <div id="cam-placeholder" style="display:none;">
           No camera stream<br>
           <span style="color:#222;font-size:10px;">__CAMERA_URL__</span>
@@ -736,6 +747,49 @@ function updateGauges(steer, speed) {
   document.getElementById('val-speed').textContent = (speed>=0?'+':'')+Math.round(speed*100)+'%';
 }
 
+function setupCameraReconnect() {
+  var wrap        = document.getElementById('cam-wrap');
+  var placeholder = document.getElementById('cam-placeholder');
+  var _healthy    = true;
+  var _imgStyle   = document.getElementById('cam-img').style.cssText;
+
+  function setHealthy() {
+    if (_healthy) return;
+    _healthy = true;
+    // Replace the img element entirely — guarantees a fresh browser request
+    var old = document.getElementById('cam-img');
+    var img = document.createElement('img');
+    img.id            = 'cam-img';
+    img.style.cssText = _imgStyle;
+    img.src           = '/camera?' + Date.now();
+    wrap.insertBefore(img, old);
+    old.src = '';
+    wrap.removeChild(old);
+    placeholder.style.display = 'none';
+    img.style.display         = 'block';
+  }
+
+  function setUnhealthy() {
+    if (!_healthy) return;
+    _healthy = false;
+    var img           = document.getElementById('cam-img');
+    img.src           = '';
+    img.style.display = 'none';
+    placeholder.style.display = 'block';
+  }
+
+  setInterval(function() {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/camera/ping');
+    xhr.timeout = 1500;
+    xhr.onload    = function() { if (xhr.status === 200) setHealthy(); else setUnhealthy(); };
+    xhr.onerror   = function() { setUnhealthy(); };
+    xhr.ontimeout = function() { setUnhealthy(); };
+    xhr.send();
+  }, 2000);
+}
+
+setupCameraReconnect();
 </script>
 </body>
 </html>"""

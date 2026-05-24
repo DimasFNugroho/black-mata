@@ -21,9 +21,10 @@ Usage:
     cam.stop()
 """
 
+import os
 import threading
 import time
-from typing import Optional
+from typing import Optional, Union
 
 try:
     import cv2
@@ -39,7 +40,7 @@ class Camera:
 
     def __init__(
         self,
-        device:  int = 1,
+        device:  Union[int, str] = '/dev/robot_camera',
         width:   int = 640,
         height:  int = 480,
         fps:     int = 30,
@@ -57,9 +58,10 @@ class Camera:
         self._frame:  Optional[bytes] = None
         self._lock    = threading.Lock()
 
-        self._cap:    Optional[cv2.VideoCapture] = None
-        self._running = False
-        self._thread: Optional[threading.Thread] = None
+        self._cap:          Optional[cv2.VideoCapture] = None
+        self._running       = False
+        self._reconnecting  = False
+        self._thread:       Optional[threading.Thread] = None
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -79,7 +81,7 @@ class Camera:
             target=self._loop, daemon=True, name='camera-capture'
         )
         self._thread.start()
-        print(f'[Camera] Started: device={self._device} {self._width}×{self._height} @ {self._fps} fps')
+        print(f'[Camera] Started: {self._device_label()} {self._width}x{self._height} @ {self._fps} fps')
 
     def stop(self) -> None:
         """Stop the capture thread and release the camera."""
@@ -96,20 +98,59 @@ class Camera:
         with self._lock:
             return self._frame
 
+    def is_healthy(self) -> bool:
+        """Return True if the camera is actively capturing frames."""
+        return self._running and not self._reconnecting
+
     # ── Internal ──────────────────────────────────────────────────────────────
+
+    def _device_label(self) -> str:
+        """Return 'device (-> /dev/videoX)' if device is a symlink, else just 'device'."""
+        if isinstance(self._device, str):
+            real = os.path.realpath(self._device)
+            if real != self._device:
+                return f'{self._device} (-> {real})'
+        return str(self._device)
+
+    def _reconnect(self) -> None:
+        """Release the current capture and reopen the same device path."""
+        self._reconnecting = True
+        with self._lock:
+            self._frame = None
+        print(f'[Camera] Disconnected from {self._device_label()}. Waiting for reconnect...')
+        self._cap.release()
+        while self._running:
+            time.sleep(2.0)
+            self._cap = cv2.VideoCapture(self._device)
+            self._cap.set(cv2.CAP_PROP_FRAME_WIDTH,  self._width)
+            self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._height)
+            self._cap.set(cv2.CAP_PROP_FPS,          self._fps)
+            if self._cap.isOpened():
+                self._reconnecting = False
+                print(f'[Camera] Reconnected: {self._device_label()}')
+                return
+            print(f'[Camera] Not available yet, retrying...')
 
     def _loop(self) -> None:
         encode_params = [cv2.IMWRITE_JPEG_QUALITY, self._quality]
         interval = 1.0 / self._fps
+        fail_count = 0
 
         while self._running:
             t0 = time.monotonic()
             ret, frame = self._cap.read()
             if ret:
+                fail_count = 0
                 ok, buf = cv2.imencode('.jpg', frame, encode_params)
                 if ok:
                     with self._lock:
                         self._frame = buf.tobytes()
+            else:
+                fail_count += 1
+                if fail_count >= 10:
+                    self._reconnect()
+                    fail_count = 0
+
             sleep_for = interval - (time.monotonic() - t0)
             if sleep_for > 0:
                 time.sleep(sleep_for)
