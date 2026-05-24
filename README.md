@@ -40,7 +40,7 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 
 - [x] Remote firmware flash toolchain — compile x86, flash to OpenCM9.04 over SSH (`tools/remote_update/`)
 - [x] Serial monitor — stream OpenCM debug output from Jetson to x86 (`tools/monitor/`)
-- [ ] Tailscale VPN setup — stable robot addressing, NAT traversal (external, manual step)
+- [x] ngrok tunnel — share dashboard publicly without exposing the OS (`tools/setup/ngrok_setup.sh`)
 - [ ] Systemd service units — auto-start Robot Agent on Jetson boot
 
 ### Calibration & Commissioning Tools (not in v1 architecture, added during development)
@@ -51,6 +51,27 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 - [x] Trapezoidal steering profile — smooth motion on large angle commands, drag vs. click detection
 - [x] Camera test server — standalone MJPEG stream over stdlib HTTP, no serial port needed (`tools/camera/camera_test.py`)
 - [x] Camera udev setup — installs stable `/dev/robot_camera` symlink tied to USB vendor/product ID (`tools/camera/setup_udev.py`)
+
+---
+
+## Sharing the Dashboard Publicly (ngrok)
+
+To give someone outside your network a URL to view the dashboard:
+
+**First time only — install ngrok on the Jetson:**
+```bash
+bash tools/setup/ngrok_setup.sh
+```
+You will need a free account at [dashboard.ngrok.com](https://dashboard.ngrok.com/signup).
+
+**Start the tunnel (after camera and dashboard are running):**
+```bash
+ngrok http 8082
+```
+
+ngrok prints a public HTTPS URL — share that with anyone. The URL changes each time ngrok restarts (free tier). Stop the tunnel with `Ctrl+C`.
+
+> **Note:** Anyone with the URL can access the drive controls. Only share it when you intend to demo the robot.
 
 ---
 
@@ -182,6 +203,8 @@ tools/
   camera/
     camera_test.py             Standalone MJPEG stream server with /health endpoint
     setup_udev.py              One-time udev rule installer — stable /dev/robot_camera symlink
+  setup/
+    ngrok_setup.sh             Install ngrok and configure auth token (one-time, Jetson)
   dynamixel/                   Jetson-side Python tools (scan, nudge, monitor servos)
   remote_update/
     flash.conf                 Default arguments for the flash script
