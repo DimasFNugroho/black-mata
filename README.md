@@ -33,6 +33,9 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 - [x] Camera auto-reconnect — dashboard detects hardware and software disconnections without page refresh
 - [x] E-stop button
 - [x] Live config display — reads `ackermann_config.json`, refreshes every 5 s
+- [x] Bird's-eye view — live per-wheel steer angles and drive direction arrows
+- [x] Per-wheel temperature heatmap — colour-coded overlaid on bird's-eye view
+- [x] Battery gauge — live voltage with colour-coded fill bar
 - [ ] Gamepad API polling → drive commands
 - [ ] Servo status panel (per-servo voltages, temperatures, positions, modes)
 
