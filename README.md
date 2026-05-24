@@ -24,8 +24,6 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 - [x] Ackermann kinematics — 4WS counter-phase, per-wheel speed differential, output fraction API (`ackermann.py`)
 - [x] E-stop handler — WebSocket silence detection (500 ms), zero-speed frame dispatch (`estop.py`)
 - [x] Camera — V4L2 capture, MJPEG encode, background thread, auto-reconnect on hardware disconnect (`camera.py`)
-- [x] Robot Agent server — WebSocket drive commands, MJPEG `/stream`, JSON `/status` (`main.py`)
-- [ ] **Fix `main.py` stale API** — `ack.compute(speed_mps=...)` kwarg renamed to `speed_frac`; WebSocket message doc says `speed: float m/s` but should be output fraction −1.0…+1.0; `CAMERA_DEVICE` hardcoded to `1` instead of `/dev/robot_camera`
 
 ### Operator Dashboard (`tools/dashboard/`)
 
