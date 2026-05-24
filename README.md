@@ -44,7 +44,7 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 - [x] Remote firmware flash toolchain — compile x86, flash to OpenCM9.04 over SSH (`tools/remote_update/`)
 - [x] Serial monitor — stream OpenCM debug output from Jetson to x86 (`tools/monitor/`)
 - [x] ngrok tunnel — share dashboard publicly without exposing the OS (`tools/setup/ngrok_setup.sh`)
-- [ ] Systemd service units — auto-start Robot Agent on Jetson boot
+- [x] Systemd auto-start — enable/disable camera, dashboard, and ngrok services with one command (`tools/setup/autostart.sh`)
 
 ### Calibration & Commissioning Tools (not in v1 architecture, added during development)
 
