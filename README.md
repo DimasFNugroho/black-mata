@@ -36,7 +36,8 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 - [x] Bird's-eye view — live per-wheel steer angles and drive direction arrows
 - [x] Per-wheel temperature heatmap — colour-coded overlaid on bird's-eye view
 - [x] Battery gauge — live voltage with colour-coded fill bar
-- [ ] Gamepad → dashboard drive integration
+- [ ] Gamepad → dashboard drive integration (evdev path, Jetson-local)
+- [ ] Browser Gamepad API → remote drive via dashboard (operator-side gamepad over network)
 - [ ] Servo status panel (per-servo voltages, temperatures, positions, modes)
 
 ### Bluetooth Gamepad (`tools/gamepad/`)
@@ -46,7 +47,8 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 - [x] ESP32-C6 HCI firmware — BLE controller-only mode over UART0 at 115200 baud, built with ESP-IDF v5 (`firmware/esp32_hci/`)
 - [x] Gamepad input validator — live display of all axes (raw + normalised) and buttons; drive preview with steer, throttle, e-stop combo, arm (`gamepad_test.py`)
 - [x] Per-controller axis calibration — G3 V2 hardware calibration procedure + software range sweep; saves to JSON (`--calibrate`)
-- [ ] Gamepad → dashboard drive integration
+- [ ] Gamepad → dashboard drive integration (evdev path, Jetson-local)
+- [ ] Browser Gamepad API → remote drive via dashboard (operator-side gamepad over network)
 
 ### Infrastructure
 

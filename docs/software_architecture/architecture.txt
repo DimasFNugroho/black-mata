@@ -717,8 +717,9 @@
     - Requires Bluetooth stack on Jetson (bluetoothd, hciattach).
     - ESP32-C6 is BLE-only; controller must support BLE (G3 V2 does).
     - ESP-IDF v5 required to build HCI firmware (not arduino-cli compatible).
-    - Browser Gamepad API path still needed for dashboard-only operators
-      (no Jetson BT) — deferred to v2.
+    - Browser Gamepad API path is still planned: operator plugs a gamepad
+      into their own machine and controls the robot remotely over any
+      network without needing BT on the Jetson. Deferred to next sprint.
 
 ================================================================================
   END OF DOCUMENT
