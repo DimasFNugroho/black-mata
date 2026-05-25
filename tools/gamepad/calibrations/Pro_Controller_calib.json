@@ -1,0 +1,41 @@
+{
+  "device": "Pro Controller",
+  "axes": {
+    "0": {
+      "name": "ABS_X",
+      "lo": -32767,
+      "hi": 32767,
+      "center": 96
+    },
+    "1": {
+      "name": "ABS_Y",
+      "lo": -32767,
+      "hi": 32767,
+      "center": 0
+    },
+    "3": {
+      "name": "ABS_RX",
+      "lo": -32751,
+      "hi": 32767,
+      "center": -111
+    },
+    "4": {
+      "name": "ABS_RY",
+      "lo": -32767,
+      "hi": 32670,
+      "center": -95
+    },
+    "16": {
+      "name": "ABS_HAT0X",
+      "lo": -1,
+      "hi": 1,
+      "center": 0
+    },
+    "17": {
+      "name": "ABS_HAT0Y",
+      "lo": -1,
+      "hi": 1,
+      "center": 0
+    }
+  }
+}
