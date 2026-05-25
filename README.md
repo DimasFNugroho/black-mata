@@ -36,8 +36,17 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 - [x] Bird's-eye view — live per-wheel steer angles and drive direction arrows
 - [x] Per-wheel temperature heatmap — colour-coded overlaid on bird's-eye view
 - [x] Battery gauge — live voltage with colour-coded fill bar
-- [ ] Gamepad API polling → drive commands
+- [ ] Gamepad → dashboard drive integration
 - [ ] Servo status panel (per-servo voltages, temperatures, positions, modes)
+
+### Bluetooth Gamepad (`tools/gamepad/`)
+
+- [x] BT pairing automation — interactive scan/pair/trust/connect via persistent bluetoothctl session (`setup_gamepad.sh`)
+- [x] ESP32-C6 as BLE HCI adapter — registers as hci0 via hciattach; systemd service auto-starts at boot (`setup_esp32_hci.sh`)
+- [x] ESP32-C6 HCI firmware — BLE controller-only mode over UART0 at 115200 baud, built with ESP-IDF v5 (`firmware/esp32_hci/`)
+- [x] Gamepad input validator — live display of all axes (raw + normalised) and buttons; drive preview with steer, throttle, e-stop combo, arm (`gamepad_test.py`)
+- [x] Per-controller axis calibration — G3 V2 hardware calibration procedure + software range sweep; saves to JSON (`--calibrate`)
+- [ ] Gamepad → dashboard drive integration
 
 ### Infrastructure
 
@@ -54,6 +63,53 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 - [x] Trapezoidal steering profile — smooth motion on large angle commands, drag vs. click detection
 - [x] Camera test server — standalone MJPEG stream over stdlib HTTP, no serial port needed (`tools/camera/camera_test.py`)
 - [x] Camera udev setup — installs stable `/dev/robot_camera` symlink tied to USB vendor/product ID (`tools/camera/setup_udev.py`)
+
+---
+
+## Setting up Bluetooth Gamepad (G3 V2 + ESP32-C6)
+
+The Machenike G3 V2 connects to the Jetson over Bluetooth. An ESP32-C6 is used as a temporary BLE adapter until a USB dongle is available.
+
+**Step 1 — Flash ESP32-C6 (x86, once)**
+```bash
+. $HOME/esp/esp-idf/export.sh      # source ESP-IDF v5
+bash tools/gamepad/flash_esp32.sh  # build & flash via CH343 port
+```
+
+**Step 2 — Register ESP32 as Bluetooth adapter (Jetson, once)**
+Plug the ESP32-C6 CH343 port into the Jetson, then:
+```bash
+bash tools/gamepad/setup_esp32_hci.sh
+```
+This attaches the ESP32 as `hci0` and installs a systemd service so it registers automatically at every boot.
+
+**Step 3 — Hardware-calibrate the G3 V2 (once)**
+
+1. Press **Home + Select + B** simultaneously — LEDs blink blue.
+2. Move all sticks and triggers to their full extents.
+3. Press **Start** to confirm.
+
+**Step 4 — Pair the controller (Jetson)**
+```bash
+bash tools/gamepad/setup_gamepad.sh
+```
+
+**Step 5 — Software calibration (Jetson)**
+```bash
+python3 tools/gamepad/gamepad_test.py --calibrate
+```
+Saves axis ranges to `tools/gamepad/calibrations/`.
+
+**Step 6 — Validate all inputs**
+```bash
+python3 tools/gamepad/gamepad_test.py
+```
+
+Control mapping:
+- Left stick X → steer, Left stick Y → throttle (+fwd / −rev)
+- L1 held → arm (dead-man)
+- L1 + D-pad diagonal → e-stop (latched)
+- Both stick clicks (LS + RS) → re-arm
 
 ---
 
@@ -199,6 +255,10 @@ firmware/
   <sketch_name>/
     <sketch_name>.ino          Arduino sketch
     build/                     Compiled artifacts — gitignored
+  esp32_hci/                   ESP-IDF project — ESP32-C6 BLE HCI controller firmware
+    main/main.c                BLE controller-only mode, UART0 115200 baud
+    sdkconfig.defaults         ESP32-C6 BT/HCI config (BT_CTRL_* options)
+    CMakeLists.txt
 tools/
   ackermann_ui/
     server.py                  Browser config tool — parameter tuning, steer calibration, servo state
@@ -208,6 +268,12 @@ tools/
   camera/
     camera_test.py             Standalone MJPEG stream server with /health endpoint
     setup_udev.py              One-time udev rule installer — stable /dev/robot_camera symlink
+  gamepad/
+    gamepad_test.py            Live input validator — all axes/buttons, drive preview, calibration
+    setup_gamepad.sh           Interactive BT pairing — scan, pair, trust, connect
+    setup_esp32_hci.sh         Register ESP32-C6 as hci0; install systemd service (Jetson)
+    flash_esp32.sh             Build & flash ESP32-C6 HCI firmware via ESP-IDF (x86)
+    calibrations/              Per-controller axis calibration JSON files
   setup/
     ngrok_setup.sh             Install ngrok and configure auth token (one-time, Jetson)
   dynamixel/                   Jetson-side Python tools (scan, nudge, monitor servos)

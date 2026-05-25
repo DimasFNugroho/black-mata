@@ -367,6 +367,28 @@
   ║ └──────────────────────────────────────────┘ ║
   ║                                              ║
   ║ ┌──────────────────────────────────────────┐ ║
+  ║ │ <<process>>  Gamepad Input               │ ║
+  ║ │ tools/gamepad/gamepad_test.py            │ ║
+  ║ │ Reads BT gamepad via Linux evdev         │ ║
+  ║ │ /dev/input/eventX  (python-evdev)        │ ║
+  ║ └────────────┬─────────────────────────────┘ ║
+  ║              │ evdev  /dev/input/eventX       ║
+  ║              │ (kernel HID driver)            ║
+  ║ ┌────────────▼─────────────────────────────┐ ║
+  ║ │ <<device>>  ESP32-C6 BLE HCI adapter     │ ║
+  ║ │ firmware/esp32_hci/                      │ ║
+  ║ │ BLE controller-only (UART0 115200 baud)  │ ║
+  ║ │ CH343 USB-serial → /dev/ttyUSB0          │ ║
+  ║ │ hciattach → hci0  (systemd: hci-esp32)  │ ║
+  ║ └────────────┬─────────────────────────────┘ ║
+  ║              │ Bluetooth 5.0 BLE              ║
+  ║ ┌────────────▼─────────────────────────────┐ ║
+  ║ │ <<device>>  Machenike G3 V2 Gamepad      │ ║
+  ║ │ BLE HID; paired via bluetoothctl         │ ║
+  ║ │ Per-controller calib: calibrations/*.json│ ║
+  ║ └──────────────────────────────────────────┘ ║
+  ║                                              ║
+  ║ ┌──────────────────────────────────────────┐ ║
   ║ │ <<optional process>>  ngrok              │ ║
   ║ │ Forwards public HTTPS → :8082            │ ║
   ║ │ Used for demos only. URL changes each    │ ║
@@ -657,6 +679,46 @@
     + Dashboard correctly reflects camera availability state.
     + Browser cache issues avoided by replacing the DOM element on reconnect.
     - 2 s polling interval means up to 2 s lag before dashboard reacts.
+
+  ──────────────────────────────────────────────────────────────────────────
+  ADR-012  Use Linux evdev + ESP32-C6 HCI adapter for gamepad input
+  ──────────────────────────────────────────────────────────────────────────
+  Status  : Accepted
+  Date    : 2026-05-26
+
+  Context
+    The robot needs gamepad (Machenike G3 V2) input for manual drive control.
+    Two architectural approaches were considered:
+
+    Option A — Browser Gamepad API (original plan):
+      Browser reads gamepad via navigator.getGamepads(), sends drive POSTs
+      to Dashboard Server. No Jetson-side code needed.
+
+    Option B — Linux evdev on Jetson (adopted):
+      Gamepad pairs to Jetson over Bluetooth. Jetson reads input via
+      python-evdev. A future gamepad_drive.py process sends frames directly
+      to serial_driver.py, bypassing the browser entirely.
+
+    The Jetson has no built-in Bluetooth. A USB BT dongle (broken) was the
+    original plan. Replaced temporarily with an ESP32-C6 acting as a BLE
+    HCI UART adapter (hciattach registers it as hci0).
+
+  Decision
+    Use Linux evdev on the Jetson. ESP32-C6 provides BLE connectivity until
+    a USB BT dongle is sourced. Gamepad input is decoupled from the browser —
+    the robot can be driven with no browser session open.
+
+  Consequences
+    + Gamepad input path is independent of browser and network.
+    + Identical /dev/input/eventX interface regardless of BT hardware
+      (dongle, ESP32, or future permanent adapter — nothing else changes).
+    + Lower latency than browser POST loop for high-frequency gamepad input.
+    + Axis calibration (hardware + software) fully corrects asymmetric ranges.
+    - Requires Bluetooth stack on Jetson (bluetoothd, hciattach).
+    - ESP32-C6 is BLE-only; controller must support BLE (G3 V2 does).
+    - ESP-IDF v5 required to build HCI firmware (not arduino-cli compatible).
+    - Browser Gamepad API path still needed for dashboard-only operators
+      (no Jetson BT) — deferred to v2.
 
 ================================================================================
   END OF DOCUMENT
