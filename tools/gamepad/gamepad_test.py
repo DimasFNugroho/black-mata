@@ -318,7 +318,14 @@ class GamepadState:
         if info is None:
             return 0, 1, 0
         lo, hi = info.min, info.max
-        center = info.value if info.min < 0 else lo
+        if info.min < 0:
+            center = info.value
+        elif code in (MAP['steer_axis'], MAP['throttle_axis']):
+            # Unsigned stick axes (min=0) need a midpoint center so
+            # normalize_stick can be applied correctly without calibration.
+            center = (lo + hi) // 2
+        else:
+            center = lo
         return lo, hi, center
 
     def _estop_combo_active(self):
@@ -345,12 +352,16 @@ class GamepadState:
 
     def axis_norm(self, code):
         lo, hi, center = self._cal(code)
-        info = self.abs_info.get(code)
-        raw  = self.axes.get(code, center)
-        if info is not None and info.min < 0:
-            return normalize_stick(raw, lo, hi, center)
+        raw = self.axes.get(code, center)
+        if center > lo:
+            val = normalize_stick(raw, lo, hi, center)
         else:
-            return normalize_trigger(raw, lo, hi)
+            val = normalize_trigger(raw, lo, hi)
+        # ABS_Y decreases when pushed forward, so negate to make
+        # forward = positive and backward = negative.
+        if code == MAP['throttle_axis']:
+            val = -val
+        return val
 
     def steer_norm(self):    return self.axis_norm(MAP['steer_axis'])
     def throttle_norm(self): return self.axis_norm(MAP['throttle_axis'])
@@ -422,13 +433,12 @@ def _render(stdscr, dev, state, max_steer_deg, has_calib):
         if   code == MAP['steer_axis']:    role = '(steer)'
         elif code == MAP['throttle_axis']: role = '(throttle)'
 
-        if info.min < 0:
-            val = normalize_stick(raw, lo, hi, center)
+        val = state.axis_norm(code)
+        if center > lo:
             bar = _bipolar_bar(val, 10)
             _safe_addstr(stdscr, y, 0,
                 '  {:<12s}{:<9s} {:6d}  {:+.2f}  {}'.format(name, role, raw, val, bar))
         else:
-            val = normalize_trigger(raw, lo, hi)
             bar = _unipolar_bar(val, 20)
             _safe_addstr(stdscr, y, 0,
                 '  {:<12s}{:<9s} {:6d}   {:.2f}  {}'.format(name, role, raw, val, bar))
