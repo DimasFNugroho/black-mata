@@ -24,12 +24,17 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'gamepad'))
 
 from software.robot.serial_driver import SerialDriver
 from software.robot.ackermann import Ackermann, AckermannConfig
+from gamepad_core import find_gamepad, load_calibration, GamepadState
 
-_driver       = None
-_last_drive_t = 0.0
+import select
+
+_driver         = None
+_gamepad_reader = None
+_last_drive_t   = 0.0
 
 DEFAULTS = {
     'wheelbase':             0.20,
@@ -80,6 +85,91 @@ _STATIC_DIR = Path(__file__).resolve().parent / 'static'
 
 def _build_html(camera_url):
     return (_STATIC_DIR / 'index.html').read_text().replace('__CAMERA_URL__', camera_url)
+
+
+# ── Gamepad reader ────────────────────────────────────────────────────────────
+
+class GamepadReader:
+    """Background thread that owns an evdev gamepad and maintains a
+    thread-safe GamepadState. Reconnects automatically when the controller
+    disappears and reappears."""
+
+    RECONNECT_SECS = 2.0   # poll for a new device this often when disconnected
+    POLL_TIMEOUT_S = 0.1   # select() timeout while reading
+
+    def __init__(self):
+        self._lock    = threading.Lock()
+        self._dev     = None     # evdev.InputDevice or None
+        self._state   = None     # GamepadState or None
+        self._running = False
+        self._thread  = None
+
+    def start(self):
+        self._running = True
+        self._thread = threading.Thread(
+            target=self._loop, daemon=True, name='gamepad-reader')
+        self._thread.start()
+
+    def stop(self):
+        self._running = False
+        with self._lock:
+            if self._dev is not None:
+                try: self._dev.close()
+                except Exception: pass
+                self._dev = None
+                self._state = None
+
+    def _loop(self):
+        while self._running:
+            if self._dev is None:
+                try:
+                    dev = find_gamepad()
+                except Exception as e:
+                    print(f'[Gamepad] find_gamepad error: {e}')
+                    dev = None
+                if dev is None:
+                    time.sleep(self.RECONNECT_SECS)
+                    continue
+                with self._lock:
+                    self._dev   = dev
+                    self._state = GamepadState(dev, load_calibration(dev.name))
+                print(f'[Gamepad] Connected: {dev.name} ({dev.path})')
+                continue
+
+            try:
+                r, _, _ = select.select([self._dev.fd], [], [], self.POLL_TIMEOUT_S)
+                if r:
+                    for ev in self._dev.read():
+                        with self._lock:
+                            if self._state is not None:
+                                self._state.feed(ev)
+            except OSError:
+                with self._lock:
+                    print(f'[Gamepad] Disconnected: {self._dev.path}')
+                    try: self._dev.close()
+                    except Exception: pass
+                    self._dev   = None
+                    self._state = None
+                time.sleep(1.0)
+
+    def snapshot(self):
+        """Return a JSON-friendly snapshot of the current state."""
+        with self._lock:
+            dev, s = self._dev, self._state
+            if dev is None or s is None:
+                return {'connected': False}
+            return {
+                'connected':       True,
+                'name':            dev.name,
+                'path':            dev.path,
+                'steer':           round(s.steer_norm(),    4),
+                'throttle':        round(s.throttle_norm(), 4),
+                'buttons':         {str(k): bool(v) for k, v in s.buttons.items()},
+                'estop_combo':     s._estop_combo_active(),
+                'estop_latched':   s.estop_latched,
+                'events_per_sec':  s.events_per_sec(),
+                'age_s':           round(s.age_since_last(), 3),
+            }
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -157,6 +247,12 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._send_json({'error': 'camera unavailable: ' + str(e)}, 503)
 
+        elif self.path == '/api/gamepad/state':
+            if _gamepad_reader is None:
+                self._send_json({'connected': False})
+                return
+            self._send_json(_gamepad_reader.snapshot())
+
         elif self.path == '/config':
             self._send_json(_load_config())
 
@@ -233,7 +329,7 @@ def _keepalive_loop():
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
-    global _driver, _camera_url
+    global _driver, _gamepad_reader, _camera_url
 
     parser = argparse.ArgumentParser(description='Black-Mata Drive Dashboard')
     parser.add_argument('--port',       '-p', default=None,
@@ -264,6 +360,9 @@ def main():
     else:
         print('No serial port found — running in simulation mode (no robot).')
 
+    _gamepad_reader = GamepadReader()
+    _gamepad_reader.start()
+
     print('Camera : {}'.format(_camera_url))
     print('Open   : http://localhost:{}'.format(args.ui_port))
     server = ThreadingHTTPServer(('0.0.0.0', args.ui_port), Handler)
@@ -272,6 +371,8 @@ def main():
     except KeyboardInterrupt:
         print('\nStopped.')
     finally:
+        if _gamepad_reader:
+            _gamepad_reader.stop()
         if _driver:
             _driver.send_estop()
             _driver.stop()
