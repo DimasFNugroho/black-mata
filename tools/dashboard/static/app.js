@@ -273,13 +273,10 @@ function sendDrive(steer, speed) {
   xhr.send(JSON.stringify({ steer_deg: steer, speed_mps: speed }));
 }
 
-function doEstop() {
-  if (_estopLatched) {
-    // Second press → reset. Phase F will replace this with hold-to-confirm.
-    _estopLatched = false;
-    updateEstopButton();
-    return;
-  }
+// Latching is instant (safety). Unlatching requires a 1 s hold via the
+// button or the LS+RS gamepad combo (see hold state machine below).
+function latchEstop() {
+  if (_estopLatched) return;
   _estopLatched = true;
   _driving = false;
   _keys = { w:false, a:false, s:false, d:false };
@@ -292,17 +289,76 @@ function doEstop() {
   xhr.send('{}');
 }
 
+function unlatchEstop() {
+  if (!_estopLatched) return;
+  _estopLatched = false;
+  updateEstopButton();
+}
+
+// Backwards-compat: existing call sites (spacebar, etc.) still work.
+function doEstop() { latchEstop(); }
+
 function updateEstopButton() {
-  var btn = document.querySelector('.btn-estop-top');
+  var btn = document.getElementById('btn-estop-main');
   if (!btn) return;
   if (_estopLatched) {
-    btn.textContent  = '↻ RESET E-STOP';
+    btn.textContent = '↻ HOLD TO RESET';
     btn.style.background = '#a86010';
   } else {
-    btn.innerHTML    = '&#9632; E-STOP';
+    btn.innerHTML   = '&#9632; E-STOP';
     btn.style.background = '';
   }
 }
+
+// ── Hold-to-confirm unlatch (button + LS+RS gamepad combo) ────────────────────
+// Both input paths drive the same 1 s timer. Whichever starts first wins.
+// A visual fill on the button shows hold progress for both sources.
+var _holdSource = null;   // 'button' | 'gamepad' | null
+var _holdStart  = 0;
+
+function startHold(source) {
+  if (!_estopLatched) return;     // only meaningful while latched
+  if (_holdSource) return;        // already counting
+  _holdSource = source;
+  _holdStart  = Date.now();
+  var btn = document.getElementById('btn-estop-main');
+  if (btn) btn.classList.add('holding');
+}
+
+function cancelHold(source) {
+  if (_holdSource !== source) return;
+  _holdSource = null;
+  var btn = document.getElementById('btn-estop-main');
+  if (btn) btn.classList.remove('holding');
+}
+
+setInterval(function() {
+  if (!_holdSource) return;
+  if (Date.now() - _holdStart >= 1000) {
+    var src = _holdSource;
+    cancelHold(src);
+    unlatchEstop();
+  }
+}, 50);
+
+// Wire the E-STOP button: press-down latches when red; press-and-hold
+// resets when amber. mouseleave / touchcancel abort the hold cleanly.
+(function attachEstopButton() {
+  var btn = document.getElementById('btn-estop-main');
+  if (!btn) return;
+  function down(e) {
+    e.preventDefault();
+    if (_estopLatched) startHold('button');
+    else               latchEstop();
+  }
+  function up() { cancelHold('button'); }
+  btn.addEventListener('mousedown',  down);
+  btn.addEventListener('mouseup',    up);
+  btn.addEventListener('mouseleave', up);
+  btn.addEventListener('touchstart', down);
+  btn.addEventListener('touchend',   up);
+  btn.addEventListener('touchcancel',up);
+})();
 
 function updateGauges(steer, speed) {
   var sp = (steer / _maxSteer) * 50;
@@ -370,7 +426,6 @@ setupCameraReconnect();
 
 var _gp = { connected: false, name: '', steer: 0, throttle: 0, deadman: false };
 var _gpEstopComboPrev = false;
-var _gpRearmComboPrev = false;
 var _shiftHeld = false;
 
 window.addEventListener('keydown', function(e) {
@@ -455,15 +510,14 @@ function pollGamepad() {
         _gp.throttle  = +d.throttle || 0;
         _gp.deadman   = !!d.deadman;
 
-        // Rising-edge detection for the two combo gestures:
-        //   L1 + D-pad diagonal → trigger e-stop
-        //   LS + RS pressed     → reset (unlatch) when already e-stopped
+        // L1 + D-pad diagonal → instant latch (rising edge).
+        // LS + RS held         → drive the hold-to-confirm timer.
         var estopRise = !!d.estop_combo && !_gpEstopComboPrev;
-        var rearmRise = !!d.rearm_combo && !_gpRearmComboPrev;
         _gpEstopComboPrev = !!d.estop_combo;
-        _gpRearmComboPrev = !!d.rearm_combo;
-        if (estopRise && !_estopLatched) doEstop();      // latch
-        if (rearmRise &&  _estopLatched) doEstop();      // unlatch
+        if (estopRise) latchEstop();
+
+        if (d.rearm_combo) startHold('gamepad');
+        else               cancelHold('gamepad');
       } catch (e) { _gp.connected = false; }
     } else {
       _gp.connected = false;

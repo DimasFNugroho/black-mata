@@ -33,8 +33,23 @@ h1 { color: #7cf; font-size: 14px; letter-spacing: 2px; }
   background: #7a1515; color: #fff;
   font-family: monospace; font-size: 12px; font-weight: bold;
   cursor: pointer;
+  position: relative; overflow: hidden;
 }
+.btn-estop-top > span { position: relative; z-index: 1; }
 .btn-estop-top:hover { background: #c22; }
+.btn-estop-top::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 0;
+  background: rgba(255, 255, 255, 0.30);
+  transition: width 0s;          /* instant snap-back on release */
+  z-index: 0;
+}
+.btn-estop-top.holding::before {
+  width: 100%;
+  transition: width 1s linear;   /* 1 s fill on hold */
+}
 
 #input-pill {
   font-family: monospace; font-size: 11px;
