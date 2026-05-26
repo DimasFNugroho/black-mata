@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drive Dashboard - Black-Mata</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- top bar -->
+<div id="topbar">
+  <h1>DRIVE DASHBOARD</h1>
+  <span id="conn-badge">connecting...</span>
+  <span id="topstatus">Click page, then use WASD to drive.</span>
+</div>
+
+<div id="layout">
+
+  <!-- ── Left: bird's-eye + WASD controls ─────────────────────────────────── -->
+  <div id="left-col">
+
+    <!-- Bird's-eye -->
+    <div class="card" style="min-height:0;overflow:hidden;flex-shrink:0;">
+      <h3>Bird's-eye</h3>
+      <svg id="robot-svg" width="406" height="332" viewBox="-183 -150 366 300" overflow="hidden">
+        <line x1="-183" y1="0" x2="183" y2="0" stroke="#1a1a1a" stroke-width="1"/>
+        <line x1="0" y1="-150" x2="0" y2="150" stroke="#1a1a1a" stroke-width="1"/>
+        <g id="ackermann-arcs"></g>
+        <!-- robot body -->
+        <rect x="-32" y="-46" width="64" height="92" rx="5" fill="#151f2e" stroke="#4af" stroke-width="1.5"/>
+        <polygon points="0,-58 -5,-46 5,-46" fill="#4af" opacity="0.7"/>
+        <text x="0" y="-74" text-anchor="middle" font-size="9" fill="#4af">FWD</text>
+        <!-- wheels: initial transforms set so layout is correct before first poll -->
+        <!-- wheels: angle label lives inside the group so it stays with the wheel label -->
+        <g id="wheel-FL" transform="translate(-55,-46)">
+          <rect id="wheel-rect-FL" x="-8" y="-14" width="16" height="28" rx="3" fill="#336"/>
+          <circle id="wheel-joint-FL" cx="0" cy="0" r="3.5" fill="#4af" stroke="#111" stroke-width="1"/>
+          <line x1="0" y1="-17" x2="0" y2="17" stroke="#6af" stroke-width="1" opacity="0.5"/>
+          <text x="0" y="24" text-anchor="middle" font-size="9" fill="#99f">FL</text>
+          <text id="angle-FL" x="0" y="34" text-anchor="middle" font-size="9" fill="#fa0">0.0°</text>
+          <!-- temp labels: local coords, x negative = left of wheel, right-edge anchored -->
+          <text id="temp-s-FL" x="-13" y="-6" text-anchor="end" font-size="8" fill="#4af">S:—</text>
+          <text id="temp-d-FL" x="-13" y="10" text-anchor="end" font-size="8" fill="#336">D:—</text>
+        </g>
+        <g id="wheel-FR" transform="translate(55,-46)">
+          <rect id="wheel-rect-FR" x="-8" y="-14" width="16" height="28" rx="3" fill="#336"/>
+          <circle id="wheel-joint-FR" cx="0" cy="0" r="3.5" fill="#4af" stroke="#111" stroke-width="1"/>
+          <line x1="0" y1="-17" x2="0" y2="17" stroke="#6af" stroke-width="1" opacity="0.5"/>
+          <text x="0" y="24" text-anchor="middle" font-size="9" fill="#99f">FR</text>
+          <text id="angle-FR" x="0" y="34" text-anchor="middle" font-size="9" fill="#fa0">0.0°</text>
+          <!-- temp labels: local coords, x positive = right of wheel, left-edge anchored -->
+          <text id="temp-s-FR" x="13" y="-6" text-anchor="start" font-size="8" fill="#4af">S:—</text>
+          <text id="temp-d-FR" x="13" y="10" text-anchor="start" font-size="8" fill="#336">D:—</text>
+        </g>
+        <g id="wheel-RL" transform="translate(-55,46)">
+          <rect id="wheel-rect-RL" x="-8" y="-14" width="16" height="28" rx="3" fill="#336"/>
+          <circle id="wheel-joint-RL" cx="0" cy="0" r="3.5" fill="#4af" stroke="#111" stroke-width="1"/>
+          <line x1="0" y1="-17" x2="0" y2="17" stroke="#6af" stroke-width="1" opacity="0.5"/>
+          <text x="0" y="-20" text-anchor="middle" font-size="9" fill="#99f">RL</text>
+          <text id="angle-RL" x="0" y="-30" text-anchor="middle" font-size="9" fill="#fa0">0.0°</text>
+          <text id="temp-s-RL" x="-13" y="-6" text-anchor="end" font-size="8" fill="#4af">S:—</text>
+          <text id="temp-d-RL" x="-13" y="10" text-anchor="end" font-size="8" fill="#336">D:—</text>
+        </g>
+        <g id="wheel-RR" transform="translate(55,46)">
+          <rect id="wheel-rect-RR" x="-8" y="-14" width="16" height="28" rx="3" fill="#336"/>
+          <circle id="wheel-joint-RR" cx="0" cy="0" r="3.5" fill="#4af" stroke="#111" stroke-width="1"/>
+          <line x1="0" y1="-17" x2="0" y2="17" stroke="#6af" stroke-width="1" opacity="0.5"/>
+          <text x="0" y="-20" text-anchor="middle" font-size="9" fill="#99f">RR</text>
+          <text id="angle-RR" x="0" y="-30" text-anchor="middle" font-size="9" fill="#fa0">0.0°</text>
+          <text id="temp-s-RR" x="13" y="-6" text-anchor="start" font-size="8" fill="#4af">S:—</text>
+          <text id="temp-d-RR" x="13" y="10" text-anchor="start" font-size="8" fill="#336">D:—</text>
+        </g>
+        <!-- drive speed arrows -->
+        <g id="arrow-FL"></g><g id="arrow-FR"></g>
+        <g id="arrow-RL"></g><g id="arrow-RR"></g>
+        <!-- RC dot -->
+        <circle id="rc-dot" r="4" fill="#f80" opacity="0"/>
+        <text id="rc-label" x="0" y="0" font-size="9" fill="#f80" opacity="0">RC</text>
+        <!-- legend -->
+        <g transform="translate(-181,91)" font-size="9" fill="#777">
+          <rect x="-2" y="-2" width="140" height="72" rx="3" fill="#111" stroke="#2a2a2a" stroke-width="0.8" opacity="0.95"/>
+          <text y="10"><tspan font-weight="bold" fill="#bbb">FL/FR</tspan>  Front L / R</text>
+          <text y="22"><tspan font-weight="bold" fill="#bbb">RL/RR</tspan>  Rear L / R</text>
+          <text y="34"><tspan font-weight="bold" fill="#f80">RC</tspan>  Rotation centre</text>
+          <text y="46"><tspan font-weight="bold" fill="#4af">S</tspan>  Steer temp (joint)</text>
+          <text y="58"><tspan font-weight="bold" fill="#1a6a3a">D</tspan>  Drive temp (rect)</text>
+        </g>
+      </svg>
+    </div>
+
+  </div>
+
+  <!-- ── Centre: camera + WASD ────────────────────────────────────────────── -->
+  <div id="center-col">
+    <div class="card" style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;">
+      <h3>Camera</h3>
+      <div id="cam-wrap" style="flex:1;min-height:0;overflow:hidden;">
+        <img id="cam-img" src="/camera" alt=""
+             style="width:100%;height:100%;object-fit:contain;display:block;">
+        <div id="cam-placeholder" style="display:none;">
+          No camera stream<br>
+          <span style="color:#222;font-size:10px;">__CAMERA_URL__</span>
+        </div>
+      </div>
+    </div>
+    <!-- WASD + gauges -->
+    <div class="card" id="wasd-card">
+      <div id="cfg-info" style="font-size:11px;color:#555;text-align:center;margin-bottom:6px;">loading...</div>
+      <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;justify-content:center;">
+
+        <div class="wasd-grid">
+          <div class="wasd-row">
+            <div id="kb-w" class="kb-key"><div class="kb-key-inner">W<span class="sub">FWD</span></div></div>
+          </div>
+          <div class="wasd-row">
+            <div id="kb-a" class="kb-key"><div class="kb-key-inner">A<span class="sub">LEFT</span></div></div>
+            <div id="kb-s" class="kb-key"><div class="kb-key-inner">S<span class="sub">REV</span></div></div>
+            <div id="kb-d" class="kb-key"><div class="kb-key-inner">D<span class="sub">RIGHT</span></div></div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div class="gauge-wrap">
+            <div class="gauge-label">Steer</div>
+            <div class="gauge-bar-track">
+              <div id="gauge-steer" class="gauge-bar-fill" style="left:50%;width:0%;background:#7cf;"></div>
+              <div class="gauge-center-line"></div>
+            </div>
+            <div id="val-steer" class="gauge-val">0.0 °</div>
+          </div>
+          <div class="gauge-wrap">
+            <div class="gauge-label">Output</div>
+            <div class="gauge-bar-track">
+              <div id="gauge-speed" class="gauge-bar-fill" style="left:50%;width:0%;background:#4fa;"></div>
+              <div class="gauge-center-line"></div>
+            </div>
+            <div id="val-speed" class="gauge-val">0 %</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:20px;color:#444;">
+          <div><span style="color:#7cf;font-weight:bold;">W/S</span>  fwd / rev</div>
+          <div><span style="color:#7cf;font-weight:bold;">A/D</span>  steer</div>
+          <div><span style="color:#7cf;font-weight:bold;">Spc/Esc</span>  e-stop</div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:center;margin-top:10px;">
+        <button class="btn-estop-top" onclick="doEstop()">&#9632; E-STOP</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Right: battery + servo state ─────────────────────────────────────── -->
+  <div id="right-col">
+
+    <!-- Battery card -->
+    <div class="card">
+      <h3>Battery</h3>
+      <div style="text-align:center;margin:6px 0 4px;">
+        <svg width="158" height="60" viewBox="0 0 158 60" style="display:inline-block;">
+          <!-- body -->
+          <rect x="2" y="5" width="138" height="50" rx="5" fill="none" stroke="#555" stroke-width="2"/>
+          <!-- terminal nub -->
+          <rect x="140" y="20" width="14" height="20" rx="3" fill="#555"/>
+          <!-- fill bar (max usable width = 132px, from x=5 to x=137) -->
+          <rect id="batt-fill" x="5" y="8" width="0" height="44" rx="3" fill="#4f4"/>
+          <!-- percentage text -->
+          <text id="batt-pct-icon" x="70" y="37" text-anchor="middle" dominant-baseline="middle"
+                font-family="monospace" font-size="20" font-weight="bold" fill="#fff">—</text>
+        </svg>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

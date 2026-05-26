@@ -1,0 +1,102 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: monospace;
+  background: #0d0d0d;
+  color: #ccc;
+  font-size: 13px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+h3 { color: #adf; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+
+/* ── top bar ── */
+#topbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 14px;
+  background: #111; border-bottom: 1px solid #222;
+  flex-shrink: 0;
+}
+h1 { color: #7cf; font-size: 14px; letter-spacing: 2px; }
+#conn-badge {
+  font-size: 22px; padding: 2px 8px; border-radius: 10px;
+  background: #222; color: #666;
+}
+#conn-badge.ok  { background: #0d2a0d; color: #4f4; }
+#conn-badge.err { background: #2a0d0d; color: #f44; }
+#topstatus { font-size: 22px; color: #555; }
+#topstatus.driving { color: #5fa; }
+#topstatus.err     { color: #f66; }
+.btn-estop-top {
+  padding: 5px 16px; border: none; border-radius: 4px;
+  background: #7a1515; color: #fff;
+  font-family: monospace; font-size: 12px; font-weight: bold;
+  cursor: pointer;
+}
+.btn-estop-top:hover { background: #c22; }
+
+/* ── main layout ── */
+#layout {
+  display: grid;
+  grid-template-columns: 430px 1fr 248px;
+  gap: 8px; padding: 8px;
+  flex: 1; min-height: 0;
+}
+.card {
+  background: #141414;
+  border: 1px solid #222;
+  border-radius: 5px;
+  padding: 10px;
+  overflow: hidden;
+}
+
+/* ── left column ── */
+#left-col { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+svg { display: block; margin: 0 auto; }
+
+/* ── centre column ── */
+#center-col { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+#cam-wrap {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  background: #050505; border-radius: 4px; overflow: hidden;
+  min-height: 0;
+}
+#cam-img { transform: rotate(180deg); }
+#cam-placeholder { color: #333; font-size: 12px; text-align: center; }
+#wasd-card { flex-shrink: 0; }
+
+/* ── controls (inside left card) ── */
+.wasd-grid { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.wasd-row  { display: flex; gap: 4px; }
+.kb-key {
+  width: 62px; height: 62px;
+  border: 2px solid #2a2a2a; border-radius: 9px;
+  background: #1a1a1a; color: #555;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; font-weight: bold; user-select: none;
+  transition: background 0.05s, color 0.05s, border-color 0.05s;
+}
+.kb-key .sub { font-size: 8px; color: #444; margin-top: 2px; text-align: center; }
+.kb-key-inner { display: flex; flex-direction: column; align-items: center; }
+.kb-key.active { background: #1a5a2a; color: #5fe; border-color: #4fa; }
+.gauge-wrap { display: flex; flex-direction: column; gap: 2px; }
+.gauge-label { font-size: 10px; color: #555; text-transform: uppercase; }
+.gauge-bar-track {
+  width: 160px; height: 16px;
+  background: #161616; border: 1px solid #2a2a2a; border-radius: 3px;
+  position: relative; overflow: hidden;
+}
+.gauge-bar-fill {
+  position: absolute; top: 0; height: 100%; border-radius: 2px;
+  transition: left 0.08s, width 0.08s;
+}
+.gauge-center-line { position: absolute; left: 50%; top: 0; width: 1px; height: 100%; background: #2a2a2a; }
+.gauge-val { font-size: 12px; font-weight: bold; color: #7cf; }
+
+/* ── right column ── */
+#right-col { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 11px; }
+th { color: #7cf; font-weight: normal; text-align: left; padding: 2px 3px; border-bottom: 1px solid #222; }
+td { padding: 2px 3px; }
+tr:nth-child(even) td { background: #181818; }
