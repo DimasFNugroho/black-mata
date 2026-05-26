@@ -24,101 +24,31 @@ Drive mapping (edit MAP dict to remap):
 import argparse
 import curses
 import json
-import re
 import select
 import sys
 import time
 from pathlib import Path
 
-try:
-    import evdev
-except ImportError:
-    sys.stderr.write(
-        "evdev not installed.\n"
-        "  pip3 install --user 'evdev>=1.6'\n"
-        "or run tools/gamepad/setup_gamepad.sh which installs it for you.\n"
-    )
-    sys.exit(1)
-
+# Reusable primitives shared with tools/dashboard/server.py.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from gamepad_core import (    # noqa: E402
+    evdev,
+    DEADZONE,
+    MAP,
+    GamepadState,
+    list_devices,
+    find_gamepad,
+    load_calibration,
+    save_calibration,
+    normalize_stick,
+    normalize_trigger,
+    _abs_name,
+    _btn_name,
+)
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / 'ackermann_ui' / 'ackermann_config.json'
-CALIB_DIR   = Path(__file__).resolve().parent / 'calibrations'
 
-MAP = {
-    'steer_axis':    evdev.ecodes.ABS_X,    # Left stick X  → steer
-    'throttle_axis': evdev.ecodes.ABS_Y,    # Left stick Y  → throttle (+fwd / -rev)
-    # E-stop: TL held AND both D-pad axes non-zero (any diagonal) — latching
-    'estop_btn':   evdev.ecodes.BTN_TL,
-    'estop_axes': (evdev.ecodes.ABS_HAT0X, evdev.ecodes.ABS_HAT0Y),
-    'arm_btn':     evdev.ecodes.BTN_TL,     # L1 held = dead-man arm
-    # Re-arm: both thumbsticks clicked simultaneously
-    'rearm_combo':  (evdev.ecodes.BTN_THUMBL, evdev.ecodes.BTN_THUMBR),
-}
-
-# Physical face-button labels for G3 V2 (Nintendo-style layout).
-# evdev Xbox convention: SOUTH=A, EAST=B, NORTH=Y, WEST=X
-# G3 V2 physical layout: SOUTH=B, EAST=A, NORTH=X, WEST=Y
-_BTN_DISPLAY_NAMES = {
-    evdev.ecodes.BTN_SOUTH: 'B',
-    evdev.ecodes.BTN_EAST:  'A',
-    evdev.ecodes.BTN_NORTH: 'X',
-    evdev.ecodes.BTN_WEST:  'Y',
-}
-
-_GAMEPAD_KEYWORDS = ('xbox', 'x-box', 'machenike', 'gamepad', 'game pad',
-                     'controller', 'joystick', 'g3')
-
-DEADZONE   = 0.06
 REFRESH_HZ = 30.0
-
-
-# ── Device discovery ──────────────────────────────────────────────────────────
-
-def list_devices():
-    devs = [evdev.InputDevice(p) for p in evdev.list_devices()]
-    if not devs:
-        print('No input devices found.')
-        return
-    for d in devs:
-        print('{:18s}  {:32s}  {}'.format(d.path, d.name, d.phys or ''))
-
-
-def find_gamepad():
-    for path in evdev.list_devices():
-        d = evdev.InputDevice(path)
-        if any(kw in d.name.lower() for kw in _GAMEPAD_KEYWORDS):
-            return d
-        d.close()
-    return None
-
-
-# ── Calibration file ──────────────────────────────────────────────────────────
-
-def _calib_path(device_name):
-    safe = re.sub(r'[^\w\-]', '_', device_name).strip('_')
-    return CALIB_DIR / f'{safe}_calib.json'
-
-
-def load_calibration(device_name):
-    path = _calib_path(device_name)
-    if not path.exists():
-        return None
-    try:
-        data = json.loads(path.read_text())
-        return {int(k): v for k, v in data.get('axes', {}).items()}
-    except Exception:
-        return None
-
-
-def save_calibration(device_name, axes_calib):
-    path = _calib_path(device_name)
-    CALIB_DIR.mkdir(parents=True, exist_ok=True)
-    payload = {
-        'device': device_name,
-        'axes':   {str(k): v for k, v in axes_calib.items()},
-    }
-    path.write_text(json.dumps(payload, indent=2))
-    return path
 
 
 # ── Calibration procedure (interactive, no curses) ───────────────────────────
@@ -245,130 +175,6 @@ def load_max_steer_deg():
         return float(json.loads(CONFIG_PATH.read_text()).get('max_steer_deg', 30.0))
     except Exception:
         return 30.0
-
-
-def get_abs_info(dev):
-    return dev.capabilities(absinfo=True).get(evdev.ecodes.EV_ABS, [])
-
-
-def get_btn_codes(dev):
-    all_keys = dev.capabilities().get(evdev.ecodes.EV_KEY, [])
-    return sorted(c for c in all_keys if c >= evdev.ecodes.BTN_MISC)
-
-
-# ── Normalisation ─────────────────────────────────────────────────────────────
-
-def normalize_stick(raw, lo, hi, center):
-    """Map raw stick value to [-1, +1] using separate half-ranges per direction."""
-    half_pos = hi - center
-    half_neg = center - lo
-    scale    = max(half_pos, half_neg, 1)
-    delta    = raw - center
-    if -DEADZONE < delta / scale < DEADZONE:
-        return 0.0
-    if delta >= 0:
-        v =  delta / half_pos if half_pos > 0 else 0.0
-    else:
-        v =  delta / half_neg if half_neg > 0 else 0.0
-    return max(-1.0, min(1.0, v))
-
-
-def normalize_trigger(raw, lo, hi):
-    if hi == lo:
-        return 0.0
-    return max(0.0, min(1.0, (raw - lo) / float(hi - lo)))
-
-
-def _abs_name(code):
-    n = evdev.ecodes.ABS.get(code, f'ABS_{code}')
-    if isinstance(n, (list, tuple)):
-        n = n[0]
-    return str(n)
-
-
-def _btn_name(code):
-    if code in _BTN_DISPLAY_NAMES:
-        return _BTN_DISPLAY_NAMES[code]
-    n = evdev.ecodes.BTN.get(code) or evdev.ecodes.keys.get(code, f'KEY_{code}')
-    if isinstance(n, (list, tuple)):
-        n = n[0]
-    return str(n).replace('BTN_', '').replace('KEY_', '')
-
-
-# ── State ─────────────────────────────────────────────────────────────────────
-
-class GamepadState:
-    def __init__(self, dev, calib):
-        self.dev       = dev
-        self.abs_info  = {code: info for code, info in get_abs_info(dev)}
-        self.btn_codes = get_btn_codes(dev)
-        self.axes      = {}
-        self.buttons   = {}
-        self.event_times   = []
-        self.last_event_t  = time.monotonic()
-        self.estop_latched = False
-        self.calib         = calib or {}   # {code: {lo, hi, center}}
-
-    def _cal(self, code):
-        """Return (lo, hi, center) from calibration or absinfo fallback."""
-        info = self.abs_info.get(code)
-        if code in self.calib:
-            c = self.calib[code]
-            return c['lo'], c['hi'], c['center']
-        if info is None:
-            return 0, 1, 0
-        lo, hi = info.min, info.max
-        if info.min < 0:
-            center = info.value
-        elif code in (MAP['steer_axis'], MAP['throttle_axis']):
-            # Unsigned stick axes (min=0) need a midpoint center so
-            # normalize_stick can be applied correctly without calibration.
-            center = (lo + hi) // 2
-        else:
-            center = lo
-        return lo, hi, center
-
-    def _estop_combo_active(self):
-        btn_ok  = self.buttons.get(MAP['estop_btn'], False)
-        axes_ok = all(self.axes.get(ax, 0) != 0 for ax in MAP['estop_axes'])
-        return btn_ok and axes_ok
-
-    def feed(self, event):
-        t = time.monotonic()
-        self.event_times.append(t)
-        self.event_times = [x for x in self.event_times if t - x <= 1.0]
-        self.last_event_t = t
-
-        if event.type == evdev.ecodes.EV_ABS:
-            self.axes[event.code] = event.value
-        elif event.type == evdev.ecodes.EV_KEY:
-            self.buttons[event.code] = bool(event.value)
-
-        if self._estop_combo_active():
-            self.estop_latched = True
-        elif (event.type == evdev.ecodes.EV_KEY
-              and all(self.buttons.get(b, False) for b in MAP['rearm_combo'])):
-            self.estop_latched = False
-
-    def axis_norm(self, code):
-        lo, hi, center = self._cal(code)
-        raw = self.axes.get(code, center)
-        if center > lo:
-            val = normalize_stick(raw, lo, hi, center)
-        else:
-            val = normalize_trigger(raw, lo, hi)
-        # ABS_Y decreases when pushed forward, so negate to make
-        # forward = positive and backward = negative.
-        if code == MAP['throttle_axis']:
-            val = -val
-        return val
-
-    def steer_norm(self):    return self.axis_norm(MAP['steer_axis'])
-    def throttle_norm(self): return self.axis_norm(MAP['throttle_axis'])
-
-    def button(self, code):     return self.buttons.get(code, False)
-    def events_per_sec(self):   return len(self.event_times)
-    def age_since_last(self):   return time.monotonic() - self.last_event_t
 
 
 # ── Rendering helpers ─────────────────────────────────────────────────────────
