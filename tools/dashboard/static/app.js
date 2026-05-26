@@ -314,3 +314,116 @@ function setupCameraReconnect() {
 }
 
 setupCameraReconnect();
+
+
+// ── Gamepad live state + input-source pill ────────────────────────────────────
+// Polls /api/gamepad/state at 20 Hz, updates the topbar pill and the
+// gamepad card. Shift tracking is for the pill only — actual drive-source
+// switching happens in Phase E.
+
+var _gp = { connected: false, name: '', steer: 0, throttle: 0, deadman: false };
+var _shiftHeld = false;
+
+window.addEventListener('keydown', function(e) {
+  if (e.key === 'Shift') _shiftHeld = true;
+});
+window.addEventListener('keyup', function(e) {
+  if (e.key === 'Shift') _shiftHeld = false;
+});
+window.addEventListener('blur', function() { _shiftHeld = false; });
+
+function setBipolarBar(elId, value, posColor, negColor) {
+  var el = document.getElementById(elId);
+  var v = Math.max(-1, Math.min(1, value));
+  if (v >= 0) {
+    el.style.left = '50%';
+    el.style.width = (v * 50) + '%';
+    el.style.background = posColor;
+  } else {
+    el.style.left = (50 + v * 50) + '%';
+    el.style.width = (-v * 50) + '%';
+    el.style.background = negColor;
+  }
+}
+
+function updateInputPill() {
+  var pill = document.getElementById('input-pill');
+  if (!_gp.connected) {
+    pill.textContent = 'GAMEPAD: NONE';
+    pill.className   = 'disconnect';
+    return;
+  }
+  if (_shiftHeld) {
+    pill.textContent = 'KEYBOARD';
+    pill.className   = 'keyboard';
+    return;
+  }
+  if (_gp.deadman) {
+    pill.textContent = 'GAMEPAD: ' + (_gp.name || '?');
+    pill.className   = 'gamepad';
+  } else {
+    pill.textContent = 'IDLE';
+    pill.className   = 'idle';
+  }
+}
+
+function updateGamepadWidget() {
+  var dc = document.getElementById('gp-disconnected');
+  var co = document.getElementById('gp-connected');
+  if (!_gp.connected) {
+    dc.style.display = 'block';
+    co.style.display = 'none';
+    return;
+  }
+  dc.style.display = 'none';
+  co.style.display = 'block';
+  document.getElementById('gp-name').textContent = _gp.name || '?';
+
+  // Stick dot — steer drives X, throttle drives Y (flip Y so fwd = up)
+  var dot = document.getElementById('gp-stick-dot');
+  dot.setAttribute('cx', Math.max(-1, Math.min(1, _gp.steer))    *  40);
+  dot.setAttribute('cy', Math.max(-1, Math.min(1, _gp.throttle)) * -40);
+
+  setBipolarBar('gp-bar-steer',    _gp.steer,    '#7cf', '#f84');
+  setBipolarBar('gp-bar-throttle', _gp.throttle, '#4fa', '#f84');
+
+  var fmt = function(v) { return (v >= 0 ? '+' : '') + v.toFixed(2); };
+  document.getElementById('gp-val-steer').textContent    = fmt(_gp.steer);
+  document.getElementById('gp-val-throttle').textContent = fmt(_gp.throttle);
+}
+
+function pollGamepad() {
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', '/api/gamepad/state');
+  xhr.timeout = 400;
+  xhr.onload = function() {
+    if (xhr.status === 200) {
+      try {
+        var d = JSON.parse(xhr.responseText);
+        _gp.connected = !!d.connected;
+        _gp.name      = d.name     || '';
+        _gp.steer     = +d.steer   || 0;
+        _gp.throttle  = +d.throttle || 0;
+        _gp.deadman   = !!d.deadman;
+      } catch (e) { _gp.connected = false; }
+    } else {
+      _gp.connected = false;
+    }
+    updateInputPill();
+    updateGamepadWidget();
+  };
+  xhr.onerror = xhr.ontimeout = function() {
+    _gp.connected = false;
+    updateInputPill();
+    updateGamepadWidget();
+  };
+  xhr.send();
+}
+
+document.getElementById('input-pill').addEventListener('click', function() {
+  // Phase H will open the BT setup modal here.
+  console.log('Gamepad setup modal: coming in Phase H');
+});
+
+setInterval(pollGamepad, 50);   // 20 Hz
+pollGamepad();

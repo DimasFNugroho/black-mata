@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'gamepad'))
 
 from software.robot.serial_driver import SerialDriver
 from software.robot.ackermann import Ackermann, AckermannConfig
-from gamepad_core import find_gamepad, load_calibration, GamepadState
+from gamepad_core import find_gamepad, load_calibration, GamepadState, MAP as GP_MAP
 
 import select
 
@@ -164,6 +164,7 @@ class GamepadReader:
                 'path':            dev.path,
                 'steer':           round(s.steer_norm(),    4),
                 'throttle':        round(s.throttle_norm(), 4),
+                'deadman':         bool(s.button(GP_MAP['arm_btn'])),   # L1 held
                 'buttons':         {str(k): bool(v) for k, v in s.buttons.items()},
                 'estop_combo':     s._estop_combo_active(),
                 'estop_latched':   s.estop_latched,
@@ -179,11 +180,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def _send_json(self, data, status=200):
         body = json.dumps(data).encode()
-        self.send_response(status)
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Content-Length', len(body))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', len(body))
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # Client closed the connection before we finished writing.
+            # Normal with high-frequency pollers; nothing to do.
+            pass
 
     def _read_json(self):
         length = int(self.headers.get('Content-Length', 0))

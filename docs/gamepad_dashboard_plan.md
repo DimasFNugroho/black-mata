@@ -9,29 +9,29 @@ controller and the UI.
 
 ## Mental Model
 
-The dashboard already has hold-to-drive semantics via WASD: holding a key
-sends drive frames, releasing it stops them. The gamepad is just another
-input layer with the same shape:
+Both keyboard and gamepad use an explicit **deadman button**:
 
-- Stick past deadzone → drive frames flow
-- Stick centered → no frames
+- **Shift** = keyboard's deadman. Drive frames flow while Shift + W/A/S/D
+  are held; release Shift and nothing moves.
+- **L1** = gamepad's deadman. Drive frames flow while L1 + sticks are
+  active; release L1 and nothing moves.
 
-There is **no** "arm / disarm" mode. The "arm" concept in `gamepad_test.py`
-was bolted on for the standalone tool; the dashboard does not need it.
+This symmetry means at rest (no Shift, no L1) the robot never receives
+drive commands no matter what's happening on the inputs.
 
 ---
 
-## Input Precedence — Shift-keyboard, default-gamepad
+## Input Precedence — Shift wins, then L1, otherwise idle
 
-| Shift held | WASD pressed | Gamepad sticks | Drives the robot |
-|------------|--------------|----------------|------------------|
-| yes        | yes          | —              | **Keyboard**     |
-| yes        | no           | —              | nothing          |
-| no         | —            | past deadzone  | **Gamepad**      |
-| no         | —            | centered       | nothing          |
+| Shift held | WASD pressed | L1 held | Gamepad sticks | Drives the robot |
+|------------|--------------|---------|----------------|------------------|
+| yes        | yes          | —       | —              | **Keyboard**     |
+| yes        | no           | —       | —              | nothing          |
+| no         | —            | yes     | any            | **Gamepad**      |
+| no         | —            | no      | —              | nothing          |
 
-Shift is the keyboard's deadman. Releasing Shift hands the wheel back to the
-gamepad. Pressing W/A/S/D without Shift does not drive the robot.
+Shift wins if both deadmen are held simultaneously, so the user always has
+a clear way to take keyboard control even with the controller in hand.
 
 Note: Shift+key combinations may need `preventDefault()` to avoid browser
 shortcuts (text selection, etc.).
@@ -155,7 +155,7 @@ dashboard call the same `bt_setup.py` functions.
 
 ## Open Items (resolved)
 
-1. ~~Naming: arm / disarm replacement~~ → No mode needed; sticks-past-deadzone is the active state.
-2. ~~WASD vs gamepad precedence~~ → Shift held = keyboard, otherwise gamepad.
+1. ~~Naming: arm / disarm replacement~~ → Both inputs use an explicit deadman (Shift for keyboard, L1 for gamepad).
+2. ~~WASD vs gamepad precedence~~ → Shift wins, then L1, otherwise idle.
 3. ~~Best e-stop unlatch UX~~ → Hold-to-confirm button (UI) + LS+RS chord (gamepad), both 1 s hold.
 4. ~~Modal embedded or split~~ → Split: dashboard becomes static files + `server.py`.

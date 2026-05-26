@@ -36,6 +36,18 @@ h1 { color: #7cf; font-size: 14px; letter-spacing: 2px; }
 }
 .btn-estop-top:hover { background: #c22; }
 
+#input-pill {
+  font-family: monospace; font-size: 11px;
+  padding: 3px 9px; border-radius: 10px;
+  border: 1px solid #2a2a2a;
+  cursor: pointer; user-select: none;
+  margin-left: auto;
+}
+#input-pill.disconnect { background: #1a1a1a; color: #555; }
+#input-pill.idle       { background: #1a1a1a; color: #888; }
+#input-pill.keyboard   { background: #0d1a2a; color: #7cf; border-color: #2a4a7a; }
+#input-pill.gamepad    { background: #0d2a0d; color: #5fa; border-color: #2a6a3a; }
+
 /* ── main layout ── */
 #layout {
   display: grid;
