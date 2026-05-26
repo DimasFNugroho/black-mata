@@ -1,6 +1,7 @@
 var _keys         = { w: false, a: false, s: false, d: false };
 var _maxSteer     = 30.0;
 var _driving      = false;
+var _estopLatched = false;   // when true, the drive merger refuses to send frames
 var _cfg          = null;
 var _battSamples    = [];   // voltage readings accumulated between display updates
 var _lastBattDispMs = 0;    // timestamp of last battery display update
@@ -53,7 +54,10 @@ function updatePanels(d) {
   }
   badge.textContent = 'connected'; badge.className = 'ok';
   if (!d.state) return;
-  if (d.state.e_stop) { _driving = false; }
+  if (d.state.e_stop) {
+    _driving = false;
+    if (!_estopLatched) { _estopLatched = true; updateEstopButton(); }
+  }
 
   var cfg  = _cfg || {};
   var sids = cfg.servo_ids || [4,2,8,6,3,1,7,5];
@@ -220,15 +224,38 @@ function updateKeyDisplay() {
   });
 }
 
+// Drive merger — 10 Hz. Two deadman buttons:
+//   Shift   → keyboard active (Shift wins if both deadmen are held)
+//   L1      → gamepad active
+// While a deadman is held we stream drive frames every 100 ms (even at
+// 0,0) so the firmware watchdog keeps the robot live. Releasing both
+// deadmen sends one final 0,0 frame and then stops; watchdog times out
+// and the robot brakes.
 setInterval(function() {
-  var anyKey = _keys.w || _keys.a || _keys.s || _keys.d;
+  // Latched e-stop: skip the loop entirely so the firmware watchdog
+  // brakes the robot and stays braked. Release with the RESET button.
+  if (_estopLatched) {
+    updateGauges(0, 0);
+    return;
+  }
+
+  var active = false;
   var steer = 0, speed = 0;
-  if (_keys.a) steer -= _maxSteer;
-  if (_keys.d) steer += _maxSteer;
-  if (_keys.w) speed += 1.0;
-  if (_keys.s) speed -= 1.0;
+
+  if (_shiftHeld) {
+    if (_keys.a) steer -= _maxSteer;
+    if (_keys.d) steer += _maxSteer;
+    if (_keys.w) speed += 1.0;
+    if (_keys.s) speed -= 1.0;
+    active = true;
+  } else if (_gp.connected && _gp.deadman) {
+    steer = _gp.steer * _maxSteer;
+    speed = _gp.throttle;
+    active = true;
+  }
+
   updateGauges(steer, speed);
-  if (anyKey) {
+  if (active) {
     _driving = true;
     sendDrive(steer, speed);
   } else if (_driving) {
@@ -247,14 +274,34 @@ function sendDrive(steer, speed) {
 }
 
 function doEstop() {
+  if (_estopLatched) {
+    // Second press → reset. Phase F will replace this with hold-to-confirm.
+    _estopLatched = false;
+    updateEstopButton();
+    return;
+  }
+  _estopLatched = true;
   _driving = false;
   _keys = { w:false, a:false, s:false, d:false };
   updateKeyDisplay(); updateGauges(0, 0);
+  updateEstopButton();
   var xhr = new XMLHttpRequest();
   xhr.open('POST', '/estop');
   xhr.setRequestHeader('Content-Type', 'application/json');
   xhr.onload = function() {};
   xhr.send('{}');
+}
+
+function updateEstopButton() {
+  var btn = document.querySelector('.btn-estop-top');
+  if (!btn) return;
+  if (_estopLatched) {
+    btn.textContent  = '↻ RESET E-STOP';
+    btn.style.background = '#a86010';
+  } else {
+    btn.innerHTML    = '&#9632; E-STOP';
+    btn.style.background = '';
+  }
 }
 
 function updateGauges(steer, speed) {
@@ -322,6 +369,8 @@ setupCameraReconnect();
 // switching happens in Phase E.
 
 var _gp = { connected: false, name: '', steer: 0, throttle: 0, deadman: false };
+var _gpEstopComboPrev = false;
+var _gpRearmComboPrev = false;
 var _shiftHeld = false;
 
 window.addEventListener('keydown', function(e) {
@@ -405,6 +454,16 @@ function pollGamepad() {
         _gp.steer     = +d.steer   || 0;
         _gp.throttle  = +d.throttle || 0;
         _gp.deadman   = !!d.deadman;
+
+        // Rising-edge detection for the two combo gestures:
+        //   L1 + D-pad diagonal → trigger e-stop
+        //   LS + RS pressed     → reset (unlatch) when already e-stopped
+        var estopRise = !!d.estop_combo && !_gpEstopComboPrev;
+        var rearmRise = !!d.rearm_combo && !_gpRearmComboPrev;
+        _gpEstopComboPrev = !!d.estop_combo;
+        _gpRearmComboPrev = !!d.rearm_combo;
+        if (estopRise && !_estopLatched) doEstop();      // latch
+        if (rearmRise &&  _estopLatched) doEstop();      // unlatch
       } catch (e) { _gp.connected = false; }
     } else {
       _gp.connected = false;

@@ -28,7 +28,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'gamepad'))
 
 from software.robot.serial_driver import SerialDriver
 from software.robot.ackermann import Ackermann, AckermannConfig
-from gamepad_core import find_gamepad, load_calibration, GamepadState, MAP as GP_MAP
+
+# Gamepad support is optional — the dashboard works without it. If evdev
+# isn't installed (e.g. on a workstation that won't ever have a gamepad
+# attached), the reader is simply never started and the /api/gamepad/state
+# endpoint always reports {connected: false}.
+_GAMEPAD_AVAILABLE = False
+try:
+    from gamepad_core import find_gamepad, load_calibration, GamepadState, MAP as GP_MAP
+    _GAMEPAD_AVAILABLE = True
+except ImportError:
+    print('[Gamepad] evdev not available — gamepad support disabled.')
+    print('          Install with: pip3 install --user evdev')
 
 import select
 
@@ -168,6 +179,8 @@ class GamepadReader:
                 'buttons':         {str(k): bool(v) for k, v in s.buttons.items()},
                 'estop_combo':     s._estop_combo_active(),
                 'estop_latched':   s.estop_latched,
+                'rearm_combo':     all(s.buttons.get(b, False)
+                                       for b in GP_MAP['rearm_combo']),  # LS + RS
                 'events_per_sec':  s.events_per_sec(),
                 'age_s':           round(s.age_since_last(), 3),
             }
@@ -366,8 +379,9 @@ def main():
     else:
         print('No serial port found — running in simulation mode (no robot).')
 
-    _gamepad_reader = GamepadReader()
-    _gamepad_reader.start()
+    if _GAMEPAD_AVAILABLE:
+        _gamepad_reader = GamepadReader()
+        _gamepad_reader.start()
 
     print('Camera : {}'.format(_camera_url))
     print('Open   : http://localhost:{}'.format(args.ui_port))
