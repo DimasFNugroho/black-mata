@@ -8,12 +8,24 @@
 #   2. Pick it from the discovered device list.
 #
 # Usage (run from repo root):
-#   bash tools/gamepad/setup_gamepad.sh
+#   bash tools/gamepad/setup_gamepad.sh [--verbose]
+#
+#   --verbose   Show raw bluetoothctl output instead of progress indicators.
 #
 # After setup, validate with:
 #   python3 tools/gamepad/gamepad_test.py
 
 PAIRING_SCAN_SECS=15
+VERBOSE=0
+
+# ── Argument parsing ──────────────────────────────────────────────────────────
+
+for arg in "$@"; do
+    case "$arg" in
+        --verbose|-v) VERBOSE=1 ;;
+        *) echo "Unknown option: $arg" >&2; exit 1 ;;
+    esac
+done
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -34,6 +46,68 @@ err() { echo ""; echo "  ERROR: $*" >&2; exit 1; }
 
 find_hci() {
     hciconfig 2>/dev/null | grep -o 'hci[0-9]\+' | head -1 || true
+}
+
+# Build a block-character bar of a given width.
+#   draw_bar FILLED TOTAL WIDTH
+draw_bar() {
+    local filled=$1 total=$2 width=$3
+    local n_fill=$(( filled * width / total )) n_empty i bar=""
+    n_empty=$(( width - n_fill ))
+    for ((i=0; i<n_fill;  i++)); do bar+="█"; done
+    for ((i=0; i<n_empty; i++)); do bar+="░"; done
+    printf "%s" "${bar}"
+}
+
+# Show a countdown progress bar while a background PID is running.
+# Exits as soon as the PID finishes or the timer reaches zero.
+#   countdown_bar LABEL DURATION_SECS BG_PID
+countdown_bar() {
+    local label="$1" total="$2" pid="$3" width=24 i
+    for ((i=0; i<=total; i++)); do
+        printf "\r  %-18s [%s] %2ds " \
+            "${label}" "$(draw_bar $i $total $width)" $(( total - i ))
+        kill -0 "${pid}" 2>/dev/null || break
+        [ $i -lt $total ] && sleep 1
+    done
+    printf "\r  %-18s [%s] done\n" "${label}" "$(draw_bar $total $total $width)"
+}
+
+# Show a timed progress bar + live phase label while a bluetooth operation runs.
+# Advances the bar 1s per tick; reads LOG_FILE to update the phase label.
+#   pair_progress LOG_FILE BG_PID TOTAL_SECS
+pair_progress() {
+    local logfile="$1" pid="$2" total="$3" width=24
+    local elapsed=0 phase="Rediscovering" log
+
+    while kill -0 "${pid}" 2>/dev/null; do
+        log=$(cat "${logfile}" 2>/dev/null)
+
+        if   echo "${log}" | grep -q 'Connected: yes'; then
+            phase="Connected     ✓"
+        elif echo "${log}" | grep -q 'Failed to connect'; then
+            phase="Connect failed ✗"
+        elif echo "${log}" | grep -q 'Attempting to connect'; then
+            phase="Connecting"
+        elif echo "${log}" | grep -q 'trust.*succeeded'; then
+            phase="Trusted       ✓"
+        elif echo "${log}" | grep -q 'Changing.*trust'; then
+            phase="Trusting"
+        elif echo "${log}" | grep -q 'Paired: yes\|Pairing successful'; then
+            phase="Paired        ✓"
+        elif echo "${log}" | grep -q 'Attempting to pair'; then
+            phase="Pairing"
+        elif echo "${log}" | grep -q 'Discovery stopped'; then
+            phase="Rediscovered"
+        fi
+
+        local capped=$(( elapsed < total ? elapsed : total ))
+        printf "\r  %-18s [%s] %2ds " \
+            "${phase}" "$(draw_bar $capped $total $width)" $(( total - capped ))
+        sleep 1
+        elapsed=$(( elapsed + 1 ))
+    done
+    printf "\r  %-18s [%s] done\n" "${phase}" "$(draw_bar $total $total $width)"
 }
 
 # ── Step 1: python-evdev ──────────────────────────────────────────────────────
@@ -146,18 +220,32 @@ pause
 
 step "Step 5/6 — Scan, pair, and connect"
 
-# Use a single persistent bluetoothctl session so the agent stays registered
-# and BlueZ keeps discovery running for the full scan window.
 echo "  Scanning for ${PAIRING_SCAN_SECS} seconds..."
-{
-    echo "power on"
-    echo "agent on"
-    echo "default-agent"
-    echo "scan on"
-    sleep "${PAIRING_SCAN_SECS}"
-    echo "scan off"
-    sleep 1
-} | bluetoothctl 2>/dev/null || true
+
+if [ "${VERBOSE}" -eq 1 ]; then
+    {
+        echo "power on"
+        echo "agent on"
+        echo "default-agent"
+        echo "scan on"
+        sleep "${PAIRING_SCAN_SECS}"
+        echo "scan off"
+        sleep 1
+    } | bluetoothctl 2>&1 || true
+else
+    {
+        echo "power on"
+        echo "agent on"
+        echo "default-agent"
+        echo "scan on"
+        sleep "${PAIRING_SCAN_SECS}"
+        echo "scan off"
+        sleep 1
+    } | bluetoothctl >/dev/null 2>&1 &
+    SCAN_PID=$!
+    countdown_bar "Scanning" "${PAIRING_SCAN_SECS}" "${SCAN_PID}"
+    wait "${SCAN_PID}" 2>/dev/null || true
+fi
 
 echo ""
 echo "  Devices discovered:"
@@ -186,18 +274,62 @@ NAME=$(echo "${DEVICES[$IDX]}" | cut -d' ' -f3-)
 echo ""
 ok "Selected: ${NAME}  (${MAC})"
 
+# Remove any stale pairing entry so 'pair' never hits AlreadyExists and
+# br-connection-create-socket doesn't fail on mismatched link keys.
+ALREADY_KNOWN=$(bluetoothctl info "${MAC}" 2>/dev/null | grep -c 'Device' || true)
+if [ "${ALREADY_KNOWN}" -gt 0 ]; then
+    warn "Stale pairing found — removing it first for a clean re-pair..."
+    bluetoothctl remove "${MAC}" 2>/dev/null || true
+    sleep 1
+fi
+
 echo ""
 echo "  Pairing, trusting, and connecting..."
-{
-    echo "agent on"
-    echo "default-agent"
-    echo "pair ${MAC}"
-    sleep 5
-    echo "trust ${MAC}"
-    sleep 1
-    echo "connect ${MAC}"
-    sleep 3
-} | bluetoothctl 2>&1 || true
+warn "Keep the controller in pairing mode (LED flashing rapidly)."
+echo ""
+
+# Re-scan within the same session so the agent is registered before 'pair'
+# and the device is rediscovered in BlueZ's cache before we try to pair it.
+if [ "${VERBOSE}" -eq 1 ]; then
+    {
+        echo "agent on"
+        echo "default-agent"
+        echo "scan on"
+        sleep 5
+        echo "scan off"
+        sleep 1
+        echo "pair ${MAC}"
+        sleep 8
+        echo "trust ${MAC}"
+        sleep 1
+        echo "connect ${MAC}"
+        sleep 5
+    } | bluetoothctl 2>&1 || true
+else
+    BTLOG=$(mktemp /tmp/btctl_pair.XXXXXX)
+    trap 'rm -f "${BTLOG}"' EXIT
+
+    {
+        echo "agent on"
+        echo "default-agent"
+        echo "scan on"
+        sleep 5
+        echo "scan off"
+        sleep 1
+        echo "pair ${MAC}"
+        sleep 8
+        echo "trust ${MAC}"
+        sleep 1
+        echo "connect ${MAC}"
+        sleep 5
+    } | bluetoothctl >> "${BTLOG}" 2>&1 &
+    BTPID=$!
+
+    pair_progress "${BTLOG}" "${BTPID}" 20
+    wait "${BTPID}" 2>/dev/null || true
+    rm -f "${BTLOG}"
+    trap - EXIT
+fi
 
 sleep 2
 
