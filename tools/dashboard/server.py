@@ -35,7 +35,8 @@ from software.robot.ackermann import Ackermann, AckermannConfig
 # endpoint always reports {connected: false}.
 _GAMEPAD_AVAILABLE = False
 try:
-    from gamepad_core import find_gamepad, load_calibration, GamepadState, MAP as GP_MAP
+    from gamepad_core import (find_gamepad, load_calibration, GamepadState,
+                              dev_path, MAP as GP_MAP)
     _GAMEPAD_AVAILABLE = True
 except ImportError:
     print('[Gamepad] evdev not available — gamepad support disabled.')
@@ -144,7 +145,7 @@ class GamepadReader:
                 with self._lock:
                     self._dev   = dev
                     self._state = GamepadState(dev, load_calibration(dev.name))
-                print(f'[Gamepad] Connected: {dev.name} ({dev.path})')
+                print(f'[Gamepad] Connected: {dev.name} ({dev_path(dev)})')
                 continue
 
             try:
@@ -156,7 +157,7 @@ class GamepadReader:
                                 self._state.feed(ev)
             except OSError:
                 with self._lock:
-                    print(f'[Gamepad] Disconnected: {self._dev.path}')
+                    print(f'[Gamepad] Disconnected: {dev_path(self._dev)}')
                     try: self._dev.close()
                     except Exception: pass
                     self._dev   = None
@@ -172,7 +173,7 @@ class GamepadReader:
             return {
                 'connected':       True,
                 'name':            dev.name,
-                'path':            dev.path,
+                'path':            dev_path(dev),
                 'steer':           round(s.steer_norm(),    4),
                 'throttle':        round(s.throttle_norm(), 4),
                 'deadman':         bool(s.button(GP_MAP['arm_btn'])),   # L1 held

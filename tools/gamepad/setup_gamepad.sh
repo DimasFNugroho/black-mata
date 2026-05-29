@@ -222,36 +222,41 @@ step "Step 5/6 — Scan, pair, and connect"
 
 echo "  Scanning for ${PAIRING_SCAN_SECS} seconds..."
 
+# Keep one scan session running a few seconds PAST our device query. BlueZ
+# evicts freshly-discovered, unpaired devices the instant discovery stops (the
+# [DEL] lines at the end of a scan), so a `bluetoothctl devices` call made after
+# `scan off` comes back empty. We must read the list WHILE the scan is active.
 if [ "${VERBOSE}" -eq 1 ]; then
-    {
-        echo "power on"
-        echo "agent on"
-        echo "default-agent"
-        echo "scan on"
-        sleep "${PAIRING_SCAN_SECS}"
-        echo "scan off"
-        sleep 1
-    } | bluetoothctl 2>&1 || true
+    SCAN_REDIR=/dev/stdout
 else
-    {
-        echo "power on"
-        echo "agent on"
-        echo "default-agent"
-        echo "scan on"
-        sleep "${PAIRING_SCAN_SECS}"
-        echo "scan off"
-        sleep 1
-    } | bluetoothctl >/dev/null 2>&1 &
-    SCAN_PID=$!
+    SCAN_REDIR=/dev/null
+fi
+
+{
+    echo "power on"
+    echo "agent on"
+    echo "default-agent"
+    echo "scan on"
+    sleep "$(( PAIRING_SCAN_SECS + 3 ))"
+    echo "scan off"
+    sleep 1
+} | bluetoothctl > "${SCAN_REDIR}" 2>&1 &
+SCAN_PID=$!
+
+if [ "${VERBOSE}" -eq 1 ]; then
+    sleep "${PAIRING_SCAN_SECS}"
+else
     countdown_bar "Scanning" "${PAIRING_SCAN_SECS}" "${SCAN_PID}"
-    wait "${SCAN_PID}" 2>/dev/null || true
 fi
 
 echo ""
 echo "  Devices discovered:"
 echo ""
 
+# Query while discovery is still active (background scan has ~3s left), then
+# let the scan session finish on its own.
 mapfile -t DEVICES < <(bluetoothctl devices 2>/dev/null | grep '^Device ')
+wait "${SCAN_PID}" 2>/dev/null || true
 
 if [ ${#DEVICES[@]} -eq 0 ]; then
     err "No devices found. Make sure the controller LED is flashing (pairing mode)

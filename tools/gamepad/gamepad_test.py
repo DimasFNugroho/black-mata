@@ -38,6 +38,7 @@ from gamepad_core import (    # noqa: E402
     GamepadState,
     list_devices,
     find_gamepad,
+    dev_path,
     load_calibration,
     save_calibration,
     normalize_stick,
@@ -219,7 +220,7 @@ def _render(stdscr, dev, state, max_steer_deg, has_calib):
     _safe_addstr(stdscr, y, 0,
         'Black-Mata Gamepad Test    q=quit  [{}]'.format(calib_note),
         curses.A_BOLD);                                                                   y += 1
-    _safe_addstr(stdscr, y, 0, 'Device : {}  ({})'.format(dev.name, dev.path));          y += 1
+    _safe_addstr(stdscr, y, 0, 'Device : {}  ({})'.format(dev.name, dev_path(dev)));      y += 1
     _safe_addstr(stdscr, y, 0, 'Events : {:4d}/s    last: {:.3f} s ago'.format(
         state.events_per_sec(), state.age_since_last()));                                 y += 2
 
@@ -322,7 +323,7 @@ def run_ui(stdscr, dev, state, max_steer_deg, has_calib):
             except OSError as e:
                 stdscr.erase()
                 _safe_addstr(stdscr, 0, 0,
-                    'Device disconnected: {} ({})'.format(dev.path, e))
+                    'Device disconnected: {} ({})'.format(dev_path(dev), e))
                 stdscr.refresh()
                 time.sleep(2)
                 return
@@ -369,7 +370,7 @@ def main():
             )
             sys.exit(1)
 
-    print('Using device: {} ({})'.format(dev.name, dev.path))
+    print('Using device: {} ({})'.format(dev.name, dev_path(dev)))
 
     if args.calibrate:
         run_calibration(dev)

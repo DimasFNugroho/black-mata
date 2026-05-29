@@ -63,13 +63,22 @@ DEADZONE = 0.06
 
 # ── Device discovery ──────────────────────────────────────────────────────────
 
+def dev_path(dev):
+    """Filesystem path of an evdev InputDevice.
+
+    evdev >= 1.0 exposes `.path`; the Jetson's evdev 0.7.0 (Python 3.6) uses
+    `.fn`. Support both so the same code runs on host and robot.
+    """
+    return getattr(dev, 'path', None) or getattr(dev, 'fn', '?')
+
+
 def list_devices():
     devs = [evdev.InputDevice(p) for p in evdev.list_devices()]
     if not devs:
         print('No input devices found.')
         return
     for d in devs:
-        print('{:18s}  {:32s}  {}'.format(d.path, d.name, d.phys or ''))
+        print('{:18s}  {:32s}  {}'.format(dev_path(d), d.name, d.phys or ''))
 
 
 def find_gamepad():
