@@ -148,9 +148,17 @@ dashboard call the same `bt_setup.py` functions.
 - [ ] `/api/estop/unlatch` endpoint clears latch + acknowledges
       *(TODO — latch is currently client-side in `app.js`; see "E-stop Unlatch" above)*
 
-### Phase G — BT setup orchestrator 🟡 (partial)
-- [x] `tools/gamepad/bt_setup.py` — functions yield structured progress events
-- [ ] `setup_gamepad.sh` consumes the same events *(shell still has its own bluetoothctl logic; not yet a thin wrapper over `bt_setup.py`)*
+### Phase G — BT setup orchestrator ✅
+- [x] `tools/gamepad/bt_setup.py` — functions yield structured progress events;
+      hardened to match the old shell's BlueZ workarounds (connect retry loop,
+      `timeout`-wrapped bluetoothctl calls, rfkill/power-on/verify, paired-check)
+- [x] `setup_gamepad.sh` is now a thin wrapper that execs `bt_setup.py`
+      (which renders the progress bars), so pairing logic lives in one place
+- [x] Verified end-to-end on the Jetson + RTL8761B dongle with an Xbox Wireless
+      Controller. Key lessons baked in: the whole flow must run in ONE
+      bluetoothctl session (cross-session purge made `pair` fail), cache must be
+      cleared with `remove '*'` (not `remove <MAC>`, which blocked re-advertise),
+      and `_run` needs `stdin=DEVNULL` (else `bluetoothctl` grabs the TTY)
 
 ### Phase H — Setup modal UI ⬜ (not started)
 - [ ] Modal markup in `static/setup_modal.html`, loaded on demand

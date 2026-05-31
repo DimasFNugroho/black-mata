@@ -19,13 +19,20 @@ import time
 from pathlib import Path
 
 PAIRING_SCAN_SECS = 15      # initial discovery scan window
-PAIR_SCAN_SECS    = 5       # re-scan inside the pair session
+PAIR_SCAN_SECS    = 8       # re-discover window inside the pair session
+                            # (early-exits as soon as the device reappears)
 PAIR_WAIT_SECS    = 8       # wait after issuing `pair`
 TRUST_WAIT_SECS   = 1       # wait after `trust`
-CONNECT_WAIT_SECS = 5       # wait after `connect`
+CONNECT_WAIT_SECS = 5       # wait after each `connect` attempt
+CONNECT_ATTEMPTS  = 3       # an Xbox-style pad drops once right after `trust`,
+                            # so connect may need a few tries to land + hold
 
 MODPROBE_CONF = '/etc/modprobe.d/bluetooth-xbox.conf'
 ERTM_SYSFS    = '/sys/module/bluetooth/parameters/disable_ertm'
+
+# Set by the CLI --verbose flag: echo raw bluetoothctl output to stderr so the
+# user can see exactly what BlueZ is doing during a failed pairing.
+VERBOSE = False
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -35,12 +42,42 @@ def _evt(kind, **kw):
     return {'kind': kind, **kw}
 
 
-def _run(cmd):
-    """Run a command quietly, capturing stdout. Returns CompletedProcess."""
-    return subprocess.run(cmd, check=False,
-                          stdout=subprocess.PIPE,
-                          stderr=subprocess.STDOUT,
-                          text=True)
+def _run(cmd, timeout=10):
+    """Run a command quietly, capturing stdout. Returns CompletedProcess.
+
+    stdin is forced to /dev/null: a `bluetoothctl` one-shot like `devices` or
+    `info` that inherits the terminal on stdin will drop into INTERACTIVE mode
+    on BlueZ 5.48 — grabbing the TTY (raw/no-echo) and blocking until timeout,
+    which then leaves the terminal broken for the next input() prompt. With
+    stdin on /dev/null it sees EOF, runs the command non-interactively, exits.
+
+    Also timeout-wrapped as a backstop: on timeout we return a
+    CompletedProcess-shaped result (rc 124) with whatever was captured, so
+    callers can keep using `.stdout`/`.returncode` uniformly."""
+    try:
+        return subprocess.run(cmd, check=False,
+                              stdin=subprocess.DEVNULL,
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT,
+                              universal_newlines=True, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        captured = e.stdout if isinstance(e.stdout, str) else ''
+        return subprocess.CompletedProcess(cmd, 124, stdout=captured, stderr='')
+
+
+def _btctl_script(script, timeout=10):
+    """Feed `script` to bluetoothctl over stdin and return its stdout.
+
+    The piped form is deliberate: passing commands like `power on` / `show` as
+    arguments makes BlueZ 5.48's bluetoothctl drop into interactive mode and
+    hang on stdin. Piping a script that ends in `quit` always terminates."""
+    try:
+        p = subprocess.run(['bluetoothctl'], input=script,
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           universal_newlines=True, timeout=timeout)
+        return p.stdout or ''
+    except subprocess.TimeoutExpired as e:
+        return e.stdout if isinstance(e.stdout, str) else ''
 
 
 def _sudo_write(path, contents):
@@ -122,7 +159,19 @@ def check_adapter():
         ))
         return
 
+    # Bring the adapter fully up. On a headless Jetson (no desktop GUI to toggle
+    # Bluetooth) the adapter is often rfkill-soft-blocked and not powered at the
+    # BlueZ level; without a BlueZ `power on`, later remove/pair/connect fail
+    # with org.bluez.Error.NotReady. `power on` goes via stdin, not as an arg.
+    subprocess.run(['sudo', 'rfkill', 'unblock', 'bluetooth'], check=False)
     subprocess.run(['sudo', 'hciconfig', hci, 'up'], check=False)
+    _btctl_script('power on\nquit\n', timeout=6)
+    time.sleep(1)
+    if 'Powered: yes' in _btctl_script('show\nquit\n', timeout=6):
+        yield _evt('log', message=f'Adapter {hci} up and powered.')
+    else:
+        yield _evt('log', message=(
+            f'Adapter {hci} is up but not powered — pairing may fail (NotReady).'))
     yield _evt('done', adapter=hci)
 
 
@@ -158,6 +207,8 @@ def _drain_devices(proc, devices):
     """Read a scanning bluetoothctl's stdout line by line, recording devices
     as they are discovered. Returns when the stream closes (process quits)."""
     for line in proc.stdout:
+        if VERBOSE:
+            sys.stderr.write(line)
         _parse_device_line(line, devices)
 
 
@@ -175,7 +226,7 @@ def scan(seconds=PAIRING_SCAN_SECS):
     proc = subprocess.Popen(
         ['bluetoothctl'], stdin=subprocess.PIPE,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, bufsize=1,
+        universal_newlines=True, bufsize=1,
     )
     reader = threading.Thread(target=_drain_devices, args=(proc, devices),
                               daemon=True)
@@ -209,76 +260,138 @@ def scan(seconds=PAIRING_SCAN_SECS):
 
 
 def pair(mac):
-    """Remove any stale entry for `mac`, then re-discover + pair + trust +
-    connect in a single bluetoothctl session (so the registered agent
-    stays alive and the device stays in BlueZ's cache between steps).
+    """Pair, trust, and connect `mac` in ONE persistent bluetoothctl session,
+    reading the session's output to detect success rather than guessing from
+    fixed sleeps. Mirrors the sequence that works by hand:
 
-    Yields a continuous stream of `progress` events covering the full
-    PAIR_SCAN_SECS + 1 + PAIR_WAIT_SECS + TRUST_WAIT_SECS + CONNECT_WAIT_SECS
-    window, with `phase_step` events marking phase transitions."""
+        remove MAC -> power on -> agent on -> default-agent ->
+        scan on -> (rediscover) -> scan off -> pair -> trust -> connect
+
+    A single session is essential: BlueZ purges unpaired devices when a session
+    ends, so splitting scan and pair across separate sessions makes the device
+    vanish before `pair` runs — which made every attempt fail.
+
+    We clear the cache with `remove '*'` (all devices), not `remove <MAC>`:
+    removing the specific MAC left the controller unable to re-advertise into
+    the same session's scan, so `pair` hit "Device not available". The quotes
+    are literal — bt_shell word-expands `*` (globs the cwd) without them."""
     yield _evt('phase', label='Pairing', mac=mac)
 
-    info = _run(['bluetoothctl', 'info', mac]).stdout
-    if 'Device' in info:
-        yield _evt('log', message='Removing stale pairing for clean re-pair...')
-        _run(['bluetoothctl', 'remove', mac])
-        time.sleep(1)
-
-    proc = subprocess.Popen(
+    # One live session; a reader thread collects its output so we can watch for
+    # 'Pairing successful' / 'Connection successful' as they happen.
+    lines = []
+    lock  = threading.Lock()
+    proc  = subprocess.Popen(
         ['bluetoothctl'], stdin=subprocess.PIPE,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        text=True, bufsize=1,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        universal_newlines=True, bufsize=1,
     )
 
-    def send(line):
-        proc.stdin.write(line + '\n')
+    def _reader():
+        for line in proc.stdout:
+            if VERBOSE:
+                sys.stderr.write(line)
+            with lock:
+                lines.append(line)
+    threading.Thread(target=_reader, daemon=True).start()
+
+    def send(cmd):
+        proc.stdin.write(cmd + '\n')
         proc.stdin.flush()
 
-    total = (PAIR_SCAN_SECS + 1 + PAIR_WAIT_SECS
-             + TRUST_WAIT_SECS + CONNECT_WAIT_SECS)
+    def mark():
+        with lock:
+            return len(lines)
+
+    def seen_since(start, *needles):
+        """True if any line captured since index `start` contains a needle."""
+        with lock:
+            return any(any(n in ln for n in needles) for ln in lines[start:])
+
+    total = PAIR_SCAN_SECS + PAIR_WAIT_SECS + TRUST_WAIT_SECS + CONNECT_WAIT_SECS
     elapsed = 0
 
-    def tick(secs, step):
+    def wait_for(step, secs, success=(), failure=()):
+        """Tick up to `secs` seconds (1 progress event/s), stopping early when a
+        success/failure marker appears AFTER this call began. The `yield from`
+        caller receives 'ok' | 'fail' | 'timeout' as the generator's value."""
         nonlocal elapsed
+        start  = mark()
+        result = 'timeout'
         for _ in range(secs):
-            yield _evt('progress', step=step, elapsed=elapsed, total=total)
+            yield _evt('progress', step=step, elapsed=min(elapsed, total), total=total)
+            if failure and seen_since(start, *failure):
+                result = 'fail'; break
+            if success and seen_since(start, *success):
+                result = 'ok';   break
             time.sleep(1)
             elapsed += 1
+        return result
 
-    send('agent on'); send('default-agent'); send('scan on')
+    def finish():
+        send('exit')
+        proc.stdin.close()
+        try:
+            proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+    # 1. Clear ALL cached devices, power up, register the agent, start scanning.
+    #    `remove '*'` (quoted) clears everything; removing just our MAC stopped
+    #    the controller from re-advertising into this scan.
+    send("remove '*'")
+    send('power on'); send('agent on'); send('default-agent'); send('scan on')
+
+    # 2. Let the scan run its full window so the controller has time to
+    #    re-advertise after the cache wipe. (We deliberately do NOT early-exit
+    #    on seeing the MAC: the pre-`remove` line is still in the buffer and
+    #    would trip an exit before the device has actually re-appeared.)
     yield _evt('phase_step', step='Rediscovering')
-    yield from tick(PAIR_SCAN_SECS, 'Rediscovering')
+    yield from wait_for('Rediscovering', PAIR_SCAN_SECS)
 
+    # 3. Stop scanning, then pair (the device stays cached within the session).
     send('scan off')
-    yield from tick(1, 'Rediscovered')
-
     send(f'pair {mac}')
     yield _evt('phase_step', step='Pairing')
-    yield from tick(PAIR_WAIT_SECS, 'Pairing')
+    res = yield from wait_for('Pairing', PAIR_WAIT_SECS,
+                              success=('Pairing successful', 'Paired: yes'),
+                              failure=('Failed to pair',))
+    if res != 'ok':
+        finish()
+        yield _evt('error', message=(
+            'Pairing did not complete. Make sure the controller is in pairing '
+            'mode (LED flashing fast); re-run with --verbose to see why.'))
+        return
 
+    # 4. Trust it so BlueZ auto-reconnects on future boots.
     send(f'trust {mac}')
     yield _evt('phase_step', step='Trusting')
-    yield from tick(TRUST_WAIT_SECS, 'Trusting')
+    yield from wait_for('Trusting', TRUST_WAIT_SECS,
+                        success=('trust succeeded', 'Trusted: yes'))
 
-    send(f'connect {mac}')
+    # 5. Connect. An Xbox pad drops right after `trust`, so retry within the
+    #    SAME session until the connection holds.
     yield _evt('phase_step', step='Connecting')
-    yield from tick(CONNECT_WAIT_SECS, 'Connecting')
+    connected = False
+    for attempt in range(1, CONNECT_ATTEMPTS + 1):
+        send(f'connect {mac}')
+        res = yield from wait_for('Connecting', CONNECT_WAIT_SECS,
+                                  success=('Connection successful',),
+                                  failure=('Failed to connect',))
+        if res == 'ok':
+            connected = True
+            break
+        yield _evt('log', message=f'Connect attempt {attempt}/{CONNECT_ATTEMPTS} '
+                                  'did not hold, retrying...')
 
-    send('quit')
-    proc.stdin.close()
-    try:
-        proc.wait(timeout=3)
-    except subprocess.TimeoutExpired:
-        proc.kill()
+    finish()
 
-    time.sleep(1)
-    if 'Connected: yes' in _run(['bluetoothctl', 'info', mac]).stdout:
+    if connected:
         yield _evt('done', connected=True)
     else:
         yield _evt('error', message=(
-            'Connection failed. Re-run the verbose shell script for full '
-            'bluetoothctl output: bash tools/gamepad/setup_gamepad.sh --verbose'
-        ))
+            'Paired but could not hold a connection. Wake the controller and '
+            're-run; --verbose shows the bluetoothctl output.'))
 
 
 def verify():
@@ -286,7 +399,7 @@ def verify():
     yield _evt('phase', label='Verify input device')
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
-        from gamepad_core import find_gamepad
+        from gamepad_core import find_gamepad, dev_path
     except ImportError as e:
         yield _evt('error', message=f'evdev not available: {e}')
         return
@@ -294,7 +407,8 @@ def verify():
     if dev is None:
         yield _evt('error', message='No gamepad input device detected.')
         return
-    yield _evt('done', name=dev.name, path=dev.path)
+    # dev_path() handles evdev 0.7.0 (.fn, the Jetson) vs >= 1.0 (.path).
+    yield _evt('done', name=dev.name, path=dev_path(dev))
 
 
 # ── CLI driver ────────────────────────────────────────────────────────────────
@@ -340,6 +454,10 @@ def _render(gen):
 
 
 def main():
+    global VERBOSE
+    args = sys.argv[1:]
+    VERBOSE = '--verbose' in args or '-v' in args
+
     print('Black-Mata gamepad setup')
 
     _render(disable_ertm())
@@ -372,6 +490,12 @@ def main():
 
     selected = devices[idx]
     print(f'\n  Selected: {selected["name"]} ({selected["mac"]})')
+
+    # Xbox-style pads drop out of pairing mode in ~20-30 s. If the user dithered
+    # over the device list, the LED may have stopped flashing — give them a
+    # chance to re-arm pairing mode right before we pair.
+    print('\n  Make sure the controller is STILL in pairing mode (LED flashing).')
+    input('  Press Enter to pair... ')
 
     _render(pair(selected['mac']))
     _render(verify())
