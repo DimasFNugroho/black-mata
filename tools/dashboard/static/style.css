@@ -121,6 +121,47 @@ svg { display: block; margin: 0 auto; }
 .gauge-center-line { position: absolute; left: 50%; top: 0; width: 1px; height: 100%; background: #2a2a2a; }
 .gauge-val { font-size: 12px; font-weight: bold; color: #7cf; }
 
+/* ── buttons ── */
+.btn {
+  font-family: monospace; font-size: 12px;
+  padding: 6px 14px; border-radius: 4px; cursor: pointer;
+  border: 1px solid #2a2a2a; background: #1a1a1a; color: #ccc;
+}
+.btn:hover { background: #222; }
+.btn-primary { background: #0d2a4a; color: #7cf; border-color: #2a4a7a; }
+.btn-primary:hover { background: #11406a; }
+.btn-ghost { background: transparent; color: #888; }
+
+/* ── Bluetooth setup modal ── */
+.modal-overlay {
+  display: none;          /* shown (flex) by setup_modal.js */
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0, 0, 0, 0.7);
+  align-items: center; justify-content: center;
+}
+.modal-panel {
+  background: #141414; border: 1px solid #2a2a2a; border-radius: 6px;
+  padding: 18px 20px; width: 460px; max-width: 92vw;
+  max-height: 88vh; overflow-y: auto;
+}
+.modal-panel h2 { color: #7cf; font-size: 14px; letter-spacing: 1px; margin-bottom: 12px; }
+.setup-status { color: #adf; font-size: 12px; margin-bottom: 8px; }
+.setup-bar-wrap {
+  height: 10px; background: #161616; border: 1px solid #2a2a2a;
+  border-radius: 3px; overflow: hidden; margin-bottom: 8px;
+}
+.setup-bar { height: 100%; width: 0; background: #2a6a9a; transition: width 0.2s linear; }
+.setup-log {
+  font-size: 10px; color: #777; white-space: pre-wrap;
+  max-height: 90px; overflow-y: auto; margin-bottom: 10px;
+}
+.setup-section { display: none; margin: 10px 0; }   /* toggled by JS */
+.setup-section p { margin-bottom: 8px; color: #bbb; }
+.setup-device { display: block; width: 100%; text-align: left; margin: 4px 0; }
+.setup-ok  { color: #5fa; }
+.setup-err { color: #f77; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+
 /* ── right column ── */
 #right-col { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 11px; }

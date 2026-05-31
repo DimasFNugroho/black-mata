@@ -1,0 +1,33 @@
+<!-- Bluetooth gamepad setup modal — loaded on demand by setup_modal.js and
+     appended to <body>. All driving is via the /api/gamepad/setup/* endpoints
+     and the SSE event stream. -->
+<div class="modal-overlay" id="setup-overlay">
+  <div class="modal-panel">
+    <h2>Set up Bluetooth gamepad</h2>
+
+    <div id="setup-status" class="setup-status">Starting…</div>
+    <div class="setup-bar-wrap"><div id="setup-bar" class="setup-bar"></div></div>
+    <div id="setup-log" class="setup-log"></div>
+
+    <!-- Pause 1: ask the operator to put the controller into pairing mode. -->
+    <div id="setup-pairing-prompt" class="setup-section">
+      <p>Put your controller into <b>pairing mode</b> (the LED should flash
+         rapidly), then press Continue.</p>
+      <button id="setup-continue" class="btn btn-primary">Continue</button>
+    </div>
+
+    <!-- Pause 2: device picker, filled in from the scan results. -->
+    <div id="setup-devices" class="setup-section">
+      <p>Select your controller:</p>
+      <div id="setup-device-list"></div>
+    </div>
+
+    <!-- Terminal result (success or error). -->
+    <div id="setup-result" class="setup-section"></div>
+
+    <div class="modal-actions">
+      <button id="setup-cancel" class="btn btn-ghost">Cancel</button>
+      <button id="setup-close"  class="btn btn-primary">Close</button>
+    </div>
+  </div>
+</div>

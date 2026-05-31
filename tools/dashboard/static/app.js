@@ -534,8 +534,7 @@ function pollGamepad() {
 }
 
 document.getElementById('input-pill').addEventListener('click', function() {
-  // Phase H will open the BT setup modal here.
-  console.log('Gamepad setup modal: coming in Phase H');
+  if (window.GamepadSetup) window.GamepadSetup.open();
 });
 
 setInterval(pollGamepad, 50);   // 20 Hz

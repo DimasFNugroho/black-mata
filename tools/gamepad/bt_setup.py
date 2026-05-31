@@ -19,16 +19,14 @@ import time
 from pathlib import Path
 
 PAIRING_SCAN_SECS = 15      # initial discovery scan window
-PAIR_SCAN_SECS    = 8       # re-discover window inside the pair session
-                            # (early-exits as soon as the device reappears)
+REDISCOVER_SECS   = 25      # max wait for the controller to re-advertise inside
+                            # the pair session (early-exits the moment it shows;
+                            # generous so a weak beacon at range still lands)
 PAIR_WAIT_SECS    = 8       # wait after issuing `pair`
 TRUST_WAIT_SECS   = 1       # wait after `trust`
 CONNECT_WAIT_SECS = 5       # wait after each `connect` attempt
 CONNECT_ATTEMPTS  = 3       # an Xbox-style pad drops once right after `trust`,
                             # so connect may need a few tries to land + hold
-
-MODPROBE_CONF = '/etc/modprobe.d/bluetooth-xbox.conf'
-ERTM_SYSFS    = '/sys/module/bluetooth/parameters/disable_ertm'
 
 # Set by the CLI --verbose flag: echo raw bluetoothctl output to stderr so the
 # user can see exactly what BlueZ is doing during a failed pairing.
@@ -80,16 +78,6 @@ def _btctl_script(script, timeout=10):
         return e.stdout if isinstance(e.stdout, str) else ''
 
 
-def _sudo_write(path, contents):
-    """Write `contents` to `path` via `sudo tee` (so we don't need to be root)."""
-    p = subprocess.Popen(['sudo', 'tee', path],
-                         stdin=subprocess.PIPE,
-                         stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL)
-    p.communicate(contents.encode())
-    return p.returncode == 0
-
-
 def find_hci():
     """Return the first 'hciN' adapter name from `hciconfig`, or None."""
     r = _run(['hciconfig'])
@@ -112,66 +100,33 @@ def list_known_devices():
 
 # ── Phase generators ──────────────────────────────────────────────────────────
 
-def disable_ertm():
-    """Disable Bluetooth ERTM (required for Xbox-style controllers on Linux
-    kernel < 5.12). Persists the modprobe option and writes the running
-    kernel parameter via sysfs."""
-    yield _evt('phase', label='Disable Bluetooth ERTM')
-
-    conf = Path(MODPROBE_CONF)
-    if conf.exists() and 'disable_ertm' in conf.read_text():
-        yield _evt('log', message=f'Already disabled in {MODPROBE_CONF}')
-    else:
-        yield _evt('log', message=f'Writing {MODPROBE_CONF} (sudo)')
-        if not _sudo_write(MODPROBE_CONF, 'options bluetooth disable_ertm=1\n'):
-            yield _evt('error', message=f'Could not write {MODPROBE_CONF}')
-            return
-
-    if Path(ERTM_SYSFS).exists():
-        _sudo_write(ERTM_SYSFS, '1')
-        yield _evt('log', message='ERTM disabled in running kernel')
-
-    yield _evt('done')
-
-
 def check_adapter():
-    """Restart bluetoothd, ensure a `hciN` adapter is up. The 'done' event
-    carries the adapter name; 'error' if none could be brought up."""
+    """No-sudo adapter readiness check, shared by the terminal flow and the
+    dashboard setup modal.
+
+    All root-level Bluetooth setup (ERTM, rfkill, adapter auto-power, the
+    `bluetooth` group) is a one-time commissioning job done by
+    setup_bluetooth_host.sh — NOT here. This only reads the adapter and powers
+    it on via bluetoothctl (no sudo). If nothing is ready it tells the user to
+    run the host setup; it deliberately cannot fix a wedged stack itself, so the
+    same code works headless in the dashboard server (which has no TTY for a
+    sudo password)."""
     yield _evt('phase', label='Bluetooth adapter')
-
-    subprocess.run(['sudo', 'systemctl', 'restart', 'bluetooth'], check=False)
-    time.sleep(1)
     hci = find_hci()
-
-    if not hci:
-        yield _evt('log', message='No adapter — loading btusb...')
-        subprocess.run(['sudo', 'modprobe', 'btusb'], check=False)
-        time.sleep(2)
-        subprocess.run(['sudo', 'systemctl', 'restart', 'bluetooth'], check=False)
-        time.sleep(1)
-        hci = find_hci()
-
     if not hci:
         yield _evt('error', message=(
-            'No Bluetooth adapter found. Plug in the RTL8761B USB dongle. '
-            'If the kernel logs "unknown project id 14", run '
-            'jetson_btrtl_8761b_fix.sh first.'
-        ))
+            'No Bluetooth adapter is ready. On the robot, run '
+            'tools/gamepad/setup_bluetooth_host.sh once (and '
+            'jetson_btrtl_8761b_fix.sh first if using the RTL8761B dongle).'))
         return
-
-    # Bring the adapter fully up. On a headless Jetson (no desktop GUI to toggle
-    # Bluetooth) the adapter is often rfkill-soft-blocked and not powered at the
-    # BlueZ level; without a BlueZ `power on`, later remove/pair/connect fail
-    # with org.bluez.Error.NotReady. `power on` goes via stdin, not as an arg.
-    subprocess.run(['sudo', 'rfkill', 'unblock', 'bluetooth'], check=False)
-    subprocess.run(['sudo', 'hciconfig', hci, 'up'], check=False)
     _btctl_script('power on\nquit\n', timeout=6)
     time.sleep(1)
-    if 'Powered: yes' in _btctl_script('show\nquit\n', timeout=6):
-        yield _evt('log', message=f'Adapter {hci} up and powered.')
-    else:
-        yield _evt('log', message=(
-            f'Adapter {hci} is up but not powered — pairing may fail (NotReady).'))
+    if 'Powered: yes' not in _btctl_script('show\nquit\n', timeout=6):
+        yield _evt('error', message=(
+            f'Adapter {hci} is not powered. Run setup_bluetooth_host.sh on the '
+            'robot (it sets AutoEnable=true so the adapter powers on at boot).'))
+        return
+    yield _evt('log', message=f'Adapter {hci} ready.')
     yield _evt('done', adapter=hci)
 
 
@@ -219,7 +174,12 @@ def scan(seconds=PAIRING_SCAN_SECS):
     Devices are captured LIVE from the scanning bluetoothctl's output stream,
     because BlueZ evicts freshly-discovered (unpaired) devices from its cache
     the moment discovery stops — so a `bluetoothctl devices` call made after
-    `scan off` would miss them."""
+    `scan off` would miss them.
+
+    Bonds are cleared with `remove '*'` up front, before discovery, so the
+    picker shows fresh advertisements and a controller stuck in a stale bonded
+    state can re-pair cleanly. (Quotes are literal — bt_shell globs `*` against
+    the cwd otherwise.)"""
     yield _evt('phase', label='Scanning', duration=seconds)
 
     devices = {}            # mac -> name, updated live by the reader thread
@@ -232,7 +192,8 @@ def scan(seconds=PAIRING_SCAN_SECS):
                               daemon=True)
     reader.start()
 
-    proc.stdin.write('power on\nagent on\ndefault-agent\nscan on\n')
+    # Clear all bonds first, then start discovery from a clean slate.
+    proc.stdin.write("power on\nagent on\ndefault-agent\nremove '*'\nscan on\n")
     proc.stdin.flush()
 
     for i in range(seconds):
@@ -308,13 +269,26 @@ def pair(mac):
         with lock:
             return any(any(n in ln for n in needles) for ln in lines[start:])
 
-    total = PAIR_SCAN_SECS + PAIR_WAIT_SECS + TRUST_WAIT_SECS + CONNECT_WAIT_SECS
+    def rediscovered():
+        """True once the target MAC re-appears AFTER discovery (re)started, so
+        the stale pre-`remove '*'` line in the buffer can't trip it early."""
+        with lock:
+            after_scan = False
+            for ln in lines:
+                if 'Discovery started' in ln:
+                    after_scan = True
+                elif after_scan and mac in ln:
+                    return True
+            return False
+
+    total = REDISCOVER_SECS + PAIR_WAIT_SECS + TRUST_WAIT_SECS + CONNECT_WAIT_SECS
     elapsed = 0
 
-    def wait_for(step, secs, success=(), failure=()):
+    def wait_for(step, secs, success=(), failure=(), predicate=None):
         """Tick up to `secs` seconds (1 progress event/s), stopping early when a
-        success/failure marker appears AFTER this call began. The `yield from`
-        caller receives 'ok' | 'fail' | 'timeout' as the generator's value."""
+        success/failure marker appears AFTER this call began, or when
+        `predicate()` (if given) returns True. The `yield from` caller receives
+        'ok' | 'fail' | 'timeout' as the generator's value."""
         nonlocal elapsed
         start  = mark()
         result = 'timeout'
@@ -322,6 +296,8 @@ def pair(mac):
             yield _evt('progress', step=step, elapsed=min(elapsed, total), total=total)
             if failure and seen_since(start, *failure):
                 result = 'fail'; break
+            if predicate is not None and predicate():
+                result = 'ok';   break
             if success and seen_since(start, *success):
                 result = 'ok';   break
             time.sleep(1)
@@ -342,12 +318,20 @@ def pair(mac):
     send("remove '*'")
     send('power on'); send('agent on'); send('default-agent'); send('scan on')
 
-    # 2. Let the scan run its full window so the controller has time to
-    #    re-advertise after the cache wipe. (We deliberately do NOT early-exit
-    #    on seeing the MAC: the pre-`remove` line is still in the buffer and
-    #    would trip an exit before the device has actually re-appeared.)
+    # 2. Wait until the controller actually re-advertises into THIS scan, then
+    #    pair the instant it shows. The beacon is intermittent and sparse at
+    #    range, so a blind fixed window misses it when the pad is a metre or two
+    #    away — poll for the MAC (after Discovery started) up to REDISCOVER_SECS.
     yield _evt('phase_step', step='Rediscovering')
-    yield from wait_for('Rediscovering', PAIR_SCAN_SECS)
+    res = yield from wait_for('Rediscovering', REDISCOVER_SECS,
+                              predicate=rediscovered)
+    if res != 'ok':
+        finish()
+        yield _evt('error', message=(
+            'Controller not found near the adapter. Move it closer to the '
+            'robot, make sure it is in pairing mode (LED flashing fast), and '
+            'try again.'))
+        return
 
     # 3. Stop scanning, then pair (the device stays cached within the session).
     send('scan off')
@@ -460,7 +444,8 @@ def main():
 
     print('Black-Mata gamepad setup')
 
-    _render(disable_ertm())
+    # Root-level setup (ERTM, rfkill, auto-power) is a one-time job done by
+    # setup_bluetooth_host.sh — this flow is sudo-free.
     _render(check_adapter())
 
     print()

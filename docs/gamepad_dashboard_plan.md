@@ -103,11 +103,11 @@ dashboard call the same `bt_setup.py` functions.
 | Method | Path                              | Purpose                                              | Status |
 |--------|-----------------------------------|------------------------------------------------------|--------|
 | GET    | `/api/gamepad/state`              | live `{connected, name, steer, throttle, buttons}`   | ✅ done |
-| GET    | `/api/gamepad/setup/events`       | SSE stream of pairing progress                       | ⬜ TODO (Phase H) |
-| POST   | `/api/gamepad/setup/start`        | begin pairing flow (scan adapter, ERTM check)        | ⬜ TODO (Phase H) |
-| POST   | `/api/gamepad/setup/continue`     | user acknowledged "controller in pairing mode"       | ⬜ TODO (Phase H) |
-| POST   | `/api/gamepad/setup/select`       | `{mac}` — pair the device the user picked            | ⬜ TODO (Phase H) |
-| POST   | `/api/gamepad/setup/cancel`       | abort pairing                                        | ⬜ TODO (Phase H) |
+| GET    | `/api/gamepad/setup/events`       | SSE stream of pairing progress                       | ✅ done |
+| POST   | `/api/gamepad/setup/start`        | begin pairing flow (no-sudo adapter check)           | ✅ done |
+| POST   | `/api/gamepad/setup/continue`     | user acknowledged "controller in pairing mode"       | ✅ done |
+| POST   | `/api/gamepad/setup/select`       | `{mac}` — pair the device the user picked            | ✅ done |
+| POST   | `/api/gamepad/setup/cancel`       | abort pairing                                        | ✅ done |
 | POST   | `/api/estop/unlatch`              | clear the latched e-stop (server-side)               | ⬜ TODO (latch is client-side for now) |
 
 ---
@@ -160,11 +160,25 @@ dashboard call the same `bt_setup.py` functions.
       cleared with `remove '*'` (not `remove <MAC>`, which blocked re-advertise),
       and `_run` needs `stdin=DEVNULL` (else `bluetoothctl` grabs the TTY)
 
-### Phase H — Setup modal UI ⬜ (not started)
-- [ ] Modal markup in `static/setup_modal.html`, loaded on demand
-- [ ] Phases mirror the shell script: adapter check → ERTM → pairing-mode prompt → scan with progress bar → device picker → pair with phase progress bar → verify
-- [ ] Consumes the SSE stream from `/api/gamepad/setup/events`
-- [ ] Cancel button at any phase
+### Phase H — Setup modal UI ✅ (pending Jetson hardware test)
+- [x] Modal markup in `static/setup_modal.html`, loaded on demand by `setup_modal.js`
+- [x] Phases: adapter check → pairing-mode prompt → scan w/ progress bar → device picker → pair w/ phase progress bar → verify
+- [x] Consumes the SSE stream from `/api/gamepad/setup/events`
+- [x] Cancel button at any phase (also cancels on backdrop click / browser disconnect)
+
+**Sudo-free by design.** `bt_setup.py` is now uniformly sudo-free — `check_adapter()`
+only reads the adapter and powers it on via `bluetoothctl`; the terminal flow and
+the modal run the identical pairing code. All root-level, persistent setup (ERTM,
+rfkill, `AutoEnable=true`, the `bluetooth` group) lives in a dedicated one-time
+commissioning script, **`tools/gamepad/setup_bluetooth_host.sh`**, run once at
+deploy. Target user: end-user with no terminal access, re-pairing / swapping
+controllers freely. If the adapter isn't ready the modal says "run the host
+setup" rather than attempting root.
+
+Backend: `SetupSession` in `server.py` runs the `bt_setup` generators in a
+thread, streams their events over SSE, and blocks at two operator gates
+(pairing-mode → `/continue`, device pick → `/select`). Orchestration unit-tested
+on x86 with fake generators; real pairing still to be run on the Jetson.
 
 ---
 

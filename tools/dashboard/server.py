@@ -12,6 +12,7 @@ Then open:  http://<jetson-ip>:8082
 import argparse
 import glob
 import json
+import queue
 import sys
 import threading
 import time
@@ -44,8 +45,18 @@ except ImportError:
 
 import select
 
+# Bluetooth pairing orchestrator (drives the dashboard setup modal). Imported
+# separately from evdev — pairing can run even when evdev isn't importable.
+_SETUP_AVAILABLE = False
+try:
+    import bt_setup
+    _SETUP_AVAILABLE = True
+except Exception as _e:        # noqa: F841 — message printed for the operator
+    print('[Setup] bt_setup unavailable — pairing modal disabled:', _e)
+
 _driver         = None
 _gamepad_reader = None
+_setup_session  = None
 _last_drive_t   = 0.0
 
 DEFAULTS = {
@@ -187,10 +198,125 @@ class GamepadReader:
             }
 
 
+# ── Bluetooth setup session (drives bt_setup.py from the dashboard) ───────────
+
+class SetupSession:
+    """Runs the Bluetooth pairing flow in a background thread and exposes it to
+    the browser as a stream of events. Two points wait for the operator: after
+    the adapter check (put the controller in pairing mode → 'continue') and
+    after the scan (pick a device → 'select').
+
+    bt_setup is uniformly sudo-free, so the flow never needs a password the
+    headless server cannot supply. The one-time root setup (ERTM, adapter
+    auto-power, bluetooth group) is done by setup_bluetooth_host.sh."""
+
+    def __init__(self):
+        self._q        = queue.Queue()
+        self._continue = threading.Event()
+        self._select   = threading.Event()
+        self._cancel   = threading.Event()
+        self._mac      = None
+        self._thread   = None
+
+    def start(self):
+        self._thread = threading.Thread(target=self._run, daemon=True,
+                                        name='bt-setup')
+        self._thread.start()
+
+    # Operator actions (called from POST handlers).
+    def cont(self):        self._continue.set()
+    def select(self, mac): self._mac = mac; self._select.set()
+    def cancel(self):
+        self._cancel.set()
+        # Unblock any pending wait so the worker can exit promptly.
+        self._continue.set(); self._select.set()
+
+    def events(self):
+        """Yield queued events for the SSE stream until the flow ends."""
+        while True:
+            ev = self._q.get()
+            yield ev
+            if ev.get('kind') in ('complete', 'aborted'):
+                return
+
+    # -- internals ----------------------------------------------------------
+    def _drain(self, gen):
+        """Forward a bt_setup generator's events to the queue. Returns its final
+        'done' payload, or None if it errored or the session was cancelled."""
+        final = None
+        for ev in gen:
+            if self._cancel.is_set():
+                return None
+            self._q.put(ev)
+            if ev.get('kind') == 'done':
+                final = ev
+            elif ev.get('kind') == 'error':
+                return None
+        return final
+
+    def _wait(self, event):
+        """Block on an operator action; False if the session was cancelled."""
+        event.wait()
+        return not self._cancel.is_set()
+
+    def _run(self):
+        try:
+            if self._drain(bt_setup.check_adapter()) is None:
+                return
+
+            # Pause: operator puts the controller into pairing mode.
+            self._q.put({'kind': 'await', 'what': 'pairing_mode'})
+            if not self._wait(self._continue):
+                return
+
+            res = self._drain(bt_setup.scan(bt_setup.PAIRING_SCAN_SECS))
+            if res is None:
+                return
+            devices = res.get('devices', [])
+            self._q.put({'kind': 'devices', 'devices': devices})
+            if not devices:
+                self._q.put({'kind': 'error', 'message': 'No devices found. '
+                             'Make sure the controller is in pairing mode.'})
+                return
+
+            # Pause: operator picks a device.
+            if not self._wait(self._select):
+                return
+
+            if self._drain(bt_setup.pair(self._mac)) is None:
+                return
+            self._drain(bt_setup.verify())
+        except Exception as e:
+            self._q.put({'kind': 'error', 'message': 'Setup failed: ' + str(e)})
+        finally:
+            # Exactly one terminal marker so the SSE stream always closes.
+            self._q.put({'kind': 'aborted' if self._cancel.is_set()
+                         else 'complete'})
+
+
 class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         pass
+
+    def _sse_setup_events(self):
+        """Stream the active SetupSession's events as Server-Sent Events."""
+        sess = _setup_session
+        if sess is None:
+            self._send_json({'error': 'no active setup session'}, 409)
+            return
+        try:
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/event-stream')
+            self.send_header('Cache-Control', 'no-cache')
+            self.send_header('Connection', 'close')
+            self.end_headers()
+            for ev in sess.events():
+                self.wfile.write(('data: ' + json.dumps(ev) + '\n\n').encode())
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            # Browser closed the modal / navigated away — abort the pairing.
+            sess.cancel()
 
     def _send_json(self, data, status=200):
         body = json.dumps(data).encode()
@@ -273,6 +399,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._send_json(_gamepad_reader.snapshot())
 
+        elif self.path == '/api/gamepad/setup/events':
+            self._sse_setup_events()
+
         elif self.path == '/config':
             self._send_json(_load_config())
 
@@ -302,7 +431,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({'error': 'not found'}, 404)
 
     def do_POST(self):
-        global _last_drive_t
+        global _last_drive_t, _setup_session
         data = self._read_json()
 
         if self.path == '/drive':
@@ -325,6 +454,33 @@ class Handler(BaseHTTPRequestHandler):
                 return
             _driver.send_estop()
             self._send_json({'status': 'e-stop sent'})
+
+        elif self.path == '/api/gamepad/setup/start':
+            if not _SETUP_AVAILABLE:
+                self._send_json({'error': 'Bluetooth setup not available'}, 503)
+                return
+            # Cancel any prior session, then begin a fresh one.
+            if _setup_session is not None:
+                _setup_session.cancel()
+            _setup_session = SetupSession()
+            _setup_session.start()
+            self._send_json({'ok': True})
+
+        elif self.path == '/api/gamepad/setup/continue':
+            if _setup_session is not None:
+                _setup_session.cont()
+            self._send_json({'ok': True})
+
+        elif self.path == '/api/gamepad/setup/select':
+            mac = (data or {}).get('mac')
+            if _setup_session is not None and mac:
+                _setup_session.select(mac)
+            self._send_json({'ok': bool(mac)})
+
+        elif self.path == '/api/gamepad/setup/cancel':
+            if _setup_session is not None:
+                _setup_session.cancel()
+            self._send_json({'ok': True})
 
         else:
             self._send_json({'error': 'not found'}, 404)

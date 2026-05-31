@@ -71,6 +71,8 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 
 The Machenike G3 V2 connects to the Jetson over Bluetooth via an RTL8761B USB dongle ("BT 6.0", USB id `0bda:a760`).
 
+> For the full, repeatable per-robot commissioning procedure (driver → host setup → verify → acceptance), see **[docs/commissioning_bluetooth.md](docs/commissioning_bluetooth.md)** — or just run the guide and follow its prompts: `bash tools/gamepad/commission_bluetooth.sh`. The steps below are the same actions, broken out.
+
 **Step 1 — Make the RTL8761B dongle work on the Jetson (once)**
 
 The L4T R32.7.x kernel (4.9.337-tegra) ships a `btrtl` that lacks the 8761B entry, so the dongle fails with `unknown project id 14`. Patch it once:
@@ -81,24 +83,33 @@ bash tools/gamepad/jetson_btrtl_8761b_fix.sh
 ```
 This rebuilds `btrtl.ko` with the missing project id, plants the 8761BU firmware, and blacklists the vendor `rtk_btusb` driver. Unplug/replug the dongle, then verify with `hciconfig -a`. Safe to re-run.
 
-**Step 2 — Hardware-calibrate the G3 V2 (once)**
+**Step 2 — Commission the Bluetooth host (once)**
+```bash
+bash tools/gamepad/setup_bluetooth_host.sh
+```
+One-time root setup so pairing afterwards needs **no sudo**: disables ERTM, unblocks rfkill, sets `AutoEnable=true` (adapter powers on at boot), and adds the dashboard user to the `bluetooth` group. After this, end-users can pair from the dashboard (the **GAMEPAD** pill → setup modal) without a terminal. Idempotent.
+
+**Step 3 — Hardware-calibrate the G3 V2 (once)**
 
 1. Press **Home + Select + B** simultaneously — LEDs blink blue.
 2. Move all sticks and triggers to their full extents.
 3. Press **Start** to confirm.
 
-**Step 3 — Pair the controller (Jetson)**
-```bash
-bash tools/gamepad/setup_gamepad.sh
-```
+**Step 4 — Pair the controller**
 
-**Step 4 — Software calibration (Jetson)**
+End-users: open the dashboard and click the **GAMEPAD** pill (top-right) to run the setup modal — no terminal needed. From a terminal you can instead run:
+```bash
+bash tools/gamepad/setup_gamepad.sh        # --verbose for full bluetoothctl output
+```
+Both paths share the same sudo-free pairing logic in `bt_setup.py`.
+
+**Step 5 — Software calibration (Jetson)**
 ```bash
 python3 tools/gamepad/gamepad_test.py --calibrate
 ```
 Saves axis ranges to `tools/gamepad/calibrations/`.
 
-**Step 5 — Validate all inputs**
+**Step 6 — Validate all inputs**
 ```bash
 python3 tools/gamepad/gamepad_test.py
 ```
@@ -265,8 +276,12 @@ tools/
   gamepad/
     gamepad_core.py            Shared evdev reading/normalisation primitives (state, calibration, MAP)
     gamepad_test.py            Live input validator — all axes/buttons, drive preview, calibration
-    setup_gamepad.sh           Interactive BT pairing — scan, pair, trust, connect
-    bt_setup.py                Python BT pairing orchestrator (structured progress events)
+    commission_bluetooth.sh    Resumable commissioning guide — prints the next step until done
+    setup_bluetooth_host.sh    One-time root BT commissioning (ERTM, AutoEnable, bluetooth group)
+    check_bluetooth_host.sh    Read-only commissioning verifier (PASS/WARN/FAIL + reboot acceptance test)
+    reset_bluetooth_host.sh    Revert Tier-2 commissioning + clear pairings (clean baseline for re-testing)
+    setup_gamepad.sh           Thin terminal wrapper over bt_setup.py (sudo-free pairing)
+    bt_setup.py                Sudo-free BT pairing orchestrator (structured progress events)
     jetson_btrtl_8761b_fix.sh  Patch btrtl.ko so the RTL8761B USB dongle works on the Jetson
     calibrations/              Per-controller axis calibration JSON files
   setup/
