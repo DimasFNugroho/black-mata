@@ -36,18 +36,17 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 - [x] Bird's-eye view — live per-wheel steer angles and drive direction arrows
 - [x] Per-wheel temperature heatmap — colour-coded overlaid on bird's-eye view
 - [x] Battery gauge — live voltage with colour-coded fill bar
-- [ ] Gamepad → dashboard drive integration (evdev path, Jetson-local)
+- [x] Gamepad → dashboard drive integration (evdev path, Jetson-local) — live state widget, drive merger with Shift/L1 precedence, hold-to-confirm e-stop unlatch
 - [ ] Browser Gamepad API → remote drive via dashboard (operator-side gamepad over network)
 - [ ] Servo status panel (per-servo voltages, temperatures, positions, modes)
 
 ### Bluetooth Gamepad (`tools/gamepad/`)
 
 - [x] BT pairing automation — interactive scan/pair/trust/connect via persistent bluetoothctl session (`setup_gamepad.sh`)
-- [x] ESP32-C6 as BLE HCI adapter — registers as hci0 via hciattach; systemd service auto-starts at boot (`setup_esp32_hci.sh`)
-- [x] ESP32-C6 HCI firmware — BLE controller-only mode over UART0 at 115200 baud, built with ESP-IDF v5 (`firmware/esp32_hci/`)
+- [x] RTL8761B USB BT dongle on Jetson — rebuilds `btrtl.ko` with the missing 8761B project id, plants 8761BU firmware, blacklists vendor `rtk_btusb` (`jetson_btrtl_8761b_fix.sh`)
 - [x] Gamepad input validator — live display of all axes (raw + normalised) and buttons; drive preview with steer, throttle, e-stop combo, arm (`gamepad_test.py`)
 - [x] Per-controller axis calibration — G3 V2 hardware calibration procedure + software range sweep; saves to JSON (`--calibrate`)
-- [ ] Gamepad → dashboard drive integration (evdev path, Jetson-local)
+- [x] Gamepad → dashboard drive integration (evdev path, Jetson-local)
 - [ ] Browser Gamepad API → remote drive via dashboard (operator-side gamepad over network)
 
 ### Infrastructure
@@ -68,41 +67,38 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 
 ---
 
-## Setting up Bluetooth Gamepad (G3 V2 + ESP32-C6)
+## Setting up Bluetooth Gamepad (G3 V2 + RTL8761B dongle)
 
-The Machenike G3 V2 connects to the Jetson over Bluetooth. An ESP32-C6 is used as a temporary BLE adapter until a USB dongle is available.
+The Machenike G3 V2 connects to the Jetson over Bluetooth via an RTL8761B USB dongle ("BT 6.0", USB id `0bda:a760`).
 
-**Step 1 — Flash ESP32-C6 (x86, once)**
+**Step 1 — Make the RTL8761B dongle work on the Jetson (once)**
+
+The L4T R32.7.x kernel (4.9.337-tegra) ships a `btrtl` that lacks the 8761B entry, so the dongle fails with `unknown project id 14`. Patch it once:
 ```bash
-. $HOME/esp/esp-idf/export.sh      # source ESP-IDF v5
-bash tools/gamepad/flash_esp32.sh  # build & flash via CH343 port
+# Place btrtl.c/btrtl.h (R32.7.x source) and rtl8761bu_fw.bin +
+# rtl8761bu_config.bin next to the script, then run on the Jetson:
+bash tools/gamepad/jetson_btrtl_8761b_fix.sh
 ```
+This rebuilds `btrtl.ko` with the missing project id, plants the 8761BU firmware, and blacklists the vendor `rtk_btusb` driver. Unplug/replug the dongle, then verify with `hciconfig -a`. Safe to re-run.
 
-**Step 2 — Register ESP32 as Bluetooth adapter (Jetson, once)**
-Plug the ESP32-C6 CH343 port into the Jetson, then:
-```bash
-bash tools/gamepad/setup_esp32_hci.sh
-```
-This attaches the ESP32 as `hci0` and installs a systemd service so it registers automatically at every boot.
-
-**Step 3 — Hardware-calibrate the G3 V2 (once)**
+**Step 2 — Hardware-calibrate the G3 V2 (once)**
 
 1. Press **Home + Select + B** simultaneously — LEDs blink blue.
 2. Move all sticks and triggers to their full extents.
 3. Press **Start** to confirm.
 
-**Step 4 — Pair the controller (Jetson)**
+**Step 3 — Pair the controller (Jetson)**
 ```bash
 bash tools/gamepad/setup_gamepad.sh
 ```
 
-**Step 5 — Software calibration (Jetson)**
+**Step 4 — Software calibration (Jetson)**
 ```bash
 python3 tools/gamepad/gamepad_test.py --calibrate
 ```
 Saves axis ranges to `tools/gamepad/calibrations/`.
 
-**Step 6 — Validate all inputs**
+**Step 5 — Validate all inputs**
 ```bash
 python3 tools/gamepad/gamepad_test.py
 ```
@@ -257,10 +253,6 @@ firmware/
   <sketch_name>/
     <sketch_name>.ino          Arduino sketch
     build/                     Compiled artifacts — gitignored
-  esp32_hci/                   ESP-IDF project — ESP32-C6 BLE HCI controller firmware
-    main/main.c                BLE controller-only mode, UART0 115200 baud
-    sdkconfig.defaults         ESP32-C6 BT/HCI config (BT_CTRL_* options)
-    CMakeLists.txt
 tools/
   ackermann_ui/
     server.py                  Browser config tool — parameter tuning, steer calibration, servo state
@@ -271,10 +263,11 @@ tools/
     camera_test.py             Standalone MJPEG stream server with /health endpoint
     setup_udev.py              One-time udev rule installer — stable /dev/robot_camera symlink
   gamepad/
+    gamepad_core.py            Shared evdev reading/normalisation primitives (state, calibration, MAP)
     gamepad_test.py            Live input validator — all axes/buttons, drive preview, calibration
     setup_gamepad.sh           Interactive BT pairing — scan, pair, trust, connect
-    setup_esp32_hci.sh         Register ESP32-C6 as hci0; install systemd service (Jetson)
-    flash_esp32.sh             Build & flash ESP32-C6 HCI firmware via ESP-IDF (x86)
+    bt_setup.py                Python BT pairing orchestrator (structured progress events)
+    jetson_btrtl_8761b_fix.sh  Patch btrtl.ko so the RTL8761B USB dongle works on the Jetson
     calibrations/              Per-controller axis calibration JSON files
   setup/
     ngrok_setup.sh             Install ngrok and configure auth token (one-time, Jetson)

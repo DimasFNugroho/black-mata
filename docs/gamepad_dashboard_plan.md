@@ -48,8 +48,14 @@ Unlatching must be deliberate. Two equivalent paths:
 - **Gamepad:** LS + RS clicked simultaneously for ~1 second (same
   hold-to-confirm shape).
 
-Both paths POST to a new `/api/estop/unlatch` endpoint, which clears the
-server-side latch and lets the next drive frame through.
+**As built:** the latch currently lives client-side in `app.js` (`_estopLatched`).
+Latching POSTs `/estop`; unlatching (after the 1 s hold) simply resumes drive
+frames and lets the firmware watchdog settle. There is **no** server-side
+`/api/estop/unlatch` endpoint yet.
+
+**TODO (server-side hardening):** add `POST /api/estop/unlatch` so the latch is
+enforced on the server too, not just in the browser — a reloaded/second tab
+should not be able to drive while latched. Tracked under Phase F below.
 
 ---
 
@@ -94,58 +100,59 @@ dashboard call the same `bt_setup.py` functions.
 
 ## Backend Endpoints
 
-| Method | Path                              | Purpose                                              |
-|--------|-----------------------------------|------------------------------------------------------|
-| GET    | `/api/gamepad/state`              | live `{connected, name, steer, throttle, buttons}`   |
-| GET    | `/api/gamepad/setup/events`       | SSE stream of pairing progress                       |
-| POST   | `/api/gamepad/setup/start`        | begin pairing flow (scan adapter, ERTM check)        |
-| POST   | `/api/gamepad/setup/continue`     | user acknowledged "controller in pairing mode"       |
-| POST   | `/api/gamepad/setup/select`       | `{mac}` — pair the device the user picked            |
-| POST   | `/api/gamepad/setup/cancel`       | abort pairing                                        |
-| POST   | `/api/estop/unlatch`              | clear the latched e-stop                             |
+| Method | Path                              | Purpose                                              | Status |
+|--------|-----------------------------------|------------------------------------------------------|--------|
+| GET    | `/api/gamepad/state`              | live `{connected, name, steer, throttle, buttons}`   | ✅ done |
+| GET    | `/api/gamepad/setup/events`       | SSE stream of pairing progress                       | ⬜ TODO (Phase H) |
+| POST   | `/api/gamepad/setup/start`        | begin pairing flow (scan adapter, ERTM check)        | ⬜ TODO (Phase H) |
+| POST   | `/api/gamepad/setup/continue`     | user acknowledged "controller in pairing mode"       | ⬜ TODO (Phase H) |
+| POST   | `/api/gamepad/setup/select`       | `{mac}` — pair the device the user picked            | ⬜ TODO (Phase H) |
+| POST   | `/api/gamepad/setup/cancel`       | abort pairing                                        | ⬜ TODO (Phase H) |
+| POST   | `/api/estop/unlatch`              | clear the latched e-stop (server-side)               | ⬜ TODO (latch is client-side for now) |
 
 ---
 
 ## Phases
 
-### Phase A — Refactor gamepad_test.py
-- [ ] Extract `tools/gamepad/gamepad_core.py` (GamepadState, normalize_*, MAP, calibration loaders)
-- [ ] `gamepad_test.py` imports from core; behaviour unchanged
-- [ ] Verify `python3 tools/gamepad/gamepad_test.py` still works end-to-end
+### Phase A — Refactor gamepad_test.py ✅
+- [x] Extract `tools/gamepad/gamepad_core.py` (GamepadState, normalize_*, MAP, calibration loaders)
+- [x] `gamepad_test.py` imports from core; behaviour unchanged
+- [x] Verify `python3 tools/gamepad/gamepad_test.py` still works end-to-end
 
-### Phase B — Split dashboard into static files
-- [ ] Move HTML/CSS/JS out of `HTML_TEMPLATE` into `tools/dashboard/static/`
-- [ ] Add `/static/*` handler in `server.py`
-- [ ] Verify dashboard still works exactly as before
+### Phase B — Split dashboard into static files ✅
+- [x] Move HTML/CSS/JS out of `HTML_TEMPLATE` into `tools/dashboard/static/`
+      (shipped as `index.html` + `app.js` + `style.css`; no separate `gamepad.js`)
+- [x] Add `/static/*` handler in `server.py`
+- [x] Verify dashboard still works exactly as before
 
-### Phase C — Backend gamepad reader
-- [ ] `GamepadReader` background thread in `server.py` (uses `gamepad_core.py`)
-- [ ] `/api/gamepad/state` endpoint
-- [ ] Auto-reconnect when device disappears/reappears
+### Phase C — Backend gamepad reader ✅
+- [x] `GamepadReader` background thread in `server.py` (uses `gamepad_core.py`)
+- [x] `/api/gamepad/state` endpoint
+- [x] Auto-reconnect when device disappears/reappears
 
-### Phase D — Topbar pill + live widget
-- [ ] Topbar pill: `KEYBOARD` / `GAMEPAD: <name>` / `IDLE` / `GAMEPAD: NONE`
-- [ ] Click pill → opens setup modal
-- [ ] Small gamepad widget (stick positions + throttle bar) under WASD card
-- [ ] Browser polls `/api/gamepad/state` at 20 Hz
+### Phase D — Topbar pill + live widget ✅
+- [x] Topbar pill: `KEYBOARD` / `GAMEPAD: <name>` / `IDLE` / `GAMEPAD: NONE`
+- [~] Click pill → opens setup modal *(pill present; modal is Phase H, not yet wired)*
+- [x] Small gamepad widget (stick positions + throttle bar) under WASD card
+- [x] Browser polls `/api/gamepad/state` at 20 Hz
 
-### Phase E — Drive merger + Shift precedence
-- [ ] Browser tracks Shift state and stick activity
-- [ ] Drive POST uses keyboard inputs when Shift held, gamepad otherwise
-- [ ] `preventDefault()` on Shift+W/A/S/D to suppress browser shortcuts
+### Phase E — Drive merger + Shift precedence ✅
+- [x] Browser tracks Shift state and stick activity
+- [x] Drive POST uses keyboard inputs when Shift held, gamepad otherwise
+- [x] `preventDefault()` on Shift+W/A/S/D to suppress browser shortcuts
 
-### Phase F — E-stop unlatch UX
-- [ ] `RESET E-STOP` button in topbar, visible only when latched
-- [ ] Hold-to-confirm with visual fill animation
-- [ ] LS + RS gamepad combo with same hold-to-confirm timing
+### Phase F — E-stop unlatch UX ✅ (UX done; server endpoint deferred)
+- [x] `RESET E-STOP` button in topbar, visible only when latched
+- [x] Hold-to-confirm with visual fill animation
+- [x] LS + RS gamepad combo with same hold-to-confirm timing
 - [ ] `/api/estop/unlatch` endpoint clears latch + acknowledges
+      *(TODO — latch is currently client-side in `app.js`; see "E-stop Unlatch" above)*
 
-### Phase G — BT setup orchestrator
-- [ ] `tools/gamepad/bt_setup.py` — functions: `check_adapter`, `scan(secs)`, `pair(mac)`, `verify(mac)`
-- [ ] Each function yields structured progress events (phase, percent, label)
-- [ ] `setup_gamepad.sh` becomes a thin wrapper that consumes the same events and renders them as the existing progress bars
+### Phase G — BT setup orchestrator 🟡 (partial)
+- [x] `tools/gamepad/bt_setup.py` — functions yield structured progress events
+- [ ] `setup_gamepad.sh` consumes the same events *(shell still has its own bluetoothctl logic; not yet a thin wrapper over `bt_setup.py`)*
 
-### Phase H — Setup modal UI
+### Phase H — Setup modal UI ⬜ (not started)
 - [ ] Modal markup in `static/setup_modal.html`, loaded on demand
 - [ ] Phases mirror the shell script: adapter check → ERTM → pairing-mode prompt → scan with progress bar → device picker → pair with phase progress bar → verify
 - [ ] Consumes the SSE stream from `/api/gamepad/setup/events`

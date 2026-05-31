@@ -213,7 +213,7 @@
     rather than building from scratch. The <strong>dxl_commander</strong> firmware already exists and abstracts
     all Dynamixel protocol complexity, so the host (Jetson) communicates with servos via a simple
     binary frame protocol over USB Serial. A <strong>Machenike G3 V2</strong> gamepad connects to the Jetson
-    over Bluetooth (via an ESP32-C6 acting as a BLE HCI adapter) and is read via evdev.
+    over Bluetooth (via an RTL8761B USB dongle) and is read via evdev.
   </div>
 
   <h2 class="section-heading">Main Features — v1</h2>
@@ -286,11 +286,10 @@
       <div class="feat-body">
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Keyboard WASD drive control</span><span class="todo-mod">tools/dashboard/</span></div>
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Bluetooth pairing automation — interactive scan, pair, trust, connect via persistent bluetoothctl session</span><span class="todo-mod">tools/gamepad/setup_gamepad.sh</span></div>
-        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">ESP32-C6 as BLE HCI adapter — exposes hci0 to bluetoothd via hciattach; systemd service auto-starts at boot</span><span class="todo-mod">tools/gamepad/setup_esp32_hci.sh</span></div>
-        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">ESP32-C6 HCI firmware — BLE controller-only mode over UART0, built with ESP-IDF v5</span><span class="todo-mod">firmware/esp32_hci/</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">RTL8761B USB BT dongle on Jetson — rebuilds btrtl.ko with the missing 8761B project id, plants 8761BU firmware, blacklists vendor rtk_btusb</span><span class="todo-mod">tools/gamepad/jetson_btrtl_8761b_fix.sh</span></div>
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Gamepad input validator — all axes (raw + normalised) and buttons displayed live; drive preview with steer, throttle, e-stop, arm</span><span class="todo-mod">tools/gamepad/gamepad_test.py</span></div>
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Per-controller axis calibration — hardware procedure + software sweep; saves lo/hi/center per axis to JSON</span><span class="todo-mod">tools/gamepad/calibrations/</span></div>
-        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Gamepad → dashboard drive integration (evdev path, Jetson-local)</span><span class="todo-mod">tools/dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Gamepad → dashboard drive integration (evdev path, Jetson-local) — GamepadReader thread, /api/gamepad/state, drive merger with Shift/L1 precedence</span><span class="todo-mod">tools/dashboard/</span></div>
         <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Browser Gamepad API → remote drive via dashboard (operator-side gamepad over any network)</span><span class="todo-mod">tools/dashboard/</span></div>
       </div>
     </details>

@@ -173,32 +173,20 @@ fi
 
 if [ -z "$HCI" ]; then
     echo ""
-    echo "  Still no adapter. How is your BT hardware connected?"
-    echo ""
-    echo "    [0] USB BT dongle  — plug in the dongle and press Enter to retry"
-    echo "    [1] ESP32 via USB  — run setup_esp32_hci.sh first, then retry"
-    echo ""
-    read -rp "  Choice [0/1]: " CHOICE
-    case "$CHOICE" in
-        1)
-            err "Run this first to register the ESP32 as a BT adapter:
-       bash tools/gamepad/setup_esp32_hci.sh
-       Then re-run this script."
-            ;;
-        *)
-            echo "  Retrying after USB dongle plug-in..."
-            sudo modprobe btusb 2>/dev/null || true
-            sleep 2
-            sudo systemctl restart bluetooth
-            sleep 1
-            HCI=$(find_hci)
-            ;;
-    esac
+    echo "  Still no adapter. Plug in the RTL8761B USB BT dongle and press Enter"
+    echo "  to retry. (First time on this Jetson? Run jetson_btrtl_8761b_fix.sh"
+    echo "  once so the kernel recognises the dongle.)"
+    pause
+    sudo modprobe btusb 2>/dev/null || true
+    sleep 2
+    sudo systemctl restart bluetooth
+    sleep 1
+    HCI=$(find_hci)
 fi
 
 [ -z "$HCI" ] && err "No Bluetooth adapter found.
-       USB BT dongle: check it appears in 'lsusb' and the btusb driver loaded.
-       ESP32:         run 'bash tools/gamepad/setup_esp32_hci.sh' first."
+       Check the dongle appears in 'lsusb' and the btusb driver loaded.
+       If it logs 'unknown project id 14', run jetson_btrtl_8761b_fix.sh first."
 
 # Bring the adapter fully up. On a headless box (no desktop GUI to toggle
 # Bluetooth) the adapter is often rfkill-soft-blocked and/or not powered at the

@@ -116,8 +116,9 @@ def check_adapter():
 
     if not hci:
         yield _evt('error', message=(
-            'No Bluetooth adapter found. Plug in a USB BT dongle, or run '
-            'setup_esp32_hci.sh first to register an ESP32 as the HCI.'
+            'No Bluetooth adapter found. Plug in the RTL8761B USB dongle. '
+            'If the kernel logs "unknown project id 14", run '
+            'jetson_btrtl_8761b_fix.sh first.'
         ))
         return
 
