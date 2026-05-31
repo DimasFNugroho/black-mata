@@ -40,7 +40,7 @@ try:
     _GAMEPAD_AVAILABLE = True
 except ImportError:
     print('[Gamepad] evdev not available — gamepad support disabled.')
-    print('          Install with: pip3 install --user evdev')
+    print('          Install with: sudo apt install python3-evdev')
 
 import select
 

@@ -6,8 +6,9 @@ pyserial>=3.5
 # opencv: use system install (JetPack provides it via apt, not pip)
 # On Jetson: sudo apt install python3-opencv
 websockets>=9.0,<10.0   # 10.0+ requires Python 3.7+
-# gamepad input. Jetson Nano (Python 3.6) can only get evdev 0.7.0 (apt:
-# python3-evdev); newer pins fail to build there. Hosts get a modern evdev.
-# The code (gamepad_core.dev_path) handles the .fn vs .path API difference.
-evdev>=0.7.0; python_version < "3.7"
-evdev>=1.6;   python_version >= "3.7"
+# gamepad input: use the system package, NOT pip (same as opencv above).
+# On Jetson: sudo apt install python3-evdev   (Python 3.6 -> evdev 0.7.0)
+# The code (gamepad_core.dev_path) supports both the 0.7.0 `.fn` API and the
+# newer `.path` API, so any evdev >= 0.7.0 works. We standardize on the apt
+# build to avoid a second pip copy shadowing it. On a modern dev host you can
+# `pip install evdev` instead.

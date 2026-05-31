@@ -114,22 +114,26 @@ pair_progress() {
 
 step "Step 1/6 — python-evdev"
 
-command -v pip3 >/dev/null 2>&1 || \
-    err "pip3 not found. Run: sudo apt-get install -y python3-pip"
+# We standardize on the system package (apt python3-evdev). On the Jetson
+# (Python 3.6) that is evdev 0.7.0; the code (gamepad_core.dev_path) supports
+# both the 0.7.0 `.fn` API and the newer `.path` API, so we do NOT force a pip
+# upgrade. Detect by import — apt installs are invisible to `pip3 show`.
+PYTHON=python3
 
-if pip3 show evdev &>/dev/null; then
-    EVDEV_VER=$(pip3 show evdev | grep '^Version' | awk '{print $2}')
+if ${PYTHON} -c 'import evdev' 2>/dev/null; then
+    EVDEV_VER=$(${PYTHON} -c 'import pkg_resources; \
+print(pkg_resources.get_distribution("evdev").version)' 2>/dev/null || echo '?')
     ok "evdev ${EVDEV_VER} already installed."
+elif sudo apt-get install -y python3-evdev >/dev/null 2>&1 \
+        && ${PYTHON} -c 'import evdev' 2>/dev/null; then
+    ok "evdev installed (apt python3-evdev)."
+elif command -v pip3 >/dev/null 2>&1 && pip3 install --user evdev >/dev/null 2>&1 \
+        && ${PYTHON} -c 'import evdev' 2>/dev/null; then
+    ok "evdev installed (pip fallback)."
 else
-    pip3 install --user 'evdev>=1.6'
-    pip3 show evdev &>/dev/null || err "evdev install failed."
-    ok "evdev installed."
+    err "Could not install evdev. Try: sudo apt-get install -y python3-evdev"
 fi
 
-# Resolve the Python interpreter that pip3 belongs to so the rest of the
-# script (and the test command at the end) uses the same one.
-PYTHON=$(pip3 --version | grep -oP '(?<=\()python[0-9.]+' | head -1)
-PYTHON=${PYTHON:-python3}
 ok "Using interpreter: ${PYTHON} ($(${PYTHON} --version 2>&1))"
 
 # ── Step 2: Disable ERTM ─────────────────────────────────────────────────────
@@ -196,8 +200,23 @@ fi
        USB BT dongle: check it appears in 'lsusb' and the btusb driver loaded.
        ESP32:         run 'bash tools/gamepad/setup_esp32_hci.sh' first."
 
+# Bring the adapter fully up. On a headless box (no desktop GUI to toggle
+# Bluetooth) the adapter is often rfkill-soft-blocked and/or not powered at the
+# BlueZ level. Without a BlueZ `power on`, later `remove`/`pair`/`connect` fail
+# with org.bluez.Error.NotReady — the desktop GUI normally does this for you.
+sudo rfkill unblock bluetooth 2>/dev/null || true
 sudo hciconfig "${HCI}" up 2>/dev/null || true
-ok "Adapter ${HCI} is up."
+# Feed commands via stdin, NOT as one-shot args: on the Jetson's BlueZ 5.48,
+# `bluetoothctl power on` / `show` as arguments drop into interactive mode and
+# block on stdin (the script gets suspended). The piped form works everywhere.
+printf 'power on\nquit\n' | bluetoothctl >/dev/null 2>&1 || true
+sleep 1
+if printf 'show\nquit\n' | bluetoothctl 2>/dev/null | grep -q 'Powered: yes'; then
+    ok "Adapter ${HCI} is up and powered."
+else
+    warn "Adapter ${HCI} is up but not powered. Pairing may fail with NotReady;
+       try: printf 'power on\\nquit\\n' | bluetoothctl"
+fi
 
 # ── Step 4: Controller in pairing mode ───────────────────────────────────────
 
@@ -220,43 +239,65 @@ pause
 
 step "Step 5/6 — Scan, pair, and connect"
 
+# Clear BlueZ's device cache first. This is a (re-)pairing tool, so we don't
+# want stale entries from past scans (TVs, lightstrips, old bonds) cluttering
+# the selection list — only what's actually advertising now should show up.
+# `remove *` wipes all known devices; best-effort, piped + timed so it can't
+# block on BlueZ 5.48.
+echo "  Clearing previously-known devices..."
+printf 'remove *\nquit\n' | timeout 10 bluetoothctl >/dev/null 2>&1 || true
+
 echo "  Scanning for ${PAIRING_SCAN_SECS} seconds..."
 
 # Keep one scan session running a few seconds PAST our device query. BlueZ
 # evicts freshly-discovered, unpaired devices the instant discovery stops (the
-# [DEL] lines at the end of a scan), so a `bluetoothctl devices` call made after
-# `scan off` comes back empty. We must read the list WHILE the scan is active.
-if [ "${VERBOSE}" -eq 1 ]; then
-    SCAN_REDIR=/dev/stdout
-else
-    SCAN_REDIR=/dev/null
-fi
-
+# [DEL] lines at the end of a scan). Rather than rely on a `bluetoothctl
+# devices` one-shot (which on BlueZ 5.48 can drop into interactive mode and
+# return nothing), we capture the scan session's full output and parse the
+# devices from its own [NEW]/[CHG] Device lines. Those are written while the
+# scan runs, so they survive the post-scan purge. `quit` + `timeout` ensure the
+# session always ends and can never block the script.
+SCAN_OUT=$(mktemp /tmp/btctl_scan.XXXXXX)
 {
     echo "power on"
     echo "agent on"
     echo "default-agent"
     echo "scan on"
-    sleep "$(( PAIRING_SCAN_SECS + 3 ))"
+    sleep "${PAIRING_SCAN_SECS}"
     echo "scan off"
     sleep 1
-} | bluetoothctl > "${SCAN_REDIR}" 2>&1 &
+    echo "quit"
+} | timeout "$(( PAIRING_SCAN_SECS + 10 ))" bluetoothctl > "${SCAN_OUT}" 2>&1 &
 SCAN_PID=$!
 
-if [ "${VERBOSE}" -eq 1 ]; then
-    sleep "${PAIRING_SCAN_SECS}"
-else
-    countdown_bar "Scanning" "${PAIRING_SCAN_SECS}" "${SCAN_PID}"
-fi
+countdown_bar "Scanning" "${PAIRING_SCAN_SECS}" "${SCAN_PID}"
+wait "${SCAN_PID}" 2>/dev/null || true
+[ "${VERBOSE}" -eq 1 ] && cat "${SCAN_OUT}"
 
 echo ""
 echo "  Devices discovered:"
 echo ""
 
-# Query while discovery is still active (background scan has ~3s left), then
-# let the scan session finish on its own.
-mapfile -t DEVICES < <(bluetoothctl devices 2>/dev/null | grep '^Device ')
-wait "${SCAN_PID}" 2>/dev/null || true
+# One "Device <MAC> <name>" line per unique MAC, parsed from the scan output.
+# Prefer a real name (from a [NEW] label or a "Name:" change) over property
+# lines like RSSI/TxPower; fall back to the MAC as the label. mawk-compatible
+# (no {n} intervals or gawk extensions).
+mapfile -t DEVICES < <(
+    sed -E 's/\x1b\[[0-9;?]*[A-Za-z]//g' "${SCAN_OUT}" \
+    | awk '
+        /\[NEW\] Device / || /\[CHG\] Device / {
+            mac=""; for (i=1;i<=NF;i++) if ($i=="Device") { mac=$(i+1); ns=i+2; break }
+            if (mac !~ /:/) next
+            rest=""; for (j=ns;j<=NF;j++) rest=rest (j>ns?" ":"") $j
+            if (rest ~ /^Name:/)            { sub(/^Name:[ \t]*/,"",rest); nm[mac]=rest }
+            else if (rest ~ /^[A-Za-z][A-Za-z0-9]*:/) { if (!(mac in nm)) nm[mac]=mac }
+            else                            { if (!(mac in nm) || nm[mac]==mac) nm[mac]=(rest==""?mac:rest) }
+            if (!(mac in ord)) { ord[mac]=1; seq[++n]=mac }
+        }
+        END { for (k=1;k<=n;k++) printf "Device %s %s\n", seq[k], nm[seq[k]] }
+    '
+)
+rm -f "${SCAN_OUT}"
 
 if [ ${#DEVICES[@]} -eq 0 ]; then
     err "No devices found. Make sure the controller LED is flashing (pairing mode)
@@ -279,71 +320,88 @@ NAME=$(echo "${DEVICES[$IDX]}" | cut -d' ' -f3-)
 echo ""
 ok "Selected: ${NAME}  (${MAC})"
 
-# Remove any stale pairing entry so 'pair' never hits AlreadyExists and
-# br-connection-create-socket doesn't fail on mismatched link keys.
-ALREADY_KNOWN=$(bluetoothctl info "${MAC}" 2>/dev/null | grep -c 'Device' || true)
-if [ "${ALREADY_KNOWN}" -gt 0 ]; then
-    warn "Stale pairing found — removing it first for a clean re-pair..."
-    bluetoothctl remove "${MAC}" 2>/dev/null || true
-    sleep 1
-fi
-
 echo ""
-echo "  Pairing, trusting, and connecting..."
-warn "Keep the controller in pairing mode (LED flashing rapidly)."
+warn "Make sure the controller is STILL in pairing mode (LED flashing rapidly)."
+warn "Xbox pads drop out of pairing mode in ~20-30s — if it stopped flashing,"
+warn "hold the Connect button ~3s again RIGHT NOW before continuing."
+read -r -p "  Press Enter to pair... " _
+echo ""
+echo "  Pairing and trusting..."
 echo ""
 
-# Re-scan within the same session so the agent is registered before 'pair'
-# and the device is rediscovered in BlueZ's cache before we try to pair it.
+# Sequence proven to work on this Jetson (BlueZ 5.48):
+#   remove -> power on -> agent -> scan on (rediscover) -> pair -> trust -> scan off
+# Scan stays ON through pair/trust: BlueZ purges unpaired devices the instant
+# discovery stops, so pairing AFTER `scan off` races the purge and fails.
+# Then connect SEPARATELY with retries: an Xbox pad drops once right after
+# `trust` (Connected: no), so the connect must land after that drop to stick.
+_pairtrust_script() {
+#    echo "remove ${MAC}";  sleep 1
+    echo "power on"
+    echo "agent on"
+    echo "default-agent"
+    echo "scan on";        sleep 6
+    echo "pair ${MAC}";    sleep 5   # pair WHILE scanning so BlueZ doesn't
+    echo "trust ${MAC}";   sleep 2    # purge the device before we pair it
+    echo "scan off"
+    echo "quit"
+}
+
+BTLOG=$(mktemp /tmp/btctl_pair.XXXXXX)
+trap 'rm -f "${BTLOG}"' EXIT
+
 if [ "${VERBOSE}" -eq 1 ]; then
-    {
-        echo "agent on"
-        echo "default-agent"
-        echo "scan on"
-        sleep 5
-        echo "scan off"
-        sleep 1
-        echo "pair ${MAC}"
-        sleep 8
-        echo "trust ${MAC}"
-        sleep 1
-        echo "connect ${MAC}"
-        sleep 5
-    } | bluetoothctl 2>&1 || true
+    _pairtrust_script | timeout 40 bluetoothctl 2>&1 | tee "${BTLOG}" || true
 else
-    BTLOG=$(mktemp /tmp/btctl_pair.XXXXXX)
-    trap 'rm -f "${BTLOG}"' EXIT
-
-    {
-        echo "agent on"
-        echo "default-agent"
-        echo "scan on"
-        sleep 5
-        echo "scan off"
-        sleep 1
-        echo "pair ${MAC}"
-        sleep 8
-        echo "trust ${MAC}"
-        sleep 1
-        echo "connect ${MAC}"
-        sleep 5
-    } | bluetoothctl >> "${BTLOG}" 2>&1 &
+    _pairtrust_script | timeout 45 bluetoothctl >> "${BTLOG}" 2>&1 &
     BTPID=$!
-
     pair_progress "${BTLOG}" "${BTPID}" 20
     wait "${BTPID}" 2>/dev/null || true
-    rm -f "${BTLOG}"
-    trap - EXIT
 fi
 
-sleep 2
-
-CONNECTED=$(bluetoothctl info "${MAC}" 2>/dev/null | grep -c 'Connected: yes' || true)
-if [ "${CONNECTED}" -gt 0 ]; then
-    ok "Controller connected."
+# Did pairing actually complete? If not, the controller almost certainly left
+# pairing mode — skip the connect retries instead of hammering a dead device.
+if grep -q 'Pairing successful\|Paired: yes' "${BTLOG}" 2>/dev/null; then
+    PAIRED=1
 else
-    warn "Connection status unclear — the controller may still be connecting."
-    warn "If it fails, try: bluetoothctl connect ${MAC}"
+    PAIRED=0
+fi
+rm -f "${BTLOG}"
+trap - EXIT
+
+CONNECTED=0
+if [ "${PAIRED}" -eq 0 ]; then
+    warn "Pairing did not complete — the controller likely left pairing mode."
+    warn "Hold the Connect button (~3s, fast flash) and re-run the script."
+else
+    # An Xbox pad drops once right after `trust`, so connect must land after
+    # that drop to hold. Check first (pairing may have auto-connected and held),
+    # then connect + retry. `timeout` wraps every bluetoothctl call — including
+    # `info`, which can otherwise drop into interactive mode and hang the script
+    # even though the controller is connected.
+    echo ""
+    for attempt in 1 2 3; do
+        if timeout 6 bluetoothctl info "${MAC}" 2>/dev/null | grep -q 'Connected: yes'; then
+            CONNECTED=1
+            break
+        fi
+        warn "Connecting (attempt ${attempt})..."
+        { echo "connect ${MAC}"; sleep 4; echo "quit"; } \
+            | timeout 10 bluetoothctl >/dev/null 2>&1 || true
+        sleep 1
+    done
+    # Catch a connect that landed on the final attempt.
+    if [ "${CONNECTED}" -eq 0 ] \
+       && timeout 6 bluetoothctl info "${MAC}" 2>/dev/null | grep -q 'Connected: yes'; then
+        CONNECTED=1
+    fi
+fi
+
+if [ "${CONNECTED}" -eq 1 ]; then
+    ok "Controller connected and holding."
+else
+    warn "Connection didn't hold after retries. Wake the controller and retry:"
+    warn "  printf 'connect ${MAC}\\nquit\\n' | bluetoothctl"
 fi
 
 # ── Step 6: Verify evdev input device ────────────────────────────────────────

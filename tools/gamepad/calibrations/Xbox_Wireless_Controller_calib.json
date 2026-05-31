@@ -1,0 +1,53 @@
+{
+  "device": "Xbox Wireless Controller",
+  "axes": {
+    "0": {
+      "name": "ABS_X",
+      "lo": 0,
+      "hi": 65535,
+      "center": 32768
+    },
+    "1": {
+      "name": "ABS_Y",
+      "lo": 0,
+      "hi": 65535,
+      "center": 32799
+    },
+    "2": {
+      "name": "ABS_Z",
+      "lo": 0,
+      "hi": 65535,
+      "center": 32768
+    },
+    "5": {
+      "name": "ABS_RZ",
+      "lo": 0,
+      "hi": 65407,
+      "center": 32767
+    },
+    "9": {
+      "name": "ABS_GAS",
+      "lo": 1023,
+      "hi": 1023,
+      "center": 1023
+    },
+    "10": {
+      "name": "ABS_BRAKE",
+      "lo": 1023,
+      "hi": 1023,
+      "center": 1023
+    },
+    "16": {
+      "name": "ABS_HAT0X",
+      "lo": -1,
+      "hi": 1,
+      "center": 0
+    },
+    "17": {
+      "name": "ABS_HAT0Y",
+      "lo": -1,
+      "hi": 1,
+      "center": 0
+    }
+  }
+}

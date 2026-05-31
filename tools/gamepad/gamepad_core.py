@@ -19,7 +19,8 @@ try:
 except ImportError:
     sys.stderr.write(
         "evdev not installed.\n"
-        "  pip3 install --user 'evdev>=1.6'\n"
+        "  sudo apt install python3-evdev      (Jetson / system Python)\n"
+        "  # or, on a non-system Python:  pip install evdev\n"
         "or run tools/gamepad/setup_gamepad.sh which installs it for you.\n"
     )
     raise
