@@ -6,6 +6,15 @@ Shared by:
   - tools/dashboard/server.py         (live drive integration)
 
 Anything that is curses- or terminal-specific stays in gamepad_test.py.
+
+evdev dependency (authoritative note — other files reference this one):
+  Requires evdev >= 0.7.0. The code is version-agnostic: dev_path() abstracts
+  the only API difference (`.fn` in 0.7.0 vs `.path` in >= 1.0), and codes that
+  may be absent on a given build are looked up with getattr(..., None). So any
+  build at or above the floor behaves identically — there is no version pin.
+    - Jetson (real target, Python 3.6): apt's python3-evdev, which is 0.7.0.
+    - x86 (eval/test only): pip's current build. Apt installs to system
+      site-packages and is invisible inside a venv, so use pip there.
 """
 
 import json

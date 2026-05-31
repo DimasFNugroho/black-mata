@@ -114,10 +114,10 @@ pair_progress() {
 
 step "Step 1/6 — python-evdev"
 
-# We standardize on the system package (apt python3-evdev). On the Jetson
-# (Python 3.6) that is evdev 0.7.0; the code (gamepad_core.dev_path) supports
-# both the 0.7.0 `.fn` API and the newer `.path` API, so we do NOT force a pip
-# upgrade. Detect by import — apt installs are invisible to `pip3 show`.
+# Installs evdev (>= 0.7.0). See tools/gamepad/gamepad_core.py for the version
+# notes; in short, any build >= 0.7.0 works. Prefer apt (python3-evdev) on the
+# Jetson, fall back to pip elsewhere. Detect by import — apt installs are
+# invisible to `pip3 show`.
 PYTHON=python3
 
 if ${PYTHON} -c 'import evdev' 2>/dev/null; then
