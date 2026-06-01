@@ -121,12 +121,12 @@
       Canvas: 1100 × 840
       Layout (top-to-bottom):
         Operator (Person)  — top-left, outside boundary
-        Tailscale VPN      — right, outside boundary
+        ngrok (demo only)  — right, outside boundary
         System Boundary    — dashed rect wrapping 4 containers
-          Dashboard        — top container
-          Robot Agent      — second container
-          dxl_commander    — third container
-          AX-12A Servos    — bottom container (data store)
+          Dashboard          — top container (browser UI)
+          Dashboard Server   — second container (Jetson, stdlib HTTP)
+          black_mata_firmware— third container
+          AX-12A Servos      — bottom container (data store)
     -->
     <svg id="c4-svg" viewBox="0 0 1100 840"
          xmlns="http://www.w3.org/2000/svg"
@@ -155,16 +155,16 @@
       <text x="115" y="178" text-anchor="middle" fill="#b8cfe8" font-size="12">browser.</text>
 
       <!-- ═══════════════════════════════════════════════════════
-           TAILSCALE VPN  (External System)
+           NGROK  (External System — demo only)
            box: x=868, y=310, w=200, h=120
       ════════════════════════════════════════════════════════════ -->
       <rect x="868" y="310" width="200" height="120" rx="6" fill="#7a7a7a"/>
-      <text x="968" y="338" text-anchor="middle" fill="#ffffff" font-size="11" font-style="italic">«External System»</text>
-      <text x="968" y="360" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">Tailscale VPN</text>
+      <text x="968" y="338" text-anchor="middle" fill="#ffffff" font-size="11" font-style="italic">«External System — demo»</text>
+      <text x="968" y="360" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">ngrok</text>
       <line x1="878" y1="368" x2="1058" y2="368" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
-      <text x="968" y="386" text-anchor="middle" fill="#e0e0e0" font-size="12">WireGuard mesh VPN.</text>
-      <text x="968" y="402" text-anchor="middle" fill="#e0e0e0" font-size="12">NAT traversal between</text>
-      <text x="968" y="418" text-anchor="middle" fill="#e0e0e0" font-size="12">operator and robot.</text>
+      <text x="968" y="386" text-anchor="middle" fill="#e0e0e0" font-size="12">Temporary HTTPS tunnel</text>
+      <text x="968" y="402" text-anchor="middle" fill="#e0e0e0" font-size="12">to the dashboard (:8082)</text>
+      <text x="968" y="418" text-anchor="middle" fill="#e0e0e0" font-size="12">for remote demos.</text>
 
       <!-- ═══════════════════════════════════════════════════════
            SYSTEM BOUNDARY  (dashed)
@@ -192,26 +192,26 @@
            center: (535, 330)
       ════════════════════════════════════════════════════════════ -->
       <rect x="264" y="255" width="542" height="150" rx="6" fill="#1168BD"/>
-      <text x="535" y="281" text-anchor="middle" fill="#b8d4f0" font-size="11" font-style="italic">«Container: Python / FastAPI + uvicorn»</text>
-      <text x="535" y="303" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">Robot Agent</text>
+      <text x="535" y="281" text-anchor="middle" fill="#b8d4f0" font-size="11" font-style="italic">«Container: Python / stdlib HTTP»</text>
+      <text x="535" y="303" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">Dashboard Server</text>
       <line x1="274" y1="311" x2="796" y2="311" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
-      <text x="535" y="329" text-anchor="middle" fill="#b8d4f0" font-size="12">Central server on the Jetson. Hosts WebSocket endpoint</text>
-      <text x="535" y="345" text-anchor="middle" fill="#b8d4f0" font-size="12">for drive commands (/ws), MJPEG stream (/stream),</text>
-      <text x="535" y="361" text-anchor="middle" fill="#b8d4f0" font-size="12">and JSON REST endpoint for servo telemetry (/status).</text>
-      <text x="535" y="377" text-anchor="middle" fill="#b8d4f0" font-size="12">Runs at port 8000 via uvicorn.</text>
+      <text x="535" y="329" text-anchor="middle" fill="#b8d4f0" font-size="12">Server on the Jetson (port 8082). POST /drive /estop,</text>
+      <text x="535" y="345" text-anchor="middle" fill="#b8d4f0" font-size="12">GET /state /config, proxies the Camera Server (:8083),</text>
+      <text x="535" y="361" text-anchor="middle" fill="#b8d4f0" font-size="12">reads the gamepad via evdev, and runs the SSE pairing</text>
+      <text x="535" y="377" text-anchor="middle" fill="#b8d4f0" font-size="12">modal. No external web framework.</text>
 
       <!-- ═══════════════════════════════════════════════════════
-           DXL_COMMANDER  (Container)
+           BLACK_MATA_FIRMWARE  (Container)
            x=264, y=505, w=542, h=130
            center: (535, 570)
       ════════════════════════════════════════════════════════════ -->
       <rect x="264" y="505" width="542" height="130" rx="6" fill="#1168BD"/>
       <text x="535" y="531" text-anchor="middle" fill="#b8d4f0" font-size="11" font-style="italic">«Container: Arduino C++ / OpenCM9.04»</text>
-      <text x="535" y="553" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">dxl_commander</text>
+      <text x="535" y="553" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">black_mata_firmware</text>
       <line x1="274" y1="561" x2="796" y2="561" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
       <text x="535" y="579" text-anchor="middle" fill="#b8d4f0" font-size="12">Servo controller firmware. Owns the Dynamixel TTL bus.</text>
-      <text x="535" y="595" text-anchor="middle" fill="#b8d4f0" font-size="12">Translates text commands into AX-12A register reads</text>
-      <text x="535" y="611" text-anchor="middle" fill="#b8d4f0" font-size="12">and writes via Dynamixel2Arduino library.</text>
+      <text x="535" y="595" text-anchor="middle" fill="#b8d4f0" font-size="12">Decodes binary CRC-16 frames into AX-12A register reads</text>
+      <text x="535" y="611" text-anchor="middle" fill="#b8d4f0" font-size="12">and writes via Dynamixel2Arduino; runs a 500 ms watchdog.</text>
 
       <!-- ═══════════════════════════════════════════════════════
            AX-12A SERVOS  (ContainerDb / data store)
@@ -240,18 +240,18 @@
             fill="#333" font-size="12">Uses [Browser]</text>
 
       <!-- ═══════════════════════════════════════════════════════
-           ARROW 2:  Operator  →  Tailscale
+           ARROW 2:  Operator  →  ngrok
            (202, 160) → (868, 370)
       ════════════════════════════════════════════════════════════ -->
       <line x1="202" y1="165" x2="866" y2="362" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
       <text x="530" y="250" text-anchor="middle"
             stroke="white" stroke-width="6" paint-order="stroke"
-            fill="#333" font-size="12">Connected via</text>
+            fill="#333" font-size="12">Opens demo URL (optional)</text>
 
       <!-- ═══════════════════════════════════════════════════════
-           ARROW 3a: Dashboard  →  Robot Agent
+           ARROW 3a: Dashboard  →  Dashboard Server
            Three fanned arrows representing the 3 protocols
-           Left  (460, 157) → (460, 255): WebSocket JSON
+           Left  (460, 157) → (460, 255): HTTP POST /drive
            Mid   (535, 157) → (535, 255): HTTP MJPEG
            Right (610, 157) → (610, 255): HTTP JSON status
       ════════════════════════════════════════════════════════════ -->
@@ -262,7 +262,7 @@
             fill="#333" font-size="12">Drive commands</text>
       <text x="356" y="210" text-anchor="middle"
             stroke="white" stroke-width="6" paint-order="stroke"
-            fill="#333" font-size="12">[WebSocket JSON]</text>
+            fill="#333" font-size="12">[HTTP POST /drive]</text>
       <line x1="356" y1="213" x2="459" y2="213" stroke="#888" stroke-width="0.7" stroke-dasharray="3,2"/>
 
       <!-- center arrow -->
@@ -272,7 +272,7 @@
             fill="#333" font-size="12">Camera feed</text>
       <text x="621" y="210" text-anchor="middle"
             stroke="white" stroke-width="6" paint-order="stroke"
-            fill="#333" font-size="12">[HTTP GET /stream]</text>
+            fill="#333" font-size="12">[HTTP GET /camera]</text>
       <line x1="536" y1="213" x2="621" y2="213" stroke="#888" stroke-width="0.7" stroke-dasharray="3,2"/>
 
       <!-- right arrow -->
@@ -282,32 +282,32 @@
             fill="#333" font-size="12">Servo status</text>
       <text x="726" y="210" text-anchor="middle"
             stroke="white" stroke-width="6" paint-order="stroke"
-            fill="#333" font-size="12">[HTTP GET /status]</text>
+            fill="#333" font-size="12">[HTTP GET /state]</text>
       <line x1="611" y1="213" x2="726" y2="213" stroke="#888" stroke-width="0.7" stroke-dasharray="3,2"/>
 
       <!-- ═══════════════════════════════════════════════════════
-           ARROW 4:  Robot Agent  →  Tailscale
+           ARROW 4:  Dashboard Server  →  ngrok
            (806, 330) → (868, 365)
       ════════════════════════════════════════════════════════════ -->
       <line x1="806" y1="330" x2="866" y2="356" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
       <text x="858" y="330" text-anchor="middle"
             stroke="white" stroke-width="6" paint-order="stroke"
-            fill="#333" font-size="12">Connected via</text>
+            fill="#333" font-size="12">Exposes (demo)</text>
 
       <!-- ═══════════════════════════════════════════════════════
-           ARROW 5:  Robot Agent  →  dxl_commander
+           ARROW 5:  Dashboard Server  →  black_mata_firmware
            (535, 405) → (535, 505)
       ════════════════════════════════════════════════════════════ -->
       <line x1="535" y1="405" x2="535" y2="503" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
       <text x="535" y="445" text-anchor="middle"
             stroke="white" stroke-width="6" paint-order="stroke"
-            fill="#333" font-size="12">Servo commands &amp; telemetry queries</text>
+            fill="#333" font-size="12">Servo targets &amp; cached state</text>
       <text x="535" y="459" text-anchor="middle"
             stroke="white" stroke-width="6" paint-order="stroke"
-            fill="#333" font-size="12">[USB Serial 115200 baud — text protocol]</text>
+            fill="#333" font-size="12">[USB Serial 115200 — binary CRC-16 frames]</text>
 
       <!-- ═══════════════════════════════════════════════════════
-           ARROW 6:  dxl_commander  →  Servos
+           ARROW 6:  black_mata_firmware  →  Servos
            (535, 635) → (535, 735)
       ════════════════════════════════════════════════════════════ -->
       <line x1="535" y1="635" x2="535" y2="733" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>

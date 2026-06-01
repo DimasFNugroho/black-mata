@@ -122,28 +122,23 @@
     <div class="mermaid">
 sequenceDiagram
   autonumber
-  participant B as Browser
-  participant SH as Status Handler /status
+  participant B as Browser (app.js)
+  participant SRV as Dashboard Server /state
   participant S as Serial Driver
-  participant F as dxl_commander
-  participant HW as AX-12A Servos
+  participant F as black_mata_firmware
 
-  loop Every 1 s (setInterval)
-    B->>SH: HTTP GET /status
-    loop For each servo — IDs 1 to 8
-      SH->>S: get_status(id)
-      S->>F: GETPOS id
-      F->>HW: DXL read PRESENT_POSITION
-      HW-->>F: position ticks
-      F-->>S: OK,GETPOS,id,ticks,deg
-      S->>F: VOLTAGE id
-      F->>HW: DXL read PRESENT_INPUT_VOLTAGE
-      HW-->>F: voltage raw
-      F-->>S: OK,VOLTAGE,id,volts
-      S-->>SH: {id, position, voltage, temperature}
-    end
-    SH-->>B: 200 OK JSON {servos:[...]}
-    note over B: Dashboard status panel updates voltage and temperature for all 8 servos.
+  Note over S,F: Background recv thread runs continuously, independent of HTTP.
+  loop Background recv thread
+    F-->>S: binary STATE frame — e-stop + 8× servo state, CRC-16
+    S->>S: validate CRC, update state cache
+  end
+
+  loop Every 100 ms (setInterval pollState)
+    B->>SRV: HTTP GET /state
+    SRV->>S: get_state()  (returns cache — no serial blocking)
+    S-->>SRV: {connected, e_stop, servos:[pos, speed, volt, temp ×8]}
+    SRV-->>B: 200 OK JSON
+    note over B: Dashboard updates bird's-eye angles, temp heatmap, battery, e-stop latch.
   end
     </div>
   </div>

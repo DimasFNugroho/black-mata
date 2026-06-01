@@ -103,8 +103,8 @@
 <main>
   <div class="page-header">
     <div class="level-badge">C4 Level 3</div>
-    <h1>Component Diagram — Robot Agent</h1>
-    <p>What are the major structural components inside the Robot Agent container?</p>
+    <h1>Component Diagram — Dashboard Server</h1>
+    <p>What are the major structural components inside the Dashboard Server container?</p>
   </div>
   <div class="toolbar">
     <button onclick="downloadSVG()">
@@ -181,7 +181,7 @@
       ════════════════════════════════════════════════ -->
       <rect x="18" y="170" width="1080" height="570" rx="8"
             fill="none" stroke="#666" stroke-width="1.5" stroke-dasharray="8,4"/>
-      <text x="28" y="166" fill="#666" font-size="11" font-weight="600">[Container]  Robot Agent  —  software/robot/  —  Python / FastAPI  —  port 8000</text>
+      <text x="28" y="166" fill="#666" font-size="11" font-weight="600">[Container]  Dashboard Server  —  tools/dashboard/server.py  —  Python / stdlib HTTP  —  port 8082</text>
 
       <!-- ═══════════════════════════════════════════
            ROW 1 — HANDLERS
@@ -189,30 +189,30 @@
 
       <!-- WS Handler  x=40, y=192, w=215, h=113 -->
       <rect x="40" y="192" width="215" height="113" rx="6" fill="#1168BD"/>
-      <text x="147" y="214" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Component: FastAPI WS route»</text>
-      <text x="147" y="232" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">WebSocket Handler</text>
+      <text x="147" y="214" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Component: stdlib HTTP route»</text>
+      <text x="147" y="232" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">Drive Handler</text>
       <line x1="50" y1="239" x2="245" y2="239" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
-      <text x="147" y="254" text-anchor="middle" fill="#b8d4f0" font-size="11">Accepts WebSocket connections.</text>
-      <text x="147" y="268" text-anchor="middle" fill="#b8d4f0" font-size="11">Receives drive commands, calls</text>
-      <text x="147" y="282" text-anchor="middle" fill="#b8d4f0" font-size="11">Translator then Serial Driver.</text>
+      <text x="147" y="254" text-anchor="middle" fill="#b8d4f0" font-size="11">POST /drive &amp; /estop. Merges</text>
+      <text x="147" y="268" text-anchor="middle" fill="#b8d4f0" font-size="11">drive input, calls Ackermann</text>
+      <text x="147" y="282" text-anchor="middle" fill="#b8d4f0" font-size="11">then Serial Driver. 300 ms keepalive.</text>
 
       <!-- Stream Handler  x=440, y=192, w=215, h=113 -->
       <rect x="440" y="192" width="215" height="113" rx="6" fill="#1168BD"/>
-      <text x="547" y="214" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Component: FastAPI HTTP route»</text>
-      <text x="547" y="232" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">MJPEG Stream Handler</text>
+      <text x="547" y="214" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Component: stdlib HTTP route»</text>
+      <text x="547" y="232" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">Camera Proxy</text>
       <line x1="450" y1="239" x2="645" y2="239" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
-      <text x="547" y="254" text-anchor="middle" fill="#b8d4f0" font-size="11">StreamingResponse endpoint.</text>
-      <text x="547" y="268" text-anchor="middle" fill="#b8d4f0" font-size="11">Consumes Camera Generator</text>
-      <text x="547" y="282" text-anchor="middle" fill="#b8d4f0" font-size="11">and serves MJPEG to browser.</text>
+      <text x="547" y="254" text-anchor="middle" fill="#b8d4f0" font-size="11">GET /camera + /camera/ping.</text>
+      <text x="547" y="268" text-anchor="middle" fill="#b8d4f0" font-size="11">Proxies the separate Camera</text>
+      <text x="547" y="282" text-anchor="middle" fill="#b8d4f0" font-size="11">Server (:8083) MJPEG stream.</text>
 
       <!-- Status Handler  x=860, y=192, w=215, h=113 -->
       <rect x="860" y="192" width="215" height="113" rx="6" fill="#1168BD"/>
-      <text x="967" y="214" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Component: FastAPI HTTP route»</text>
-      <text x="967" y="232" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">Status Handler</text>
+      <text x="967" y="214" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Component: stdlib HTTP route»</text>
+      <text x="967" y="232" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">State + Setup Handlers</text>
       <line x1="870" y1="239" x2="1065" y2="239" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
-      <text x="967" y="254" text-anchor="middle" fill="#b8d4f0" font-size="11">HTTP GET /status endpoint.</text>
-      <text x="967" y="268" text-anchor="middle" fill="#b8d4f0" font-size="11">Queries Serial Driver for</text>
-      <text x="967" y="282" text-anchor="middle" fill="#b8d4f0" font-size="11">position, voltage, temp of servos.</text>
+      <text x="967" y="254" text-anchor="middle" fill="#b8d4f0" font-size="11">GET /state /config (cached servo</text>
+      <text x="967" y="268" text-anchor="middle" fill="#b8d4f0" font-size="11">state); SSE /api/gamepad/setup/*</text>
+      <text x="967" y="282" text-anchor="middle" fill="#b8d4f0" font-size="11">for in-browser BT pairing.</text>
 
       <!-- ═══════════════════════════════════════════
            ROW 2 — PROCESSING
@@ -220,12 +220,12 @@
 
       <!-- Command Translator  x=40, y=408, w=215, h=113 -->
       <rect x="40" y="408" width="215" height="113" rx="6" fill="#1168BD"/>
-      <text x="147" y="430" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Component: Python — main.py»</text>
-      <text x="147" y="448" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">Command Translator</text>
+      <text x="147" y="430" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Component: Python — gamepad_core.py»</text>
+      <text x="147" y="448" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">Gamepad Reader</text>
       <line x1="50" y1="455" x2="245" y2="455" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
-      <text x="147" y="470" text-anchor="middle" fill="#b8d4f0" font-size="11">Maps normalised gamepad axes</text>
-      <text x="147" y="484" text-anchor="middle" fill="#b8d4f0" font-size="11">(-1…1) into physical values:</text>
-      <text x="147" y="498" text-anchor="middle" fill="#b8d4f0" font-size="11">v (m/s) and delta (degrees).</text>
+      <text x="147" y="470" text-anchor="middle" fill="#b8d4f0" font-size="11">evdev thread. Normalises axes</text>
+      <text x="147" y="484" text-anchor="middle" fill="#b8d4f0" font-size="11">(-1…1), applies calibration;</text>
+      <text x="147" y="498" text-anchor="middle" fill="#b8d4f0" font-size="11">feeds /state &amp; the drive merger.</text>
 
       <!-- Ackermann  x=310, y=408, w=215, h=113 -->
       <rect x="310" y="408" width="215" height="113" rx="6" fill="#1168BD"/>
@@ -238,12 +238,12 @@
 
       <!-- Camera Generator  x=640, y=408, w=215, h=113 -->
       <rect x="640" y="408" width="215" height="113" rx="6" fill="#1168BD"/>
-      <text x="747" y="430" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Component: OpenCV — camera.py»</text>
-      <text x="747" y="448" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">Camera Generator</text>
+      <text x="747" y="430" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Process: camera_test.py — :8083»</text>
+      <text x="747" y="448" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">Camera Server</text>
       <line x1="650" y1="455" x2="845" y2="455" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
-      <text x="747" y="470" text-anchor="middle" fill="#b8d4f0" font-size="11">Opens /dev/video0 via</text>
-      <text x="747" y="484" text-anchor="middle" fill="#b8d4f0" font-size="11">cv2.VideoCapture. JPEG-encodes</text>
-      <text x="747" y="498" text-anchor="middle" fill="#b8d4f0" font-size="11">each frame; yields MJPEG stream.</text>
+      <text x="747" y="470" text-anchor="middle" fill="#b8d4f0" font-size="11">Separate process (ADR-009). Opens</text>
+      <text x="747" y="484" text-anchor="middle" fill="#b8d4f0" font-size="11">/dev/robot_camera, JPEG-encodes</text>
+      <text x="747" y="498" text-anchor="middle" fill="#b8d4f0" font-size="11">frames; serves MJPEG + /health.</text>
 
       <!-- ═══════════════════════════════════════════
            ROW 3 — SERIAL
@@ -254,18 +254,18 @@
       <text x="417" y="630" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Component: pyserial — serial_driver.py»</text>
       <text x="417" y="648" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">Serial Driver</text>
       <line x1="320" y1="655" x2="515" y2="655" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
-      <text x="417" y="670" text-anchor="middle" fill="#b8d4f0" font-size="11">Thin wrapper over the</text>
-      <text x="417" y="684" text-anchor="middle" fill="#b8d4f0" font-size="11">dxl_commander text protocol</text>
-      <text x="417" y="698" text-anchor="middle" fill="#b8d4f0" font-size="11">via USB Serial /dev/ttyACM0.</text>
+      <text x="417" y="670" text-anchor="middle" fill="#b8d4f0" font-size="11">Encodes/decodes binary CRC-16</text>
+      <text x="417" y="684" text-anchor="middle" fill="#b8d4f0" font-size="11">frames; background recv thread</text>
+      <text x="417" y="698" text-anchor="middle" fill="#b8d4f0" font-size="11">via USB Serial /dev/opencm.</text>
 
       <!-- ═══════════════════════════════════════════
-           DXL_COMMANDER  (External Container — bottom)
+           BLACK_MATA_FIRMWARE  (External Container — bottom)
            x=460, y=762, w=280, h=90
            center: (600, 807)
       ════════════════════════════════════════════════ -->
       <rect x="460" y="762" width="280" height="90" rx="6" fill="#7a7a7a"/>
       <text x="600" y="787" text-anchor="middle" fill="#ffffff" font-size="11" font-style="italic">«Container: Arduino C++ / OpenCM9.04»</text>
-      <text x="600" y="809" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="700">dxl_commander</text>
+      <text x="600" y="809" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="700">black_mata_firmware</text>
       <line x1="470" y1="816" x2="730" y2="816" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
       <text x="600" y="834" text-anchor="middle" fill="#e0e0e0" font-size="12">Servo controller firmware. Owns Dynamixel TTL bus.</text>
 
@@ -278,28 +278,28 @@
       <line x1="490" y1="138" x2="150" y2="190" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
       <text x="290" y="148" text-anchor="middle"
             stroke="white" stroke-width="6" paint-order="stroke"
-            fill="#333" font-size="12">WebSocket drive commands</text>
+            fill="#333" font-size="12">POST /drive</text>
 
       <!-- 2. Dashboard → Stream Handler
            (550, 138) → (547, 192)   near-vertical  -->
       <line x1="550" y1="138" x2="547" y2="190" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
       <text x="610" y="164" text-anchor="start"
             stroke="white" stroke-width="6" paint-order="stroke"
-            fill="#333" font-size="12">HTTP GET /stream</text>
+            fill="#333" font-size="12">HTTP GET /camera</text>
 
       <!-- 3. Dashboard → Status Handler
            (610, 138) → (910, 192)   diagonal down-right  -->
       <line x1="610" y1="138" x2="907" y2="190" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
       <text x="775" y="148" text-anchor="middle"
             stroke="white" stroke-width="6" paint-order="stroke"
-            fill="#333" font-size="12">HTTP GET /status</text>
+            fill="#333" font-size="12">HTTP GET /state</text>
 
       <!-- 4. WS Handler → Command Translator
            (147, 305) → (147, 408)   vertical  -->
       <line x1="147" y1="305" x2="147" y2="406" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
       <text x="147" y="355" text-anchor="middle"
             stroke="white" stroke-width="6" paint-order="stroke"
-            fill="#333" font-size="12">raw gamepad axes</text>
+            fill="#333" font-size="12">evdev events</text>
 
       <!-- 5. Command Translator → Ackermann
            (255, 464) → (310, 464)   horizontal  -->
@@ -335,21 +335,21 @@
       <text x="1105" y="494" text-anchor="middle"
             stroke="white" stroke-width="6" paint-order="stroke"
             fill="#333" font-size="12"
-            transform="rotate(-90,1105,494)">get_status ×8</text>
+            transform="rotate(-90,1105,494)">get_state (cached)</text>
 
       <!-- 9. Camera Generator → Stream Handler
            (640, 452) → (655, 305)   diagonal up-left  -->
       <line x1="640" y1="440" x2="628" y2="307" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
       <text x="698" y="374" text-anchor="start"
             stroke="white" stroke-width="6" paint-order="stroke"
-            fill="#333" font-size="12">JPEG frame bytes</text>
+            fill="#333" font-size="12">MJPEG via localhost:8083</text>
 
-      <!-- 10. Serial Driver → dxl_commander
+      <!-- 10. Serial Driver → black_mata_firmware
             (417, 721) → (510, 762)   diagonal down  -->
       <line x1="417" y1="721" x2="508" y2="760" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
       <text x="415" y="748" text-anchor="middle"
             stroke="white" stroke-width="6" paint-order="stroke"
-            fill="#333" font-size="12">USB Serial text commands</text>
+            fill="#333" font-size="12">USB Serial binary frames</text>
     </svg>
   </div>
 </main>

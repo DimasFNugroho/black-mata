@@ -190,7 +190,7 @@ python3 tools/ackermann_ui/server.py        # open http://<jetson-ip>:8081
 python3 tools/dashboard/server.py            # reads ackermann_config.json at runtime
 ```
 
-The dashboard re-reads `ackermann_config.json` every 5 s, so the values you tuned take effect as soon as it starts. There is intentionally no live link between the two processes — `ackermann_config.json` is the handoff. (See ADR-014 in `docs/software_architecture/architecture.txt` for the rationale.)
+The dashboard re-reads `ackermann_config.json` every 5 s, so the values you tuned take effect as soon as it starts. There is intentionally no live link between the two processes — `ackermann_config.json` is the handoff. (See ADR-014 in the [architecture ADRs](docs/software_architecture/adr.html) for the rationale.)
 
 ---
 

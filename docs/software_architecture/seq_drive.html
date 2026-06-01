@@ -124,34 +124,25 @@
     <div class="mermaid">
 sequenceDiagram
   autonumber
-  participant B as Browser
-  participant WS as WS Handler
-  participant T as Cmd Translator
+  participant B as Browser (app.js)
+  participant SRV as Dashboard Server
   participant A as Ackermann
   participant S as Serial Driver
-  participant F as dxl_commander
+  participant F as black_mata_firmware
   participant HW as AX-12A Servos
 
-  loop Every ~20 ms (50 Hz)
-    B->>B: poll navigator.getGamepads()
-    B->>WS: WebSocket send {steer_deg, speed_pct}
-    WS->>T: translate(steer_deg, speed_pct)
-    T->>A: compute(v, delta)
+  loop Every 100 ms (10 Hz) while a deadman is held
+    B->>B: merge keyboard + gamepad (evdev) input
+    B->>SRV: POST /drive {steer_deg, speed_mps}
+    SRV->>A: compute(steer_deg, speed_mps)
     note over A: Ackermann geometry — front inner/outer angles, rear counter-phase, per-wheel speed differential.
-    A-->>WS: return WheelCommands {steer[], drive[]}
-    loop For each steer servo — IDs 1 to 4
-      WS->>S: set_steering(id, ticks)
-      S->>F: SETPOS id ticks
-      F->>HW: DXL write GOAL_POSITION
-      F-->>S: OK,SETPOS,id,ticks
-    end
-    loop For each drive servo — IDs 5 to 8
-      WS->>S: set_drive_speed(id, speed)
-      S->>F: SETSPEED id speed
-      F->>HW: DXL write MOVING_SPEED
-      F-->>S: OK,SETSPEED,id,speed
-    end
+    A-->>SRV: WheelCommands {steer[], drive[]}
+    SRV->>S: send_frame(8× servo targets)
+    S->>F: binary CMD frame — CRC-16, all 8 servos in one write
+    F->>HW: DXL write GOAL_POSITION / MOVING_SPEED
+    F-->>S: binary STATE frame — e-stop + 8× servo state, CRC-16
   end
+  note over B,SRV: If no POST arrives within 300 ms, the server sends a zero-speed frame (e-stop layer 1). Firmware zeroes drive after 500 ms (layer 2).
     </div>
   </div>
 </main>

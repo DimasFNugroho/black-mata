@@ -123,25 +123,25 @@
 sequenceDiagram
   autonumber
   participant B as Browser
-  participant H as MJPEG Handler /stream
-  participant C as Camera Generator
-  participant CAM as USB Camera /dev/video0
+  participant SRV as Dashboard Server /camera
+  participant CS as Camera Server :8083 /stream
+  participant CAM as USB Camera /dev/robot_camera
 
-  B->>H: HTTP GET /stream
-  H->>C: iterate frame generator
-  activate C
+  B->>SRV: HTTP GET /camera
+  SRV->>CS: proxy GET /stream
+  activate CS
 
   loop Continuous — until connection closed
-    C->>CAM: cv2.VideoCapture.read()
-    CAM-->>C: raw BGR frame
-    C->>C: cv2.imencode('.jpg', frame)
-    C-->>H: yield JPEG bytes
-    H-->>B: multipart/x-mixed-replace + JPEG frame
+    CS->>CAM: cv2.VideoCapture.read()
+    CAM-->>CS: raw BGR frame
+    CS->>CS: cv2.imencode('.jpg', frame)
+    CS-->>SRV: yield JPEG bytes (multipart)
+    SRV-->>B: multipart/x-mixed-replace + JPEG frame
     note over B: Browser renders each incoming frame directly in the img tag. No JavaScript required.
   end
 
-  B->>H: connection closed
-  deactivate C
+  B->>SRV: connection closed
+  deactivate CS
     </div>
   </div>
 </main>
