@@ -8,7 +8,8 @@
 //   POST /api/gamepad/setup/select {mac}  operator picked a device
 //   POST /api/gamepad/setup/cancel        abort
 //
-// Exposed as window.GamepadSetup.open() — wired to the topbar pill in app.js.
+// Exposed as window.GamepadSetup.open() — wired to the "+ Pair Controller"
+// button in the Gamepad card (see app.js).
 
 (function () {
   var loaded = false;       // modal HTML injected yet?

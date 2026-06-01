@@ -13,7 +13,7 @@
   <h1>DRIVE DASHBOARD</h1>
   <span id="conn-badge">connecting...</span>
   <span id="topstatus">Hold ⇧ + WASD to drive (keyboard) or L1 + sticks (gamepad).</span>
-  <span id="input-pill" class="disconnect" title="Click to set up Bluetooth gamepad">GAMEPAD: NONE</span>
+  <span id="input-pill" class="disconnect" title="Active drive input source">GAMEPAD: NONE</span>
 </div>
 
 <div id="layout">
@@ -151,7 +151,14 @@
 
     <!-- Gamepad live state -->
     <div class="card" id="gamepad-card" style="flex-shrink:0;">
-      <h3>Gamepad</h3>
+      <div class="gp-header">
+        <h3>Gamepad</h3>
+        <!-- Pairing is its own control, separate from the live-state widget,
+             and always available — you can pair/swap a controller even while
+             one is already connected. -->
+        <button id="btn-pair-gamepad" class="btn btn-primary" type="button"
+                title="Pair or swap a Bluetooth controller">+ Pair Controller</button>
+      </div>
       <div id="gp-disconnected" style="color:#555;text-align:center;font-size:11px;padding:6px;">
         No controller paired.
       </div>

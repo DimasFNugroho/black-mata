@@ -533,7 +533,10 @@ function pollGamepad() {
   xhr.send();
 }
 
-document.getElementById('input-pill').addEventListener('click', function() {
+// The topbar pill is a pure state indicator now. Pairing lives on its own
+// dedicated button so the affordance is obvious and stays available even
+// while a controller is connected (pair/swap any time).
+document.getElementById('btn-pair-gamepad').addEventListener('click', function() {
   if (window.GamepadSetup) window.GamepadSetup.open();
 });
 
