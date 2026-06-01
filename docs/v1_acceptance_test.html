@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Black-Mata v1 — Acceptance Test</title>
+<style>
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --surface2: #1e242d;
+    --border:   #30363d;
+    --text:     #e6edf3;
+    --muted:    #8b949e;
+    --accent:   #58a6ff;
+    --green:    #3fb950;
+    --red:      #f85149;
+    --yellow:   #d29922;
+    --orange:   #ffa657;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px; line-height: 1.6;
+  }
+
+  /* ── header ── */
+  header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 16px 24px; position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 16px; font-weight: 700; color: #fff; white-space: nowrap; }
+  .header-meta { font-size: 12px; color: var(--muted); }
+
+  .overall-bar-wrap {
+    flex: 1; min-width: 180px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; height: 18px; overflow: hidden; position: relative;
+  }
+  .overall-bar {
+    height: 100%; width: 0; background: var(--green);
+    transition: width 0.3s ease;
+  }
+  .overall-pct {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 11px; font-weight: 700; color: #fff;
+  }
+
+  .btn-hdr {
+    font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 5px;
+    cursor: pointer; border: 1px solid var(--border); background: var(--surface2);
+    color: var(--text); white-space: nowrap;
+  }
+  .btn-hdr:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-hdr.danger:hover { border-color: var(--red); color: var(--red); }
+
+  /* ── main layout ── */
+  main { max-width: 860px; margin: 0 auto; padding: 24px 20px 80px; }
+
+  /* ── section card ── */
+  .section {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; margin-bottom: 14px; overflow: hidden;
+  }
+  .section-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 13px 18px; cursor: pointer; user-select: none;
+    border-bottom: 1px solid transparent;
+    transition: background 0.15s;
+  }
+  .section-header:hover { background: #ffffff08; }
+  .section.open .section-header { border-bottom-color: var(--border); }
+
+  .sec-num {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+    color: var(--muted); background: var(--bg);
+    padding: 2px 8px; border-radius: 4px; border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .sec-title { font-size: 14px; font-weight: 600; color: var(--text); flex: 1; }
+  .sec-progress {
+    font-size: 11px; color: var(--muted); white-space: nowrap;
+  }
+  .sec-status {
+    font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 4px;
+    white-space: nowrap;
+  }
+  .sec-status.todo    { background: #1e242d; color: var(--muted); border: 1px solid var(--border); }
+  .sec-status.partial { background: #3a2f1f; color: var(--orange); border: 1px solid #5a4a2a; }
+  .sec-status.pass    { background: #1f3a2f; color: var(--green);  border: 1px solid #2a5a3a; }
+  .sec-status.fail    { background: #3a1f1f; color: var(--red);    border: 1px solid #5a2a2a; }
+  .sec-chevron { color: var(--muted); font-size: 11px; transition: transform 0.2s; }
+  .section.open .sec-chevron { transform: rotate(90deg); }
+
+  /* ── section progress bar ── */
+  .sec-bar-wrap {
+    height: 3px; background: var(--bg);
+  }
+  .sec-bar { height: 100%; width: 0; background: var(--green); transition: width 0.3s ease; }
+
+  /* ── items ── */
+  .section-body { padding: 12px 18px 16px; display: none; }
+  .section.open .section-body { display: block; }
+
+  .item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 5px 0; border-bottom: 1px solid #1a1f26;
+  }
+  .item:last-child { border-bottom: none; }
+
+  .item input[type="checkbox"] {
+    margin-top: 3px; width: 15px; height: 15px; flex-shrink: 0;
+    accent-color: var(--green); cursor: pointer;
+  }
+  .item label {
+    font-size: 13px; color: var(--text); cursor: pointer; flex: 1;
+    line-height: 1.5;
+  }
+  .item.checked label { color: var(--muted); text-decoration: line-through; }
+
+  .item label code {
+    font-family: 'SFMono-Regular', 'Consolas', monospace;
+    font-size: 12px; background: var(--bg);
+    padding: 1px 5px; border-radius: 3px; color: var(--accent);
+  }
+  .item label .warn { color: var(--yellow); font-style: italic; font-size: 12px; }
+
+  .sub-note {
+    font-size: 12px; color: var(--muted); margin: 6px 0 10px 25px;
+    padding: 6px 10px; border-left: 2px solid var(--border);
+    border-radius: 0 4px 4px 0; background: var(--surface2);
+  }
+  .sub-note code { font-family: monospace; font-size: 11px; color: var(--orange); }
+
+  /* ── sign-off ── */
+  .signoff {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px 22px; margin-top: 24px;
+  }
+  .signoff h2 { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 14px; }
+  .signoff-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    margin-bottom: 18px;
+  }
+  .signoff-row {
+    display: flex; align-items: center; gap: 8px; font-size: 12px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 12px;
+  }
+  .signoff-row .dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    background: var(--muted);
+  }
+  .signoff-row.pass .dot  { background: var(--green); }
+  .signoff-row.fail .dot  { background: var(--red); }
+  .signoff-row .sec-lbl   { flex: 1; }
+  .signoff-row .sec-badge { font-size: 11px; font-weight: 700; }
+  .signoff-row.pass .sec-badge { color: var(--green); }
+  .signoff-row.fail .sec-badge { color: var(--red); }
+  .signoff-row.todo .sec-badge { color: var(--muted); }
+
+  .field-row {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 8px; font-size: 13px;
+  }
+  .field-row label { width: 180px; color: var(--muted); flex-shrink: 0; }
+  .field-row input {
+    flex: 1; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 5px 10px; border-radius: 5px;
+    font-family: monospace; font-size: 12px;
+  }
+  .field-row input:focus { outline: none; border-color: var(--accent); }
+
+  .verdict {
+    display: flex; gap: 12px; margin-top: 14px; flex-wrap: wrap;
+  }
+  .verdict-btn {
+    flex: 1; min-width: 160px; padding: 12px; border-radius: 7px;
+    border: 2px solid var(--border); background: var(--surface2);
+    color: var(--muted); font-size: 14px; font-weight: 700;
+    cursor: pointer; text-align: center; transition: all 0.15s;
+  }
+  .verdict-btn:hover { border-color: var(--accent); color: var(--text); }
+  .verdict-btn.approved { border-color: var(--green); color: var(--green); background: #1f3a2f; }
+  .verdict-btn.blocked  { border-color: var(--red);   color: var(--red);   background: #3a1f1f; }
+
+  @media print {
+    header { position: static; }
+    .btn-hdr, .sec-chevron { display: none; }
+    .section-body { display: block !important; }
+    .section { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⬡ Black-Mata v1 — Field Acceptance Test</h1>
+  <div class="overall-bar-wrap">
+    <div class="overall-bar" id="overall-bar"></div>
+    <div class="overall-pct" id="overall-pct">0%</div>
+  </div>
+  <div class="header-meta" id="header-count">0 / 0 items</div>
+  <button class="btn-hdr" onclick="expandAll()">Expand all</button>
+  <button class="btn-hdr" onclick="collapseAll()">Collapse all</button>
+  <button class="btn-hdr" onclick="window.print()">Print / PDF</button>
+  <button class="btn-hdr danger" onclick="resetAll()">Reset</button>
+</header>
+
+<main id="main"></main>
+
+<script>
+// ─── Test data ────────────────────────────────────────────────────────────────
+var SECTIONS = [
+  {
+    id: 's0', num: 'SEC 0', title: 'Pre-flight Hardware',
+    items: [
+      '12 V battery ≥ 11.0 V on multimeter before power-on',
+      'All 8 servo connectors seated; no open links in the daisy chain',
+      'USB camera plugged in — <code>lsusb</code> shows camera vendor/product',
+      'RTL8761B dongle plugged in — <code>lsusb</code> shows <code>0bda:a760</code>',
+      'OpenCM9.04 USB Serial connected — <code>ls /dev/ttyACM*</code> shows device',
+      '<code>/dev/opencm</code> symlink exists — <code>ls -l /dev/opencm</code>',
+      '<code>/dev/robot_camera</code> symlink exists — <code>ls -l /dev/robot_camera</code>',
+    ]
+  },
+  {
+    id: 's1', num: 'SEC 1', title: 'Cold Boot Baseline',
+    note: 'Full power cycle first. Do not SSH in until the Jetson is fully up.',
+    items: [
+      'After boot: <code>hciconfig</code> lists <code>hci0</code> — adapter auto-powered',
+      '<code>rfkill list bluetooth</code> shows NOT blocked',
+      '<code>systemctl is-active bluetooth</code> → active',
+      '<code>bash tools/gamepad/check_bluetooth_host.sh</code> — all 9 checks PASS (ERTM WARN is acceptable)',
+      'Exit code is 0 — gate passed',
+      'Adapter Powered: yes with no manual intervention',
+    ]
+  },
+  {
+    id: 's2', num: 'SEC 2', title: 'Firmware Verification',
+    items: [
+      'x86: <code>python build.py</code> — build completes, no errors',
+      'x86: <code>./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh</code> — flashes, board resets',
+      'OpenCM LED blinks after flash (firmware running)',
+      '<code>./tools/monitor/serial_monitor.sh</code> — STATE frames at ~10 Hz, sequence numbers incrementing',
+      'No CRC errors in first 30 s of monitoring',
+      '<code>e_stop: 0</code> in state output — not stuck in e-stop on power-up',
+      'All 8 servo IDs discovered — <code>python3 tools/dynamixel/dxl_identify.py</code>',
+      'No ID conflicts; all servos respond with AX-12A model',
+    ]
+  },
+  {
+    id: 's3', num: 'SEC 3', title: 'Ackermann UI Calibration',
+    note: 'Stop dashboard first. Run: python3 tools/ackermann_ui/server.py --port /dev/opencm → open :8081',
+    items: [
+      'Servo ID map matches physical wheel roles (FL/FR/RL/RR steer + drive)',
+      'Nudge each steer servo individually — correct wheel moves',
+      'Nudge each drive servo individually — correct wheel spins',
+      'Torque off steering → all four steer servos go limp',
+      'Push all four wheels straight-ahead physically',
+      'Record neutral → offsets fill in automatically',
+      'Send to robot → wheels hold straight under torque',
+      'Bird\'s-eye steer angle readback ≈ 0.0° for all wheels at neutral',
+      'Steer slider to +30° — Ackermann geometry correct (inner tighter than outer)',
+      'Steer slider to −30° — correct opposite geometry',
+      'Return to 0° — wheels return straight, no drift',
+      'Save config — confirms write to <code>ackermann_config.json</code>',
+      'Reload ackermann_ui — all values repopulate correctly',
+      '<code>ackermann_config.json</code> contains <code>default_drive_mode</code> field',
+      'Toggle default drive mode → Touchpad — "Saved" flash; JSON updated',
+      'Toggle back to WASD — "Saved" flash; JSON updated',
+      'Battery threshold fields save and reload correctly',
+    ]
+  },
+  {
+    id: 's4', num: 'SEC 4', title: 'Camera Stream + Auto-reconnect',
+    note: 'Run: python3 tools/camera/camera_test.py',
+    items: [
+      '<code>curl -I http://&lt;jetson-ip&gt;:8083/stream</code> → 200 multipart/x-mixed-replace',
+      '<code>curl http://&lt;jetson-ip&gt;:8083/health</code> → {"status":"ok"}',
+      'Open <code>:8083/stream</code> in browser — live MJPEG visible',
+      'Physically unplug USB camera — <code>/health</code> returns 503 within ~2 s',
+      'Stream blanks in browser; camera_test.py stays running (no crash)',
+      'Replug camera — <code>/health</code> returns 200 within ~4 s',
+      'Stream resumes in browser WITHOUT any page refresh',
+    ]
+  },
+  {
+    id: 's5', num: 'SEC 5', title: 'Dashboard Startup & Config',
+    note: 'Run: python3 tools/dashboard/server.py --port /dev/opencm → open :8082',
+    items: [
+      'Dashboard loads — no JS console errors (check browser DevTools)',
+      '<code>conn-badge</code> shows "connected" (green)',
+      '<code>cfg-info</code> bar shows correct max steer and max output % from config',
+      'Config refreshes within 5 s after manually editing and saving JSON',
+      'Drive mode is WASD on first load (matches <code>default_drive_mode</code> in config)',
+      'MJPEG feed visible in camera panel (proxied via :8082)',
+      'Camera frame rotated correctly (robot-mounted orientation)',
+      'Bird\'s-eye SVG shows all four wheel icons',
+      'All four wheel steer angles read ≈ 0.0° at rest',
+      'Manually push a front wheel — angle label updates in real time',
+      'Ackermann arc appears when steer angle > 0.5°; disappears at 0',
+      'All 8 servos show temperature labels (S:°C, D:°C) — cool-blue at ambient',
+      'Battery fill bar shows non-zero percentage; voltage ± 0.2 V of multimeter',
+    ]
+  },
+  {
+    id: 's6', num: 'SEC 6', title: 'WASD Keyboard Drive',
+    note: 'Raise robot off the ground or clear a run area before all drive tests.',
+    items: [
+      'Topbar hint: "Hold ⇧ + WASD to drive or L1 + sticks (gamepad)."',
+      'Drive mode toggle shows ⌨ WASD selected',
+      'W/A/S/D without Shift → NO movement (deadman not held)',
+      'Shift + W → robot moves forward; release Shift → stops',
+      'Shift + S → robot reverses; release → stops',
+      'Output gauge bar fills during drive; returns to 0 on release',
+      'Shift + A → steers left; bird\'s-eye arcs correct Ackermann geometry',
+      'Shift + D → steers right',
+      'Shift + W + A → forward-left arc; both gauges update simultaneously',
+      'While Shift held: pill shows KEYBOARD (blue)',
+      'Release Shift: pill shows IDLE (or GAMEPAD: NONE)',
+      'Network kill test: hold Shift+W → <code>iptables DROP :8082</code> → robot stops ≤ 300 ms',
+      'Restore iptables rule → dashboard reconnects; robot controllable again',
+    ]
+  },
+  {
+    id: 's7', num: 'SEC 7', title: 'Touchpad Drive Mode',
+    items: [
+      'Click ⊹ Touchpad toggle — WASD grid disappears, touchpad SVG appears',
+      'Hints update: "drag up → fwd / drag right → steer / Spc/Esc → e-stop"',
+      'Topbar updates to touchpad hint text',
+      'W/A/S/D keyboard keys are COMPLETELY INERT in Touchpad mode',
+      'Click and hold pad centre → no movement (centre deadzone)',
+      'Click hold + drag right → steers right; steer gauge fills; bird\'s-eye updates',
+      'Click hold + drag up → drives forward; output gauge fills',
+      'Release pointer → robot stops; dot snaps to centre',
+      'Press inside pad, drag OUTSIDE boundary — input still tracks (pointer capture)',
+      'Release off-pad → robot stops cleanly',
+      'Set default to Touchpad in ackermann_ui → reload dashboard → opens in Touchpad',
+      'Set back to WASD in ackermann_ui → reload → WASD mode',
+      'Drive in Touchpad mode → click ⌨ WASD toggle mid-drive → robot stops immediately',
+    ]
+  },
+  {
+    id: 's8', num: 'SEC 8', title: 'E-Stop — All Six Paths',
+    note: 'Test each path independently. Re-arm fully between each test.',
+    items: [
+      '[Path 1 — Space/Esc] Driving → press Space → instant stop; button turns amber "↻ HOLD TO RESET"',
+      '[Path 1] Shift+W while latched → NO movement',
+      '[Path 1] Hold button 1 s → latch clears; button returns to red "■ E-STOP"',
+      '[Path 2 — Button click] Driving → click red E-STOP → instant stop',
+      '[Path 2] Hold button 1 s → re-arms',
+      '[Path 3 — Gamepad combo] L1+sticks driving → L1 + D-pad diagonal → instant stop (rising edge, not held)',
+      '[Path 3] Dashboard button turns amber confirming latch',
+      '[Path 4 — LS+RS re-arm] While latched: hold both stick clicks 1 s → latch clears',
+      '[Path 4] Partial hold (< 1 s) → latch stays; must complete full 1 s hold',
+      '[Path 5 — Serial kill] Driving → physically unplug OpenCM USB → all servos stop ≤ 500 ms',
+      '[Path 5] Dashboard shows "no robot (sim)"; replug → reconnects',
+      '[Path 6 — Camera loss IS NOT E-STOP] Unplug camera while driving → robot KEEPS DRIVING',
+      '[Path 6] Camera feed blanks; drive continues; replug → camera restores',
+    ]
+  },
+  {
+    id: 's9', num: 'SEC 9', title: 'Robot Bluetooth Gamepad',
+    items: [
+      '[Terminal pair] <code>bash tools/gamepad/reset_bluetooth_host.sh</code> — bonds cleared',
+      '[Terminal pair] <code>bash tools/gamepad/setup_gamepad.sh --verbose</code> — scan finds G3 V2',
+      '[Terminal pair] "Pairing successful" — trust and connect succeed',
+      '[Terminal pair] <code>hcitool con</code> shows active ACL connection',
+      '[Modal pair] <code>reset_bluetooth_host.sh</code> to clear bond again',
+      '[Modal pair] Dashboard: click "Pair to Robot" — modal opens',
+      '[Modal pair] Continue → progress bar through scan phase',
+      '[Modal pair] G3 V2 appears in device list; click it → pair/trust/connect progress shown',
+      '[Modal pair] "ON ROBOT (Bluetooth)" row shows controller name — no terminal needed',
+      'L1 released → NO movement (deadman not held)',
+      'L1 + left stick forward → robot drives forward',
+      'L1 + left stick back → reverse; release L1 → stops immediately',
+      'L1 + left stick left/right → steers; bird\'s-eye arcs update',
+      'Input pill shows GAMEPAD: [controller name] while deadman held',
+      '[Range test] Pair controller from 1.5 m away — completes successfully',
+      '[Swap] Click "Pair to Robot" again while connected → modal opens without crash',
+      '[Swap] Pair again → new controller name appears in "ON ROBOT" row',
+    ]
+  },
+  {
+    id: 's10', num: 'SEC 10', title: 'PC Gamepad (Browser Gamepad API)',
+    note: 'Use a USB gamepad or a BT gamepad paired to the operator laptop via OS Bluetooth settings.',
+    items: [
+      '"ON THIS PC" shows "No controller detected — plug in via USB or pair via your OS Bluetooth settings."',
+      'Plug USB gamepad into operator laptop — name appears in "ON THIS PC" within 100 ms',
+      'No page reload needed for detection',
+      'No BT gamepad L1 held → hold L1/LB on PC gamepad + sticks → robot drives',
+      'Input pill shows GAMEPAD-PC',
+      'Release L1 → robot stops',
+      '[Priority test] Both gamepads connected; hold both L1s → robot follows ROBOT BT (local override)',
+      '[Priority test] Release Robot BT L1 only → robot switches to PC gamepad immediately (if PC L1 still held)',
+      '[Priority test] Release PC L1 → robot stops',
+      '[Unplug mid-drive] Driving via PC gamepad → unplug USB → robot stops within one 100 ms tick',
+      '"ON THIS PC" returns to "No controller detected" on unplug',
+    ]
+  },
+  {
+    id: 's11', num: 'SEC 11', title: 'Input Priority Matrix',
+    note: 'Run each combination. Confirm ONLY the expected source drives the robot.',
+    items: [
+      'Shift held (WASD mode), no other source → KEYBOARD drives',
+      'Touchpad pressed (Touchpad mode), no other source → TOUCHPAD drives',
+      'Robot BT L1, no Shift/Touchpad → GAMEPAD-ROBOT drives',
+      'PC L1, no Shift/Touchpad/BT → GAMEPAD-PC drives',
+      'Shift + Robot BT L1 simultaneously → KEYBOARD wins (manual beats gamepad)',
+      'Touchpad + Robot BT L1 simultaneously → TOUCHPAD wins (manual beats gamepad)',
+      'Robot BT L1 + PC L1 simultaneously → GAMEPAD-ROBOT wins (local overrides remote)',
+      'Nothing held → IDLE (no movement, no drive frames sent)',
+    ]
+  },
+  {
+    id: 's12', num: 'SEC 12', title: 'Remote Access via ngrok',
+    note: 'Run: ngrok http 8082 on the Jetson (dashboard + camera already running)',
+    items: [
+      'ngrok prints a https://*.ngrok-free.app URL',
+      'Open URL on a MOBILE PHONE on 4G/5G (different network)',
+      'Dashboard loads fully: camera feed, bird\'s-eye, all widgets',
+      'Drive the robot from the phone using Touchpad — full round trip over internet',
+      'E-stop from the phone works instantly',
+      'Stop ngrok (Ctrl+C) → robot no longer reachable externally',
+      'Dashboard on LAN still works normally (ngrok is not a dependency)',
+    ]
+  },
+  {
+    id: 's13', num: 'SEC 13', title: 'Systemd Auto-start',
+    note: 'Run: bash tools/setup/autostart.sh enable → sudo reboot',
+    items: [
+      'After reboot, camera and dashboard start WITHOUT any manual SSH',
+      'Dashboard reachable at :8082 within 30 s of Jetson becoming pingable',
+      'Camera feed live in dashboard (camera service up before dashboard)',
+      '<code>systemctl status black-mata-camera black-mata-dashboard</code> — both active, no failed restarts',
+      'Disable: <code>bash tools/setup/autostart.sh disable</code> → reboot → services do NOT start',
+      'No stale processes on port 8082 or 8083 after disable',
+      'Re-enable: <code>autostart.sh enable</code> — services re-enabled',
+    ]
+  },
+  {
+    id: 's14', num: 'SEC 14', title: '5-Minute Drive Endurance',
+    note: 'Drive continuously, cycling through all input modes. Clear run area required.',
+    items: [
+      '[0:00–1:30] WASD — figure-of-eight path; Ackermann arcs on bird\'s-eye track geometry',
+      '[1:30–3:00] Touchpad — same path; drag off-pad mid-drive intentionally — no runaway',
+      '[3:00–4:00] Robot BT gamepad — full-throttle sprint and hard steer; no frame drops / CRC errors',
+      '[4:00–5:00] PC gamepad from laptop — latency acceptable for teleoperation',
+      'Battery gauge decreased visibly (voltage drop under load displayed correctly)',
+      'Temperature labels on drive servos shifted warmer (thermal load visible)',
+      'All 8 servo IDs present throughout — no disconnection events',
+      'No dashboard JS errors for the entire session (console clean)',
+    ]
+  },
+  {
+    id: 's15', num: 'SEC 15', title: 'Fault Injection',
+    items: [
+      '[Dashboard crash] Robot idle → <code>pkill -f server.py</code> → robot stays stopped (no spurious motion)',
+      '[Dashboard crash] Restart dashboard → conn-badge returns green; all widgets repopulate',
+      '[Serial hot-unplug] Driving → unplug OpenCM USB → servos stop ≤ 500 ms (firmware watchdog fires)',
+      '[Serial hot-unplug] Replug → server reconnects; send_estop() fires before allowing drive',
+      '[Camera hot-unplug] Driving → unplug camera → robot KEEPS DRIVING (processes isolated)',
+      '[Camera hot-unplug] Feed blanks; replug → restores without action; drive throughout uninterrupted',
+      '[Browser close] Driving via Shift+W → close browser tab → robot stops ≤ 300 ms',
+      '[BT out of range] Driving via Robot BT → carry controller 5+ m behind a wall → link drops; robot stops',
+      '[BT out of range] Return in range → GamepadReader auto-reconnects within a few seconds',
+    ]
+  },
+  {
+    id: 's16', num: 'SEC 16', title: 'Commissioning Tools Verification',
+    items: [
+      '<code>check_bluetooth_host.sh</code> — 8 PASS / 1 WARN (ERTM) / 0 FAIL',
+      '<code>commission_bluetooth.sh</code> — reports "fully commissioned" immediately',
+      'Embedded check_bluetooth_host output within guide: same PASS/WARN counts',
+      '[Reproduce cycle] <code>reset_bluetooth_host.sh</code> → reboot → check shows 4+ FAIL (clean slate confirmed)',
+      '[Reproduce cycle] <code>setup_bluetooth_host.sh</code> → reboot → check returns 8 PASS / 0 FAIL',
+      '[Reproduce cycle] Proves procedure is REPEATABLE on this unit',
+      'x86: <code>bash tools/gamepad/push_gamepad_to_jetson.sh</code> — password prompted once (SSH multiplexing)',
+      'All 14 files transferred; no "Is a directory" or permission errors',
+    ]
+  },
+  {
+    id: 's17', num: 'SEC 17', title: 'Final State Verification',
+    note: 'Clean reboot with auto-start enabled. Verify the robot ships in a known-good state.',
+    items: [
+      'Dashboard reachable at :8082 without any SSH after reboot',
+      'Camera feed live without any SSH',
+      '<code>check_bluetooth_host.sh</code> still passes (commissioning survived all testing)',
+      '<code>ackermann_config.json</code> has correct calibration values (steer offsets intact)',
+      '<code>default_drive_mode</code> in config is <code>"wasd"</code> (shipping default)',
+      'No stale BT bonds from test pairings (run a fresh pair to confirm clean state)',
+      'Serial monitor shows clean STATE frames — no CRC errors at rest',
+      'All widget values make sense: battery healthy, temps at ambient, steer ≈ 0°',
+    ]
+  },
+];
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+var STORE_KEY = 'bm_v1_accept_test';
+
+function load() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); } catch(e) { return {}; }
+}
+
+function save(state) {
+  localStorage.setItem(STORE_KEY, JSON.stringify(state));
+}
+
+var _state = load();
+var _meta  = _state._meta || { tester: '', date: '', unit: '', commit: '', verdict: '' };
+
+function itemKey(sId, idx) { return sId + '_' + idx; }
+
+function sectionStatus(sId, count, checked) {
+  if (checked === 0)     return { cls: 'todo',    label: 'TODO' };
+  if (checked === count) return { cls: 'pass',    label: 'PASS' };
+  return                        { cls: 'partial', label: checked + '/' + count };
+}
+
+function renderSection(sec) {
+  var div = document.createElement('div');
+  div.className = 'section';
+  div.id = sec.id;
+
+  // Count checked
+  var total   = sec.items.length;
+  var checked = 0;
+  sec.items.forEach(function(_, i) {
+    if (_state[itemKey(sec.id, i)]) checked++;
+  });
+
+  var st = sectionStatus(sec.id, total, checked);
+  var pct = total > 0 ? Math.round(checked / total * 100) : 0;
+
+  div.innerHTML =
+    '<div class="section-header" onclick="toggleSection(\'' + sec.id + '\')">' +
+      '<span class="sec-num">' + sec.num + '</span>' +
+      '<span class="sec-title">' + sec.title + '</span>' +
+      '<span class="sec-progress" id="' + sec.id + '-prog">' + checked + ' / ' + total + '</span>' +
+      '<span class="sec-status ' + st.cls + '" id="' + sec.id + '-status">' + st.label + '</span>' +
+      '<span class="sec-chevron">▶</span>' +
+    '</div>' +
+    '<div class="sec-bar-wrap"><div class="sec-bar" id="' + sec.id + '-bar" style="width:' + pct + '%"></div></div>' +
+    '<div class="section-body" id="' + sec.id + '-body">' +
+      (sec.note ? '<div class="sub-note"><code>' + sec.note.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</code></div>' : '') +
+      sec.items.map(function(text, i) {
+        var key = itemKey(sec.id, i);
+        var chk = _state[key] ? 'checked' : '';
+        return '<div class="item' + (chk ? ' checked' : '') + '" id="item-' + key + '">' +
+          '<input type="checkbox" id="cb-' + key + '" ' + chk + ' onchange="toggle(\'' + key + '\',\'' + sec.id + '\')">' +
+          '<label for="cb-' + key + '">' + text + '</label>' +
+        '</div>';
+      }).join('') +
+    '</div>';
+
+  return div;
+}
+
+function renderAll() {
+  var main = document.getElementById('main');
+  main.innerHTML = '';
+  SECTIONS.forEach(function(sec) {
+    main.appendChild(renderSection(sec));
+  });
+  main.appendChild(renderSignoff());
+  updateOverall();
+}
+
+function toggle(key, sId) {
+  var cb = document.getElementById('cb-' + key);
+  _state[key] = cb.checked;
+  save(_state);
+  var row = document.getElementById('item-' + key);
+  if (cb.checked) row.classList.add('checked');
+  else            row.classList.remove('checked');
+  updateSection(sId);
+  updateOverall();
+  updateSignoffGrid();
+}
+
+function updateSection(sId) {
+  var sec   = SECTIONS.find(function(s){ return s.id === sId; });
+  var total = sec.items.length;
+  var checked = 0;
+  sec.items.forEach(function(_, i) { if (_state[itemKey(sId, i)]) checked++; });
+  var st  = sectionStatus(sId, total, checked);
+  var pct = total > 0 ? Math.round(checked / total * 100) : 0;
+  document.getElementById(sId + '-prog').textContent   = checked + ' / ' + total;
+  document.getElementById(sId + '-status').textContent = st.label;
+  document.getElementById(sId + '-status').className   = 'sec-status ' + st.cls;
+  document.getElementById(sId + '-bar').style.width    = pct + '%';
+}
+
+function updateOverall() {
+  var total = 0, checked = 0;
+  SECTIONS.forEach(function(sec) {
+    total += sec.items.length;
+    sec.items.forEach(function(_, i) { if (_state[itemKey(sec.id, i)]) checked++; });
+  });
+  var pct = total > 0 ? Math.round(checked / total * 100) : 0;
+  document.getElementById('overall-bar').style.width = pct + '%';
+  document.getElementById('overall-pct').textContent = pct + '%';
+  document.getElementById('header-count').textContent = checked + ' / ' + total + ' items';
+}
+
+function toggleSection(sId) {
+  var sec = document.getElementById(sId);
+  sec.classList.toggle('open');
+}
+
+function expandAll()   { SECTIONS.forEach(function(s){ document.getElementById(s.id).classList.add('open'); }); }
+function collapseAll() { SECTIONS.forEach(function(s){ document.getElementById(s.id).classList.remove('open'); }); }
+
+function resetAll() {
+  if (!confirm('Reset ALL checkboxes and sign-off fields? This cannot be undone.')) return;
+  localStorage.removeItem(STORE_KEY);
+  _state = {};
+  _meta  = { tester: '', date: '', unit: '', commit: '', verdict: '' };
+  renderAll();
+}
+
+// ─── Sign-off ─────────────────────────────────────────────────────────────────
+function renderSignoff() {
+  var div = document.createElement('div');
+  div.className = 'signoff';
+  div.id = 'signoff';
+  div.innerHTML =
+    '<h2>Sign-off</h2>' +
+    '<div class="signoff-grid" id="signoff-grid"></div>' +
+    '<div class="field-row"><label>Tested by</label><input id="f-tester" placeholder="Name / ID" value="' + (_meta.tester||'') + '" oninput="saveMeta()"></div>' +
+    '<div class="field-row"><label>Date</label><input id="f-date" placeholder="YYYY-MM-DD" value="' + (_meta.date||'') + '" oninput="saveMeta()"></div>' +
+    '<div class="field-row"><label>Unit / hostname</label><input id="f-unit" placeholder="mata-mata / Jetson hostname" value="' + (_meta.unit||'') + '" oninput="saveMeta()"></div>' +
+    '<div class="field-row"><label>Firmware commit</label><input id="f-commit" placeholder="git rev-parse --short HEAD" value="' + (_meta.commit||'') + '" oninput="saveMeta()"></div>' +
+    '<div class="verdict">' +
+      '<div class="verdict-btn' + (_meta.verdict==='approved'?' approved':'') + '" id="v-approved" onclick="setVerdict(\'approved\')">✓ APPROVED FOR RELEASE</div>' +
+      '<div class="verdict-btn' + (_meta.verdict==='blocked'?' blocked':'') + '" id="v-blocked"  onclick="setVerdict(\'blocked\')">✗ BLOCKED — see notes</div>' +
+    '</div>';
+  return div;
+}
+
+function updateSignoffGrid() {
+  var grid = document.getElementById('signoff-grid');
+  if (!grid) return;
+  grid.innerHTML = SECTIONS.map(function(sec) {
+    var total = sec.items.length, checked = 0;
+    sec.items.forEach(function(_, i) { if (_state[itemKey(sec.id, i)]) checked++; });
+    var st = sectionStatus(sec.id, total, checked);
+    return '<div class="signoff-row ' + st.cls + '">' +
+      '<div class="dot"></div>' +
+      '<span class="sec-lbl">' + sec.num + ' — ' + sec.title + '</span>' +
+      '<span class="sec-badge">' + (st.cls==='todo'?'—':st.label) + '</span>' +
+    '</div>';
+  }).join('');
+}
+
+function saveMeta() {
+  _meta.tester  = document.getElementById('f-tester').value;
+  _meta.date    = document.getElementById('f-date').value;
+  _meta.unit    = document.getElementById('f-unit').value;
+  _meta.commit  = document.getElementById('f-commit').value;
+  _state._meta  = _meta;
+  save(_state);
+}
+
+function setVerdict(v) {
+  _meta.verdict = v;
+  _state._meta  = _meta;
+  save(_state);
+  document.getElementById('v-approved').className = 'verdict-btn' + (v==='approved'?' approved':'');
+  document.getElementById('v-blocked').className  = 'verdict-btn' + (v==='blocked'?' blocked':'');
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+renderAll();
+// Expand first incomplete section automatically
+for (var i = 0; i < SECTIONS.length; i++) {
+  var sec = SECTIONS[i];
+  var total = sec.items.length, checked = 0;
+  sec.items.forEach(function(_, j) { if (_state[itemKey(sec.id, j)]) checked++; });
+  if (checked < total) {
+    document.getElementById(sec.id).classList.add('open');
+    break;
+  }
+}
+updateSignoffGrid();
+</script>
+</body>
+</html>
