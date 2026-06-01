@@ -151,6 +151,8 @@ The server, serial protocol, gamepad path, and e-stop logic are untouched —
 
 ## Test Checklist (manual, on the dashboard)
 
+Implemented in commit `5178e16`. Pending hardware verification on Jetson:
+
 - [ ] Toggle switches blocks; WASD grid and touchpad never show together.
 - [ ] WASD mode behaves exactly as before (Shift+W/S/A/D drives; release stops).
 - [ ] Touchpad: press centre → 0,0; drag right → +steer; drag up → +throttle;

@@ -132,7 +132,7 @@ dashboard call the same `bt_setup.py` functions.
 
 ### Phase D — Topbar pill + live widget ✅
 - [x] Topbar pill: `KEYBOARD` / `GAMEPAD: <name>` / `IDLE` / `GAMEPAD: NONE`
-- [~] Click pill → opens setup modal *(pill present; modal is Phase H, not yet wired)*
+- [x] Dedicated **+ Pair Controller** button in the Gamepad card opens the setup modal (pill is now a pure state indicator; pairing separated into its own control)
 - [x] Small gamepad widget (stick positions + throttle bar) under WASD card
 - [x] Browser polls `/api/gamepad/state` at 20 Hz
 

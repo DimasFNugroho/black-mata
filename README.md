@@ -117,7 +117,17 @@ Saves axis ranges to `tools/gamepad/calibrations/`.
 python3 tools/gamepad/gamepad_test.py
 ```
 
-Control mapping:
+**Dashboard drive input — toggle between modes with the ⌨ WASD / ⊹ Touchpad button in the drive card:**
+
+| Mode | Activate | Steer | Throttle |
+|---|---|---|---|
+| WASD | Hold **⇧ Shift** (deadman) | A / D | W / S |
+| Touchpad | **Press & hold** on the virtual pad (no Shift) | drag left / right | drag down / up |
+| Gamepad | Hold **L1** (deadman) | left stick X | left stick Y |
+
+Gamepad works in both WASD and Touchpad modes as the fallback source. Mode is remembered across page reloads.
+
+Gamepad control mapping:
 - Left stick X → steer, Left stick Y → throttle (+fwd / −rev)
 - L1 held → arm (dead-man)
 - L1 + D-pad diagonal → e-stop (latched)
@@ -292,7 +302,7 @@ tools/
     server.py                  Browser config tool — parameter tuning, steer calibration, servo state
     ackermann_config.json      Saved robot config (read by dashboard at runtime)
   dashboard/
-    server.py                  Operator dashboard — WASD drive, camera feed, e-stop, live config
+    server.py                  Operator dashboard — WASD/touchpad drive, camera feed, e-stop, live config
   camera/
     camera_test.py             Standalone MJPEG stream server with /health endpoint
     setup_udev.py              One-time udev rule installer — stable /dev/robot_camera symlink
