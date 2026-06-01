@@ -17,9 +17,10 @@
 
   Feature status and TODO list: see README.md
 
-  NOTE: The HTML diagram files in this directory reflect the original design
-  (FastAPI / WebSocket / Tailscale) and are now outdated. This text file is
-  the authoritative reference for the current architecture.
+  NOTE: This file is the SINGLE SOURCE OF TRUTH for the software architecture.
+  Earlier parallel HTML renderings (C4/ADR/deployment/sequence pages) were
+  removed because they drifted from this text — keep all architecture content
+  here. All diagrams are ASCII and live inline below.
 
 ================================================================================
   1. C4 LEVEL 1 — SYSTEM CONTEXT
