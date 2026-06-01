@@ -13,7 +13,7 @@
   6. Sequence Diagram — Camera Stream Flow
   7. Sequence Diagram — Camera Reconnect Flow
   8. Deployment Diagram
-  9. Architecture Decision Records (ADR-001 … ADR-013)
+  9. Architecture Decision Records (ADR-001 … ADR-014)
 
   Feature status and TODO list: see README.md
 
@@ -786,6 +786,52 @@
     - ERTM's modprobe.d option is not applied at boot on L4T 4.9 (runtime
       stays N); treated as informational since the G3 V2 pairs without it. If
       a future controller needs it, add a boot-time systemd one-shot.
+
+  ──────────────────────────────────────────────────────────────────────────
+  ADR-014  OpenCM serial port is single-owner; tuning vs. driving are
+           mutually exclusive, handed off via ackermann_config.json
+  ──────────────────────────────────────────────────────────────────────────
+  Status  : Accepted
+  Date    : 2026-06-01
+
+  Context
+    Two browser tools talk to the OpenCM: the Operator Dashboard
+    (tools/dashboard/server.py) for driving, and the Ackermann UI
+    (tools/ackermann_ui/server.py) for parameter tuning, steer-centre
+    calibration, and live servo state. Each constructs its own SerialDriver
+    and opens the OpenCM serial port directly. A serial port has a single
+    OS-level owner, so running both at once makes the second process fail to
+    open the port (or read corrupt data).
+
+    Beyond the resource clash, the two are mutually exclusive *activities*:
+    steer-centre calibration torques servos OFF so the wheels can be aligned
+    by hand, which directly conflicts with the dashboard streaming drive
+    frames. Driving while calibrating is undesirable regardless of software.
+
+  Decision
+    Keep the two tools mutually exclusive — run one at a time. They already
+    share a handoff artifact: the Ackermann UI writes ackermann_config.json,
+    and the dashboard re-reads it every 5 s at runtime. That file IS the
+    interface between them; there is intentionally no live process-to-process
+    link.
+
+    Considered and rejected for now:
+      - A serial broker daemon owning the port with both UIs as clients
+        (the camera-server pattern, ADR-009). Correct long-term and the right
+        move if simultaneous access is ever needed, but a real refactor and
+        unnecessary while tuning and driving don't overlap.
+      - Folding the Ackermann UI into the dashboard as a panel (one process,
+        one owner). Viable, deferred — keeps the bench tool standalone.
+      - Two live owners with locking — most work, and bakes in the unsafe
+        drive-while-calibrate case.
+
+  Consequences
+    + Zero added infrastructure; the JSON handoff already exists.
+    + The unsafe "drive while calibrating" case can't happen by construction.
+    - The operator must stop one process before starting the other; there is
+      no live tuning while driving.
+    - If simultaneous access is ever required, revisit with the serial-broker
+      option above (ADR-009 is the precedent).
 
 ================================================================================
   END OF DOCUMENT

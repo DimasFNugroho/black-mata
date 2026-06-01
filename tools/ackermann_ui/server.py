@@ -8,7 +8,13 @@ Run:
     python3 tools/ackermann_ui/server.py
     python3 tools/ackermann_ui/server.py --port /dev/ttyACM1
 
-Then open:  http://<jetson-ip>:8080
+Then open:  http://<jetson-ip>:8081
+
+NOTE: this tool opens the OpenCM serial port directly, which has a single
+OS-level owner. Do NOT run it at the same time as the dashboard
+(tools/dashboard/server.py) — stop one before starting the other. They hand
+off through ackermann_config.json (see README "Tuning with the Ackermann UI"
+and ADR-014).
 """
 
 import argparse

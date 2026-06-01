@@ -172,6 +172,26 @@ Then open `http://<jetson-ip>:8082` in a browser.
 
 The dashboard polls the camera's `/health` endpoint every 2 seconds and auto-reconnects the stream on both hardware and software disconnections without requiring a page refresh.
 
+> **Do not run the dashboard and the Ackermann UI at the same time.** Both open the OpenCM serial port directly, and a serial port has a single OS-level owner — the second process to start will fail to open it (or read garbage). These are mutually exclusive *activities* anyway: you tune/calibrate, then you drive. See [Tuning with the Ackermann UI](#tuning-with-the-ackermann-ui).
+
+---
+
+## Tuning with the Ackermann UI
+
+`tools/ackermann_ui/server.py` is the bench tool for parameter tuning, steer-centre calibration, and live servo state. It owns the OpenCM serial port while running, so it and the dashboard run **one at a time**, handing off through `ackermann_config.json`:
+
+```bash
+# 1. Stop the dashboard if it is running (it holds the serial port).
+# 2. Tune:
+python3 tools/ackermann_ui/server.py        # open http://<jetson-ip>:8081
+#    Adjust parameters / calibrate — changes are saved to
+#    tools/ackermann_ui/ackermann_config.json.
+# 3. Stop the Ackermann UI, then start the dashboard:
+python3 tools/dashboard/server.py            # reads ackermann_config.json at runtime
+```
+
+The dashboard re-reads `ackermann_config.json` every 5 s, so the values you tuned take effect as soon as it starts. There is intentionally no live link between the two processes — `ackermann_config.json` is the handoff. (See ADR-014 in `docs/software_architecture/architecture.txt` for the rationale.)
+
 ---
 
 ## Prerequisites
