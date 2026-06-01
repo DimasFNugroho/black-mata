@@ -39,7 +39,7 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 - [x] Gamepad → dashboard drive integration (evdev path, Jetson-local) — live state widget, drive merger with Shift/L1 precedence, hold-to-confirm e-stop unlatch
 - [x] In-browser Bluetooth pairing modal — pair/swap a controller from the dashboard with no terminal and no sudo (SSE-driven progress; `server.py` + `static/setup_modal.*`)
 - [x] Browser Gamepad API — operator's PC gamepad drives the robot remotely over any network; "ON THIS PC" row in the Gamepad card; Robot BT takes priority over PC gamepad
-- [ ] Servo status panel (per-servo voltages, temperatures, positions, modes)
+
 
 ### Bluetooth Gamepad (`tools/gamepad/`)
 
@@ -201,7 +201,7 @@ python3 tools/ackermann_ui/server.py        # open http://<jetson-ip>:8081
 python3 tools/dashboard/server.py            # reads ackermann_config.json at runtime
 ```
 
-The dashboard re-reads `ackermann_config.json` every 5 s, so the values you tuned take effect as soon as it starts. There is intentionally no live link between the two processes — `ackermann_config.json` is the handoff. (See ADR-014 in the [architecture ADRs](docs/software_architecture/adr.html) for the rationale.)
+The dashboard re-reads `ackermann_config.json` every 5 s, so the values you tuned take effect as soon as it starts. The **Default drive mode** toggle in the AckermannConfig section sets whether the dashboard opens in WASD or Touchpad mode — saved immediately on click, applied on the next dashboard load. There is intentionally no live link between the two processes — `ackermann_config.json` is the handoff. (See ADR-014 in the [architecture ADRs](docs/software_architecture/adr.html) for the rationale.)
 
 ---
 

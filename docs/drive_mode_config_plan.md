@@ -88,6 +88,8 @@ exists and works.
 
 ## Test Checklist
 
+Implemented in commits `f9559d7`+ (config plan) and the drive-mode-config commit. Pending hardware verification:
+
 - [ ] Fresh dashboard load uses WASD when config has `default_drive_mode: "wasd"`.
 - [ ] Fresh dashboard load uses Touchpad when config has `default_drive_mode: "touchpad"`.
 - [ ] Toggling mid-session works; next page reload reverts to config default.

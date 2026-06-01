@@ -3,8 +3,9 @@ var _maxSteer     = 30.0;
 var _driving      = false;
 var _estopLatched = false;   // when true, the drive merger refuses to send frames
 var _cfg          = null;
-var _driveMode    = localStorage.getItem('driveMode') || 'wasd';
-var _touch        = { active: false, steer: 0, throttle: 0 };
+var _driveMode        = 'wasd';   // overwritten from config on first loadConfig()
+var _modeInitialised  = false;    // prevents the 5 s re-poll from resetting an in-session toggle
+var _touch            = { active: false, steer: 0, throttle: 0 };
 var _battSamples    = [];   // voltage readings accumulated between display updates
 var _lastBattDispMs = 0;    // timestamp of last battery display update
 var WHEEL_POS  = { FL:{x:-55,y:-46}, FR:{x:55,y:-46}, RL:{x:-55,y:46}, RR:{x:55,y:46} };
@@ -21,6 +22,12 @@ function loadConfig() {
       var pct = (Math.min(parseInt(_cfg.max_wheel_speed_ticks||300),1023)/1023*100).toFixed(0);
       document.getElementById('cfg-info').textContent =
         'max steer: ' + _maxSteer + '°  |  max output: ' + pct + '%';
+      // Apply default drive mode from config only on first load so the 5 s
+      // re-poll doesn't reset an in-session toggle.
+      if (!_modeInitialised) {
+        _modeInitialised = true;
+        setDriveMode(_cfg.default_drive_mode || 'wasd');
+      }
     } catch(e) {}
   };
   xhr.send();
@@ -455,7 +462,6 @@ function setDriveMode(mode) {
   if (_touch.active) _touchRelease();
 
   _driveMode = mode;
-  localStorage.setItem('driveMode', mode);
 
   document.getElementById('mode-wasd').classList.toggle('mode-hidden', mode !== 'wasd');
   document.getElementById('mode-touchpad').classList.toggle('mode-hidden', mode !== 'touchpad');
@@ -472,8 +478,8 @@ function setDriveMode(mode) {
   }
 }
 
-// Apply persisted mode on load
-setDriveMode(_driveMode);
+// Drive mode is applied on first loadConfig() callback (from config default).
+// setDriveMode() here would race with the XHR — don't call it at module load.
 
 // ── Touchpad pointer handlers ─────────────────────────────────────────────────
 

@@ -158,6 +158,7 @@ def _default_config():
         'servo_ids': [4, 2, 8, 6, 3, 1, 7, 5],
         'steer_rate_deg_s': 30.0, 'steer_accel_deg_s2': 60.0,
         'batt_max_v': 12.6, 'batt_ok_v': 11.0, 'batt_low_v': 10.2, 'batt_critical_v': 9.6,
+        'default_drive_mode': 'wasd',
     }
 
 
@@ -538,6 +539,10 @@ HTML_PAGE = """<!DOCTYPE html>
   .btn-save    { background: #46a; color: #fff; }
   .btn-load    { background: #555; color: #fff; }
   .btn-torque-on  { background: #2a7; color: #fff; }
+  .dm-btn { padding: 5px 14px; font-family: monospace; font-size: 12px; font-weight: 600; cursor: pointer; background: #1a1a1a; color: #555; border: 1px solid #333; }
+  .dm-btn:first-child { border-radius: 4px 0 0 4px; }
+  .dm-btn:last-child  { border-radius: 0 4px 4px 0; border-left: none; }
+  .dm-btn-active { background: #0d2a4a; color: #7cf; border-color: #2a4a7a; }
   .btn-torque-off { background: #555; color: #aaa; border: 1px solid #888; }
   .btn:hover { opacity: 0.85; }
   .btn:active { opacity: 0.7; }
@@ -751,6 +756,22 @@ HTML_PAGE = """<!DOCTYPE html>
       </div>
     </div>
 
+    <!-- Dashboard default drive mode -->
+    <div style="margin-top:12px;border-top:1px solid #333;padding-top:10px;">
+      <h3>Dashboard default drive mode</h3>
+      <div style="font-size:12px;color:#888;margin-bottom:8px;">
+        Applied when the dashboard first loads. In-session toggles are ephemeral and reset on next load.
+      </div>
+      <div class="cfg-row">
+        <label>Default mode</label>
+        <div style="display:flex;gap:0;">
+          <button id="dm-btn-wasd"     class="dm-btn dm-btn-active" onclick="setDefaultMode('wasd')">⌨ WASD</button>
+          <button id="dm-btn-touchpad" class="dm-btn"               onclick="setDefaultMode('touchpad')">⊹ Touchpad</button>
+        </div>
+        <span id="dm-saved" style="font-size:11px;color:#4f4;margin-left:8px;display:none;">Saved</span>
+      </div>
+    </div>
+
     <!-- Battery thresholds -->
     <div style="margin-top:12px;border-top:1px solid #333;padding-top:10px;">
       <h3>Battery thresholds (V)</h3>
@@ -857,6 +878,7 @@ function readConfig() {
     batt_ok_v:             parseFloat(document.getElementById('c-batt-ok').value)   || 11.0,
     batt_low_v:            parseFloat(document.getElementById('c-batt-low').value)  || 10.2,
     batt_critical_v:       parseFloat(document.getElementById('c-batt-crit').value) || 9.6,
+    default_drive_mode:    _currentDriveMode,
   };
 }
 
@@ -878,8 +900,29 @@ function fillConfig(c) {
   document.getElementById('c-batt-ok').value   = c.batt_ok_v       !== undefined ? c.batt_ok_v       : 11.0;
   document.getElementById('c-batt-low').value  = c.batt_low_v      !== undefined ? c.batt_low_v      : 10.2;
   document.getElementById('c-batt-crit').value = c.batt_critical_v !== undefined ? c.batt_critical_v : 9.6;
+  _applyDriveModeBtns(c.default_drive_mode || 'wasd');
   updateSliderRange(c.max_steer_deg);
   updateTicksPct();
+}
+
+var _currentDriveMode = 'wasd';
+
+function _applyDriveModeBtns(mode) {
+  _currentDriveMode = (mode === 'touchpad') ? 'touchpad' : 'wasd';
+  document.getElementById('dm-btn-wasd').classList.toggle('dm-btn-active',     _currentDriveMode === 'wasd');
+  document.getElementById('dm-btn-touchpad').classList.toggle('dm-btn-active', _currentDriveMode === 'touchpad');
+}
+
+function setDefaultMode(mode) {
+  _applyDriveModeBtns(mode);
+  // Immediately persist by POSTing the full current config
+  var body = JSON.stringify({ config: collectConfig() });
+  fetch('/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
+    .then(function() {
+      var el = document.getElementById('dm-saved');
+      el.style.display = 'inline';
+      setTimeout(function() { el.style.display = 'none'; }, 1500);
+    });
 }
 
 function updateSliderRange(maxSteer) {
