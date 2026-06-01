@@ -28,7 +28,7 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 ### Operator Dashboard (`tools/dashboard/`)
 
 - [x] Single-page HTML dashboard (Vanilla JS, no build step)
-- [x] Keyboard WASD drive control
+- [x] Keyboard WASD drive control — toggle to virtual touchpad mode (press-and-drag, no Shift needed)
 - [x] Live MJPEG camera feed — proxied from `camera_test.py`
 - [x] Camera auto-reconnect — dashboard detects hardware and software disconnections without page refresh
 - [x] E-stop button

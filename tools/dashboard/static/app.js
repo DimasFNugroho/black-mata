@@ -3,6 +3,8 @@ var _maxSteer     = 30.0;
 var _driving      = false;
 var _estopLatched = false;   // when true, the drive merger refuses to send frames
 var _cfg          = null;
+var _driveMode    = localStorage.getItem('driveMode') || 'wasd';
+var _touch        = { active: false, steer: 0, throttle: 0 };
 var _battSamples    = [];   // voltage readings accumulated between display updates
 var _lastBattDispMs = 0;    // timestamp of last battery display update
 var WHEEL_POS  = { FL:{x:-55,y:-46}, FR:{x:55,y:-46}, RL:{x:-55,y:46}, RR:{x:55,y:46} };
@@ -206,6 +208,8 @@ document.addEventListener('keydown', function(e) {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   var k = e.key.toLowerCase();
   if (k === 'w' || k === 'a' || k === 's' || k === 'd') {
+    // WASD keys are inert in touchpad mode (keys are also hidden)
+    if (_driveMode !== 'wasd') return;
     e.preventDefault(); _keys[k] = true; updateKeyDisplay();
   } else if (k === ' ' || k === 'escape') {
     e.preventDefault(); doEstop();
@@ -224,13 +228,14 @@ function updateKeyDisplay() {
   });
 }
 
-// Drive merger — 10 Hz. Two deadman buttons:
-//   Shift   → keyboard active (Shift wins if both deadmen are held)
-//   L1      → gamepad active
-// While a deadman is held we stream drive frames every 100 ms (even at
-// 0,0) so the firmware watchdog keeps the robot live. Releasing both
-// deadmen sends one final 0,0 frame and then stops; watchdog times out
-// and the robot brakes.
+// Drive merger — 10 Hz.
+//   Manual source depends on drive mode:
+//     WASD mode     → Shift deadman wins (Shift + W/A/S/D)
+//     Touchpad mode → pointer-held deadman wins (_touch.active)
+//   Fallback: gamepad (L1 deadman)
+// While any deadman is held, frames flow every 100 ms so the firmware
+// watchdog keeps the robot live. Releasing all deadmen sends one final
+// 0,0 frame; the watchdog then brakes the robot.
 setInterval(function() {
   // Latched e-stop: skip the loop entirely so the firmware watchdog
   // brakes the robot and stays braked. Release with the RESET button.
@@ -242,11 +247,15 @@ setInterval(function() {
   var active = false;
   var steer = 0, speed = 0;
 
-  if (_shiftHeld) {
+  if (_driveMode === 'wasd' && _shiftHeld) {
     if (_keys.a) steer -= _maxSteer;
     if (_keys.d) steer += _maxSteer;
     if (_keys.w) speed += 1.0;
     if (_keys.s) speed -= 1.0;
+    active = true;
+  } else if (_driveMode === 'touchpad' && _touch.active) {
+    steer  = _touch.steer    * _maxSteer;
+    speed  = _touch.throttle;
     active = true;
   } else if (_gp.connected && _gp.deadman) {
     steer = _gp.steer * _maxSteer;
@@ -280,6 +289,7 @@ function latchEstop() {
   _estopLatched = true;
   _driving = false;
   _keys = { w:false, a:false, s:false, d:false };
+  if (_touch.active) _touchRelease();
   updateKeyDisplay(); updateGauges(0, 0);
   updateEstopButton();
   var xhr = new XMLHttpRequest();
@@ -419,6 +429,116 @@ function setupCameraReconnect() {
 setupCameraReconnect();
 
 
+// ── Drive mode (WASD ↔ Touchpad) ─────────────────────────────────────────────
+
+var _HINTS = {
+  wasd:     ['<div><span style="color:#7cf;font-weight:bold;">⇧+W/S</span>  fwd / rev</div>',
+             '<div><span style="color:#7cf;font-weight:bold;">⇧+A/D</span>  steer</div>',
+             '<div><span style="color:#7cf;font-weight:bold;">Spc/Esc</span>  e-stop</div>'].join(''),
+  touchpad: ['<div><span style="color:#7cf;font-weight:bold;">drag up</span>  fwd</div>',
+             '<div><span style="color:#7cf;font-weight:bold;">drag right</span>  steer</div>',
+             '<div><span style="color:#7cf;font-weight:bold;">Spc/Esc</span>  e-stop</div>'].join('')
+};
+
+function setDriveMode(mode) {
+  // if switching while a touch is active, release it first so no drift
+  if (_touch.active) _touchRelease();
+
+  _driveMode = mode;
+  localStorage.setItem('driveMode', mode);
+
+  document.getElementById('mode-wasd').classList.toggle('mode-hidden', mode !== 'wasd');
+  document.getElementById('mode-touchpad').classList.toggle('mode-hidden', mode !== 'touchpad');
+  document.getElementById('mode-btn-wasd').classList.toggle('mode-btn-active', mode === 'wasd');
+  document.getElementById('mode-btn-touchpad').classList.toggle('mode-btn-active', mode === 'touchpad');
+
+  document.getElementById('drive-hints').innerHTML = _HINTS[mode];
+
+  var ts = document.getElementById('topstatus');
+  if (mode === 'wasd') {
+    ts.textContent = 'Hold ⇧ + WASD to drive or L1 + sticks (gamepad).';
+  } else {
+    ts.textContent = 'Press & drag the touchpad to drive or L1 + sticks (gamepad).';
+  }
+}
+
+// Apply persisted mode on load
+setDriveMode(_driveMode);
+
+// ── Touchpad pointer handlers ─────────────────────────────────────────────────
+
+var _TP_R = 74;   // usable radius (pad half-width minus dot radius)
+var _TP_DEAD = 6; // centre deadzone in px
+
+function _touchSteerThrottle(padX, padY) {
+  var dx = Math.max(-_TP_R, Math.min(_TP_R, padX));
+  var dy = Math.max(-_TP_R, Math.min(_TP_R, padY));
+  var steer    = Math.abs(dx) < _TP_DEAD ? 0 : dx / _TP_R;
+  var throttle = Math.abs(dy) < _TP_DEAD ? 0 : -dy / _TP_R;
+  return { steer: steer, throttle: throttle, dx: dx, dy: dy };
+}
+
+function _touchRelease() {
+  _touch.active   = false;
+  _touch.steer    = 0;
+  _touch.throttle = 0;
+  var pad = document.getElementById('drive-touchpad');
+  if (pad) pad.classList.remove('touchpad-engaged');
+  var dot = document.getElementById('tp-dot');
+  if (dot) { dot.setAttribute('cx', 0); dot.setAttribute('cy', 0); }
+}
+
+(function wireTouchpad() {
+  var pad = document.getElementById('drive-touchpad');
+  if (!pad) return;
+  var rect;
+
+  function padCoords(e) {
+    if (!rect) rect = pad.getBoundingClientRect();
+    // SVG viewBox is -80..-80..160..160 so centre at (rect.width/2, rect.height/2)
+    var cx = rect.left + rect.width  / 2;
+    var cy = rect.top  + rect.height / 2;
+    var scale = rect.width / 160;
+    return { x: (e.clientX - cx) / scale, y: (e.clientY - cy) / scale };
+  }
+
+  pad.addEventListener('pointerdown', function(e) {
+    if (e.button !== undefined && e.button !== 0) return; // left / touch only
+    if (_estopLatched) return;
+    e.preventDefault();
+    pad.setPointerCapture(e.pointerId);
+    rect = pad.getBoundingClientRect();
+    var c = padCoords(e);
+    var r = _touchSteerThrottle(c.x, c.y);
+    _touch.active   = true;
+    _touch.steer    = r.steer;
+    _touch.throttle = r.throttle;
+    pad.classList.add('touchpad-engaged');
+    var dot = document.getElementById('tp-dot');
+    if (dot) { dot.setAttribute('cx', r.dx); dot.setAttribute('cy', r.dy); }
+  });
+
+  pad.addEventListener('pointermove', function(e) {
+    if (!_touch.active) return;
+    e.preventDefault();
+    var c = padCoords(e);
+    var r = _touchSteerThrottle(c.x, c.y);
+    _touch.steer    = r.steer;
+    _touch.throttle = r.throttle;
+    var dot = document.getElementById('tp-dot');
+    if (dot) { dot.setAttribute('cx', r.dx); dot.setAttribute('cy', r.dy); }
+  });
+
+  function onRelease(e) {
+    if (!_touch.active) return;
+    e.preventDefault();
+    _touchRelease();
+  }
+  pad.addEventListener('pointerup',     onRelease);
+  pad.addEventListener('pointercancel', onRelease);
+})();
+
+
 // ── Gamepad live state + input-source pill ────────────────────────────────────
 // Polls /api/gamepad/state at 20 Hz, updates the topbar pill and the
 // gamepad card. Shift tracking is for the pill only — actual drive-source
@@ -452,19 +572,25 @@ function setBipolarBar(elId, value, posColor, negColor) {
 
 function updateInputPill() {
   var pill = document.getElementById('input-pill');
-  if (!_gp.connected) {
-    pill.textContent = 'GAMEPAD: NONE';
-    pill.className   = 'disconnect';
-    return;
-  }
-  if (_shiftHeld) {
+  // Manual sources take precedence by mode
+  if (_driveMode === 'wasd' && _shiftHeld) {
     pill.textContent = 'KEYBOARD';
     pill.className   = 'keyboard';
     return;
   }
-  if (_gp.deadman) {
+  if (_driveMode === 'touchpad' && _touch.active) {
+    pill.textContent = 'TOUCHPAD';
+    pill.className   = 'keyboard';
+    return;
+  }
+  if (_gp.connected && _gp.deadman) {
     pill.textContent = 'GAMEPAD: ' + (_gp.name || '?');
     pill.className   = 'gamepad';
+    return;
+  }
+  if (!_gp.connected) {
+    pill.textContent = 'GAMEPAD: NONE';
+    pill.className   = 'disconnect';
   } else {
     pill.textContent = 'IDLE';
     pill.className   = 'idle';

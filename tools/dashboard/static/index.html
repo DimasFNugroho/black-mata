@@ -12,7 +12,7 @@
 <div id="topbar">
   <h1>DRIVE DASHBOARD</h1>
   <span id="conn-badge">connecting...</span>
-  <span id="topstatus">Hold ⇧ + WASD to drive (keyboard) or L1 + sticks (gamepad).</span>
+  <span id="topstatus">Hold ⇧ + WASD to drive or L1 + sticks (gamepad).</span>
   <span id="input-pill" class="disconnect" title="Active drive input source">GAMEPAD: NONE</span>
 </div>
 
@@ -105,21 +105,50 @@
         </div>
       </div>
     </div>
-    <!-- WASD + gauges -->
+    <!-- WASD / Touchpad + gauges -->
     <div class="card" id="wasd-card">
       <div id="cfg-info" style="font-size:11px;color:#555;text-align:center;margin-bottom:6px;">loading...</div>
+
+      <!-- drive-mode toggle -->
+      <div class="drive-mode-toggle">
+        <button id="mode-btn-wasd"     class="mode-btn mode-btn-active" onclick="setDriveMode('wasd')">⌨ WASD</button>
+        <button id="mode-btn-touchpad" class="mode-btn"                 onclick="setDriveMode('touchpad')">⊹ Touchpad</button>
+      </div>
+
       <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;justify-content:center;">
 
-        <div class="wasd-grid">
-          <div class="wasd-row">
-            <div id="kb-w" class="kb-key"><div class="kb-key-inner">W<span class="sub">FWD</span></div></div>
-          </div>
-          <div class="wasd-row">
-            <div id="kb-a" class="kb-key"><div class="kb-key-inner">A<span class="sub">LEFT</span></div></div>
-            <div id="kb-s" class="kb-key"><div class="kb-key-inner">S<span class="sub">REV</span></div></div>
-            <div id="kb-d" class="kb-key"><div class="kb-key-inner">D<span class="sub">RIGHT</span></div></div>
+        <!-- ── WASD block ── -->
+        <div id="mode-wasd">
+          <div class="wasd-grid">
+            <div class="wasd-row">
+              <div id="kb-w" class="kb-key"><div class="kb-key-inner">W<span class="sub">FWD</span></div></div>
+            </div>
+            <div class="wasd-row">
+              <div id="kb-a" class="kb-key"><div class="kb-key-inner">A<span class="sub">LEFT</span></div></div>
+              <div id="kb-s" class="kb-key"><div class="kb-key-inner">S<span class="sub">REV</span></div></div>
+              <div id="kb-d" class="kb-key"><div class="kb-key-inner">D<span class="sub">RIGHT</span></div></div>
+            </div>
           </div>
         </div>
+
+        <!-- ── Touchpad block ── -->
+        <div id="mode-touchpad" class="mode-hidden">
+          <svg id="drive-touchpad" class="touchpad"
+               width="160" height="160" viewBox="-80 -80 160 160"
+               style="touch-action:none;cursor:crosshair;">
+            <!-- background -->
+            <rect x="-80" y="-80" width="160" height="160" rx="6"
+                  fill="#0a0a0a" stroke="#222" stroke-width="1"/>
+            <!-- cross-hairs -->
+            <line x1="-80" y1="0" x2="80" y2="0" stroke="#1a1a1a"/>
+            <line x1="0" y1="-80" x2="0" y2="80" stroke="#1a1a1a"/>
+            <!-- command dot -->
+            <circle id="tp-dot" cx="0" cy="0" r="8" fill="#4fa" opacity="0.85"/>
+          </svg>
+          <div style="font-size:10px;color:#444;text-align:center;margin-top:4px;">press &amp; drag to drive</div>
+        </div>
+
+        <!-- ── shared: gauges + hints ── -->
         <div style="display:flex;flex-direction:column;gap:6px;">
           <div class="gauge-wrap">
             <div class="gauge-label">Steer</div>
@@ -138,12 +167,11 @@
             <div id="val-speed" class="gauge-val">0 %</div>
           </div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:6px;font-size:20px;color:#444;">
-          <div><span style="color:#7cf;font-weight:bold;">⇧+W/S</span>  fwd / rev</div>
-          <div><span style="color:#7cf;font-weight:bold;">⇧+A/D</span>  steer</div>
-          <div><span style="color:#7cf;font-weight:bold;">Spc/Esc</span>  e-stop</div>
+        <div id="drive-hints" style="display:flex;flex-direction:column;gap:6px;font-size:20px;color:#444;">
+          <!-- populated by setDriveMode() -->
         </div>
       </div>
+
       <div style="display:flex;justify-content:center;margin-top:10px;">
         <button id="btn-estop-main" class="btn-estop-top">&#9632; E-STOP</button>
       </div>
