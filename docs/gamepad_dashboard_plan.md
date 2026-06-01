@@ -146,7 +146,7 @@ dashboard call the same `bt_setup.py` functions.
 - [x] Hold-to-confirm with visual fill animation
 - [x] LS + RS gamepad combo with same hold-to-confirm timing
 - [ ] `/api/estop/unlatch` endpoint clears latch + acknowledges
-      *(TODO — latch is currently client-side in `app.js`; see "E-stop Unlatch" above)*
+      *(Deferred to v2 — latch is client-side in `app.js`; UX is fully working. Server-side hardening not required for v1.)*
 
 ### Phase G — BT setup orchestrator ✅
 - [x] `tools/gamepad/bt_setup.py` — functions yield structured progress events;

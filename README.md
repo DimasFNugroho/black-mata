@@ -22,7 +22,7 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 
 - [x] Serial driver — binary frame encode/decode, background recv thread, CRC validation (`serial_driver.py`)
 - [x] Ackermann kinematics — 4WS counter-phase, per-wheel speed differential, output fraction API (`ackermann.py`)
-- [x] E-stop handler — WebSocket silence detection (500 ms), zero-speed frame dispatch (`estop.py`)
+- [x] E-stop keepalive — 300 ms HTTP POST silence triggers zero-speed frame; firmware watchdog at 500 ms as independent second layer (`server.py`)
 - [x] Camera — V4L2 capture, MJPEG encode, background thread, auto-reconnect on hardware disconnect (`camera.py`)
 
 ### Operator Dashboard (`tools/dashboard/`)
@@ -50,7 +50,6 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 - [x] Gamepad input validator — live display of all axes (raw + normalised) and buttons; drive preview with steer, throttle, e-stop combo, arm (`gamepad_test.py`)
 - [x] Per-controller axis calibration — G3 V2 hardware calibration procedure + software range sweep; saves to JSON (`--calibrate`)
 - [x] Gamepad → dashboard drive integration (evdev path, Jetson-local)
-- [ ] Browser Gamepad API → remote drive via dashboard (operator-side gamepad over network)
 
 ### Infrastructure
 
