@@ -13,7 +13,7 @@
   6. Sequence Diagram — Camera Stream Flow
   7. Sequence Diagram — Camera Reconnect Flow
   8. Deployment Diagram
-  9. Architecture Decision Records (ADR-001 … ADR-011)
+  9. Architecture Decision Records (ADR-001 … ADR-013)
 
   Feature status and TODO list: see README.md
 
@@ -352,6 +352,8 @@
   ║ │ <<process>>  Dashboard Server  :8082     │ ║
   ║ │ tools/dashboard/server.py                │ ║
   ║ │ serial_driver.py  ackermann.py           │ ║
+  ║ │ bt_setup.py — in-browser BT pairing via  │ ║
+  ║ │ SSE (/api/gamepad/setup/*), sudo-free    │ ║
   ║ └──────────────────────────────────────────┘ ║
   ║              │ HTTP localhost:8083            ║
   ║ ┌────────────▼─────────────────────────────┐ ║
@@ -725,6 +727,65 @@
     - Browser Gamepad API path is still planned: operator plugs a gamepad
       into their own machine and controls the robot remotely over any
       network without needing BT on the Jetson. Deferred to next sprint.
+
+  ──────────────────────────────────────────────────────────────────────────
+  ADR-013  Sudo-free in-browser pairing + one-time host commissioning
+  ──────────────────────────────────────────────────────────────────────────
+  Status  : Accepted
+  Date    : 2026-06-01
+
+  Context
+    An end-user should be able to pair (and later swap) a Bluetooth gamepad
+    from the dashboard alone — no terminal, no sudo. But pairing on BlueZ
+    normally needs privileged setup (rfkill unblock, adapter power, ERTM,
+    device bonds), and the Jetson's L4T 4.9 stack has quirks: bluetoothctl
+    one-shots grab the TTY and hang; pairing/scanning across separate
+    bluetoothctl sessions drops the bond; the RTL8761B beacons sparsely at
+    low RSSI. Doing all this safely at request time, as a non-root web
+    process, is the constraint.
+
+  Decision
+    Split the work by lifetime into a three-tier model and push every
+    privileged action OUT of the runtime path:
+
+      Tier 1 — Driver (once per OS image): jetson_btrtl_8761b_fix.sh.
+      Tier 2 — Commission (once per robot): setup_bluetooth_host.sh applies
+        all root-level setup — ERTM disable, rfkill unblock, AutoEnable=true
+        (adapter powers on at boot), dashboard user added to the 'bluetooth'
+        group, bluetooth.service enabled. After this the runtime needs no
+        sudo.
+      Tier 3 — Verify (gate): check_bluetooth_host.sh, read-only PASS/WARN/
+        FAIL, must pass on a COLD boot.
+      Tier 4 — Acceptance: pair from the dashboard, no terminal/sudo.
+
+    commission_bluetooth.sh is a resumable, read-only guide that walks these
+    tiers across the reboots that separate them; reset_bluetooth_host.sh
+    reverts Tier 2 for re-testing on a single robot. The pairing logic itself
+    lives once in bt_setup.py and is shared by the terminal wrapper
+    (setup_gamepad.sh) and the dashboard. server.py drives the modal over
+    Server-Sent Events (/api/gamepad/setup/{events,start,continue,select,
+    cancel}) so the browser sees live scan/pair/connect progress and can pick
+    a device. Because the gamepad live-state widget and the pairing control
+    are independent, a controller can be (re)paired even while another is
+    connected.
+
+    BlueZ-quirk mitigations baked into bt_setup.py: stdin=DEVNULL on every
+    bluetoothctl call (kills the TTY-grab hang); a SINGLE bluetoothctl session
+    for remove→scan→pair→trust→connect; remove '*' (quoted) before scanning;
+    and a re-discovery wait (up to REDISCOVER_SECS) until the target MAC
+    re-advertises, instead of a blind pairing window.
+
+  Consequences
+    + End-user pairs/swaps controllers from the browser; no shell, no sudo.
+    + All privilege is confined to a one-time, auditable commissioning step.
+    + One pairing implementation (bt_setup.py) for both terminal and browser.
+    + Procedure is repeatable and verifiable on any black-mata (guide + gate
+      + reset), so commissioning is a checklist, not tribal knowledge.
+    - Commissioning requires one reboot between tiers (group membership,
+      AutoEnable), so it is a guided procedure rather than one script.
+    - ERTM's modprobe.d option is not applied at boot on L4T 4.9 (runtime
+      stays N); treated as informational since the G3 V2 pairs without it. If
+      a future controller needs it, add a boot-time systemd one-shot.
 
 ================================================================================
   END OF DOCUMENT

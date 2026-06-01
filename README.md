@@ -37,12 +37,15 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 - [x] Per-wheel temperature heatmap — colour-coded overlaid on bird's-eye view
 - [x] Battery gauge — live voltage with colour-coded fill bar
 - [x] Gamepad → dashboard drive integration (evdev path, Jetson-local) — live state widget, drive merger with Shift/L1 precedence, hold-to-confirm e-stop unlatch
+- [x] In-browser Bluetooth pairing modal — pair/swap a controller from the dashboard with no terminal and no sudo (SSE-driven progress; `server.py` + `static/setup_modal.*`)
 - [ ] Browser Gamepad API → remote drive via dashboard (operator-side gamepad over network)
 - [ ] Servo status panel (per-servo voltages, temperatures, positions, modes)
 
 ### Bluetooth Gamepad (`tools/gamepad/`)
 
-- [x] BT pairing automation — interactive scan/pair/trust/connect via persistent bluetoothctl session (`setup_gamepad.sh`)
+- [x] Sudo-free BT pairing orchestrator — scan/pair/trust/connect over one persistent bluetoothctl session, structured progress events (`bt_setup.py`; `setup_gamepad.sh` is a thin terminal wrapper)
+- [x] In-browser pairing — pair/swap a controller from the dashboard setup modal, no terminal/sudo (shares `bt_setup.py`)
+- [x] One-time host commissioning toolkit — root setup, read-only verifier, resumable guide, and clean-baseline reset (`setup_bluetooth_host.sh`, `check_bluetooth_host.sh`, `commission_bluetooth.sh`, `reset_bluetooth_host.sh`; runbook in `docs/commissioning_bluetooth.md`)
 - [x] RTL8761B USB BT dongle on Jetson — rebuilds `btrtl.ko` with the missing 8761B project id, plants 8761BU firmware, blacklists vendor `rtk_btusb` (`jetson_btrtl_8761b_fix.sh`)
 - [x] Gamepad input validator — live display of all axes (raw + normalised) and buttons; drive preview with steer, throttle, e-stop combo, arm (`gamepad_test.py`)
 - [x] Per-controller axis calibration — G3 V2 hardware calibration procedure + software range sweep; saves to JSON (`--calibrate`)
