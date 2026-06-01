@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C4 Level 1 — System Context — Black-Mata Architecture</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --accent:  #58a6ff;
+    --green:   #3fb950;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px; line-height: 1.6;
+  }
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 40px; display: flex; align-items: center; gap: 4px; overflow-x: auto;
+  }
+  .nav-brand {
+    font-size: 14px; font-weight: 700; color: var(--text);
+    padding: 14px 16px 14px 0; margin-right: 12px;
+    border-right: 1px solid var(--border); white-space: nowrap; text-decoration: none;
+  }
+  nav a:not(.nav-brand) {
+    display: block; padding: 14px 14px; font-size: 13px; font-weight: 500;
+    color: var(--muted); text-decoration: none; white-space: nowrap;
+    border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+  }
+  nav a:not(.nav-brand):hover { color: var(--text); }
+  nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .sub-nav {
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 0 40px; display: flex; gap: 0; overflow-x: auto;
+  }
+  .sub-nav a {
+    display: block; padding: 10px 16px; font-size: 13px; font-weight: 500;
+    color: var(--muted); text-decoration: none; white-space: nowrap;
+    border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+  }
+  .sub-nav a:hover { color: var(--text); }
+  .sub-nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  main { max-width: 1400px; margin: 0 auto; padding: 48px 40px 100px; }
+  .page-header { margin-bottom: 32px; }
+  .level-badge {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    padding: 3px 10px; border-radius: 4px; margin-bottom: 12px;
+    background: #1f3a5f; color: var(--accent); border: 1px solid #2a5a8f;
+  }
+  .page-header h1 { font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+  .page-header p  { font-size: 14px; color: var(--muted); }
+
+  .toolbar {
+    display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .toolbar button {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); font-size: 13px; font-weight: 600;
+    padding: 8px 16px; border-radius: 7px; cursor: pointer;
+    display: flex; align-items: center; gap: 7px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .toolbar button:hover { border-color: var(--accent); background: #1f2d3d; }
+  .toolbar button svg { width: 15px; height: 15px; fill: currentColor; }
+
+  .diagram-card {
+    background: #ffffff; border: 1px solid #d0d7de;
+    border-radius: 12px; padding: 40px; overflow-x: auto;
+  }
+
+  @media print {
+    nav, .sub-nav, .toolbar, .page-header { display: none !important; }
+    body { background: #fff !important; }
+    .diagram-card { border: none !important; padding: 0 !important; background: #fff !important; }
+    #c4-svg { width: 100% !important; height: auto !important; }
+  }
+</style>
+</head>
+<body>
+<nav>
+  <a href="index.html" class="nav-brand">Black-Mata Arch.</a>
+  <a href="index.html">Overview</a>
+  <a href="c4.html" class="active">C4 Diagrams</a>
+  <a href="sequences.html">Sequences</a>
+  <a href="deployment.html">Deployment</a>
+  <a href="adr.html">ADRs</a>
+</nav>
+<div class="sub-nav">
+  <a href="c4_context.html" class="active">Level 1 · System Context</a>
+  <a href="c4_containers.html">Level 2 · Containers</a>
+  <a href="c4_components.html">Level 3 · Components</a>
+</div>
+<main>
+  <div class="page-header">
+    <div class="level-badge">C4 Level 1</div>
+    <h1>System Context</h1>
+    <p>Who uses the system, and what external systems does it interact with?</p>
+  </div>
+  <div class="toolbar">
+    <button onclick="downloadSVG()">
+      <svg viewBox="0 0 16 16"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-5 2h10v1.5H3V14z"/></svg>
+      Download SVG
+    </button>
+    <button onclick="window.print()">
+      <svg viewBox="0 0 16 16"><path d="M4 1h8v3H4V1zM1 5h14v7h-3v3H4v-3H1V5zm3 6v3h8v-3H4zm9-4h1v1h-1V7z"/></svg>
+      Print / Save as PDF
+    </button>
+  </div>
+  <div class="diagram-card">
+    <svg id="c4-svg" viewBox="0 0 960 560"
+         xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;max-width:960px;display:block;margin:0 auto"
+         font-family="system-ui,-apple-system,'Segoe UI',sans-serif">
+      <defs>
+        <marker id="arr" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0,10 3.5,0 7" fill="#444"/>
+        </marker>
+      </defs>
+
+      <!-- ═══════════════════════════════════════════════════════
+           OPERATOR  (Person)
+      ════════════════════════════════════════════════════════════ -->
+      <!-- person icon above box -->
+      <circle cx="122" cy="36" r="22" fill="#08427B"/>
+      <line x1="122" y1="58" x2="122" y2="72" stroke="#08427B" stroke-width="3.5"/>
+      <line x1="97"  y1="66" x2="147" y2="66" stroke="#08427B" stroke-width="3.5"/>
+      <!-- box -->
+      <rect x="40" y="72" width="164" height="125" rx="6" fill="#08427B"/>
+      <text x="122" y="95"  text-anchor="middle" fill="#b8cfe8" font-size="11" font-style="italic">«Person»</text>
+      <text x="122" y="117" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">Operator</text>
+      <line x1="50" y1="124" x2="194" y2="124" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+      <text x="122" y="141" text-anchor="middle" fill="#b8cfe8" font-size="12">Human operator. Controls</text>
+      <text x="122" y="157" text-anchor="middle" fill="#b8cfe8" font-size="12">the robot remotely from</text>
+      <text x="122" y="173" text-anchor="middle" fill="#b8cfe8" font-size="12">a browser on any machine.</text>
+
+      <!-- ═══════════════════════════════════════════════════════
+           SYSTEM BOUNDARY  (dashed)
+      ════════════════════════════════════════════════════════════ -->
+      <rect x="288" y="20" width="328" height="220" rx="8"
+            fill="none" stroke="#666" stroke-width="1.5" stroke-dasharray="8,4"/>
+      <text x="298" y="16" fill="#666" font-size="11" font-weight="600">[System]  Black-Mata Robot System</text>
+
+      <!-- ═══════════════════════════════════════════════════════
+           BLACK-MATA  (System — internal)
+      ════════════════════════════════════════════════════════════ -->
+      <rect x="304" y="40" width="296" height="176" rx="6" fill="#1168BD"/>
+      <text x="452" y="66"  text-anchor="middle" fill="#b8d4f0" font-size="11" font-style="italic">«System»</text>
+      <text x="452" y="88"  text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">Black-Mata</text>
+      <line x1="314" y1="96" x2="590" y2="96" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+      <text x="452" y="115" text-anchor="middle" fill="#b8d4f0" font-size="12">4WS+4WD teleoperated robot</text>
+      <text x="452" y="131" text-anchor="middle" fill="#b8d4f0" font-size="12">platform. Accepts drive commands</text>
+      <text x="452" y="147" text-anchor="middle" fill="#b8d4f0" font-size="12">via WebSocket. Streams live</text>
+      <text x="452" y="163" text-anchor="middle" fill="#b8d4f0" font-size="12">camera feed and servo telemetry</text>
+      <text x="452" y="179" text-anchor="middle" fill="#b8d4f0" font-size="12">back to the operator.</text>
+
+      <!-- ═══════════════════════════════════════════════════════
+           TAILSCALE VPN  (External System)
+      ════════════════════════════════════════════════════════════ -->
+      <rect x="268" y="415" width="272" height="108" rx="6" fill="#7a7a7a"/>
+      <text x="404" y="441" text-anchor="middle" fill="#ffffff" font-size="11" font-style="italic">«External System»</text>
+      <text x="404" y="463" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">Tailscale VPN</text>
+      <line x1="278" y1="471" x2="530" y2="471" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+      <text x="404" y="488" text-anchor="middle" fill="#e0e0e0" font-size="12">WireGuard-based mesh VPN.</text>
+      <text x="404" y="504" text-anchor="middle" fill="#e0e0e0" font-size="12">Provides NAT traversal &amp; encryption.</text>
+
+      <!-- ═══════════════════════════════════════════════════════
+           ARROW 1:  Operator  →  Black-Mata
+           (202, 128)  →  (304, 128)  horizontal
+      ════════════════════════════════════════════════════════════ -->
+      <line x1="204" y1="128" x2="302" y2="128" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <!-- label above line -->
+      <text x="253" y="112" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">Drive commands, camera feed,</text>
+      <text x="253" y="126" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">servo status [WebSocket + HTTP]</text>
+
+      <!-- ═══════════════════════════════════════════════════════
+           ARROW 2:  Black-Mata  →  Tailscale
+           (452, 216)  →  (404, 415)  diagonal
+      ════════════════════════════════════════════════════════════ -->
+      <line x1="452" y1="216" x2="404" y2="413" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <!-- label alongside -->
+      <text x="448" y="300" text-anchor="start"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">Robot registered</text>
+      <text x="448" y="315" text-anchor="start"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">as VPN node</text>
+
+      <!-- ═══════════════════════════════════════════════════════
+           ARROW 3:  Operator  →  Tailscale
+           (122, 197)  →  (268, 469)  diagonal
+      ════════════════════════════════════════════════════════════ -->
+      <line x1="122" y1="197" x2="268" y2="467" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <!-- label alongside -->
+      <text x="116" y="312" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">Operator registered</text>
+      <text x="116" y="327" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">as VPN node</text>
+    </svg>
+  </div>
+</main>
+
+<script>
+  function downloadSVG() {
+    const svg = document.getElementById('c4-svg');
+    if (!svg) { alert('Diagram not ready.'); return; }
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const data = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([data], { type: 'image/svg+xml' });
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(blob),
+      download: 'c4-level1-system-context.svg'
+    });
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+</script>
+</body>
+</html>

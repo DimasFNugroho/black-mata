@@ -1,0 +1,3 @@
+Now, as usual, we need to update the documentations so everything is up-to-date to the current progress. Then, commit them. Next, I want you to modify the button to pair the joystick on the dashboard. It should be obvious to
+  the user that such a button is used for pairing. Also, do not combine the gamepad state with the pairing button. In the future, it should be possible for the robot to pair with other gamepad, although it is currently connected
+  to a gamepad via bluetooth. 

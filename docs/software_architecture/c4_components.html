@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C4 Level 3 — Components — Black-Mata Architecture</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --accent:  #58a6ff;
+    --green:   #3fb950;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px; line-height: 1.6;
+  }
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 40px; display: flex; align-items: center; gap: 4px; overflow-x: auto;
+  }
+  .nav-brand {
+    font-size: 14px; font-weight: 700; color: var(--text);
+    padding: 14px 16px 14px 0; margin-right: 12px;
+    border-right: 1px solid var(--border); white-space: nowrap; text-decoration: none;
+  }
+  nav a:not(.nav-brand) {
+    display: block; padding: 14px 14px; font-size: 13px; font-weight: 500;
+    color: var(--muted); text-decoration: none; white-space: nowrap;
+    border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+  }
+  nav a:not(.nav-brand):hover { color: var(--text); }
+  nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .sub-nav {
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 0 40px; display: flex; gap: 0; overflow-x: auto;
+  }
+  .sub-nav a {
+    display: block; padding: 10px 16px; font-size: 13px; font-weight: 500;
+    color: var(--muted); text-decoration: none; white-space: nowrap;
+    border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+  }
+  .sub-nav a:hover { color: var(--text); }
+  .sub-nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  main { max-width: 1400px; margin: 0 auto; padding: 48px 40px 100px; }
+  .page-header { margin-bottom: 32px; }
+  .level-badge {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    padding: 3px 10px; border-radius: 4px; margin-bottom: 12px;
+    background: #1f3a5f; color: var(--accent); border: 1px solid #2a5a8f;
+  }
+  .page-header h1 { font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+  .page-header p  { font-size: 14px; color: var(--muted); }
+
+  .toolbar {
+    display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .toolbar button {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); font-size: 13px; font-weight: 600;
+    padding: 8px 16px; border-radius: 7px; cursor: pointer;
+    display: flex; align-items: center; gap: 7px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .toolbar button:hover { border-color: var(--accent); background: #1f2d3d; }
+  .toolbar button svg { width: 15px; height: 15px; fill: currentColor; }
+
+  .diagram-card {
+    background: #ffffff; border: 1px solid #d0d7de;
+    border-radius: 12px; padding: 40px; overflow-x: auto;
+  }
+
+  @media print {
+    nav, .sub-nav, .toolbar, .page-header { display: none !important; }
+    body { background: #fff !important; }
+    .diagram-card { border: none !important; padding: 0 !important; background: #fff !important; }
+    #c4-svg { width: 100% !important; height: auto !important; }
+  }
+</style>
+</head>
+<body>
+<nav>
+  <a href="index.html" class="nav-brand">Black-Mata Arch.</a>
+  <a href="index.html">Overview</a>
+  <a href="c4.html" class="active">C4 Diagrams</a>
+  <a href="sequences.html">Sequences</a>
+  <a href="deployment.html">Deployment</a>
+  <a href="adr.html">ADRs</a>
+</nav>
+<div class="sub-nav">
+  <a href="c4_context.html">Level 1 · System Context</a>
+  <a href="c4_containers.html">Level 2 · Containers</a>
+  <a href="c4_components.html" class="active">Level 3 · Components</a>
+</div>
+<main>
+  <div class="page-header">
+    <div class="level-badge">C4 Level 3</div>
+    <h1>Component Diagram — Robot Agent</h1>
+    <p>What are the major structural components inside the Robot Agent container?</p>
+  </div>
+  <div class="toolbar">
+    <button onclick="downloadSVG()">
+      <svg viewBox="0 0 16 16"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-5 2h10v1.5H3V14z"/></svg>
+      Download SVG
+    </button>
+    <button onclick="window.print()">
+      <svg viewBox="0 0 16 16"><path d="M4 1h8v3H4V1zM1 5h14v7h-3v3H4v-3H1V5zm3 6v3h8v-3H4zm9-4h1v1h-1V7z"/></svg>
+      Print / Save as PDF
+    </button>
+  </div>
+  <div class="diagram-card">
+    <!--
+      Canvas: 1120 × 860
+
+      External (top):  Dashboard   x=400, y=18,  w=300, h=120
+      External (bot):  dxl_fw      x=460, y=760, w=280, h=90
+
+      Agent Boundary:  x=18, y=170, w=1080, h=570
+
+      Row 1 — handlers (y=190…305):
+        WS Handler      x=40,  y=192, w=215, h=113
+        Stream Handler  x=440, y=192, w=215, h=113
+        Status Handler  x=860, y=192, w=215, h=113
+
+      Row 2 — processing (y=410…525):
+        Cmd Translator  x=40,  y=408, w=215, h=113
+        Ackermann       x=310, y=408, w=215, h=113
+        Camera Gen      x=640, y=408, w=215, h=113
+
+      Row 3 — serial (y=610…725):
+        Serial Driver   x=310, y=608, w=215, h=113
+
+      Arrows:
+        1  Dashboard → WS Handler      diagonal left-down
+        2  Dashboard → Stream Handler  nearly vertical
+        3  Dashboard → Status Handler  diagonal right-down
+        4  WS Handler → Translator     vertical down
+        5  Translator → Ackermann      horizontal right
+        6  Ackermann → WS Handler      L-path along left edge (return)
+        7  WS Handler → Serial Driver  diagonal right-down
+        8  Status Handler → Serial Dr  L-path along right edge
+        9  Camera Gen → Stream Handler diagonal up-left
+       10  Serial Driver → dxl_fw      diagonal down
+    -->
+    <svg id="c4-svg" viewBox="0 0 1120 860"
+         xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;max-width:1120px;display:block;margin:0 auto"
+         font-family="system-ui,-apple-system,'Segoe UI',sans-serif">
+      <defs>
+        <marker id="arr" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0,10 3.5,0 7" fill="#444"/>
+        </marker>
+        <marker id="arr-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0,10 3.5,0 7" fill="#16803a"/>
+        </marker>
+      </defs>
+
+      <!-- ═══════════════════════════════════════════
+           DASHBOARD  (External Container — top)
+           x=400, y=18, w=300, h=120
+           center: (550, 78)
+      ════════════════════════════════════════════════ -->
+      <rect x="400" y="18" width="300" height="120" rx="6" fill="#7a7a7a"/>
+      <text x="550" y="44"  text-anchor="middle" fill="#ffffff" font-size="11" font-style="italic">«Container: HTML / Vanilla JS»</text>
+      <text x="550" y="66"  text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">Dashboard</text>
+      <line x1="410" y1="74" x2="690" y2="74" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+      <text x="550" y="92"  text-anchor="middle" fill="#e0e0e0" font-size="12">Operator UI in the browser.</text>
+      <text x="550" y="108" text-anchor="middle" fill="#e0e0e0" font-size="12">Sends drive commands; displays stream &amp; telemetry.</text>
+
+      <!-- ═══════════════════════════════════════════
+           AGENT BOUNDARY  (dashed)
+           x=18, y=170, w=1080, h=570
+      ════════════════════════════════════════════════ -->
+      <rect x="18" y="170" width="1080" height="570" rx="8"
+            fill="none" stroke="#666" stroke-width="1.5" stroke-dasharray="8,4"/>
+      <text x="28" y="166" fill="#666" font-size="11" font-weight="600">[Container]  Robot Agent  —  software/robot/  —  Python / FastAPI  —  port 8000</text>
+
+      <!-- ═══════════════════════════════════════════
+           ROW 1 — HANDLERS
+      ════════════════════════════════════════════════ -->
+
+      <!-- WS Handler  x=40, y=192, w=215, h=113 -->
+      <rect x="40" y="192" width="215" height="113" rx="6" fill="#1168BD"/>
+      <text x="147" y="214" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Component: FastAPI WS route»</text>
+      <text x="147" y="232" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">WebSocket Handler</text>
+      <line x1="50" y1="239" x2="245" y2="239" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+      <text x="147" y="254" text-anchor="middle" fill="#b8d4f0" font-size="11">Accepts WebSocket connections.</text>
+      <text x="147" y="268" text-anchor="middle" fill="#b8d4f0" font-size="11">Receives drive commands, calls</text>
+      <text x="147" y="282" text-anchor="middle" fill="#b8d4f0" font-size="11">Translator then Serial Driver.</text>
+
+      <!-- Stream Handler  x=440, y=192, w=215, h=113 -->
+      <rect x="440" y="192" width="215" height="113" rx="6" fill="#1168BD"/>
+      <text x="547" y="214" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Component: FastAPI HTTP route»</text>
+      <text x="547" y="232" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">MJPEG Stream Handler</text>
+      <line x1="450" y1="239" x2="645" y2="239" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+      <text x="547" y="254" text-anchor="middle" fill="#b8d4f0" font-size="11">StreamingResponse endpoint.</text>
+      <text x="547" y="268" text-anchor="middle" fill="#b8d4f0" font-size="11">Consumes Camera Generator</text>
+      <text x="547" y="282" text-anchor="middle" fill="#b8d4f0" font-size="11">and serves MJPEG to browser.</text>
+
+      <!-- Status Handler  x=860, y=192, w=215, h=113 -->
+      <rect x="860" y="192" width="215" height="113" rx="6" fill="#1168BD"/>
+      <text x="967" y="214" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Component: FastAPI HTTP route»</text>
+      <text x="967" y="232" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">Status Handler</text>
+      <line x1="870" y1="239" x2="1065" y2="239" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+      <text x="967" y="254" text-anchor="middle" fill="#b8d4f0" font-size="11">HTTP GET /status endpoint.</text>
+      <text x="967" y="268" text-anchor="middle" fill="#b8d4f0" font-size="11">Queries Serial Driver for</text>
+      <text x="967" y="282" text-anchor="middle" fill="#b8d4f0" font-size="11">position, voltage, temp of servos.</text>
+
+      <!-- ═══════════════════════════════════════════
+           ROW 2 — PROCESSING
+      ════════════════════════════════════════════════ -->
+
+      <!-- Command Translator  x=40, y=408, w=215, h=113 -->
+      <rect x="40" y="408" width="215" height="113" rx="6" fill="#1168BD"/>
+      <text x="147" y="430" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Component: Python — main.py»</text>
+      <text x="147" y="448" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">Command Translator</text>
+      <line x1="50" y1="455" x2="245" y2="455" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+      <text x="147" y="470" text-anchor="middle" fill="#b8d4f0" font-size="11">Maps normalised gamepad axes</text>
+      <text x="147" y="484" text-anchor="middle" fill="#b8d4f0" font-size="11">(-1…1) into physical values:</text>
+      <text x="147" y="498" text-anchor="middle" fill="#b8d4f0" font-size="11">v (m/s) and delta (degrees).</text>
+
+      <!-- Ackermann  x=310, y=408, w=215, h=113 -->
+      <rect x="310" y="408" width="215" height="113" rx="6" fill="#1168BD"/>
+      <text x="417" y="430" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Component: Python — ackermann.py»</text>
+      <text x="417" y="448" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">Ackermann 4WS</text>
+      <line x1="320" y1="455" x2="515" y2="455" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+      <text x="417" y="470" text-anchor="middle" fill="#b8d4f0" font-size="11">Pure math module. Computes</text>
+      <text x="417" y="484" text-anchor="middle" fill="#b8d4f0" font-size="11">per-wheel steering angles and</text>
+      <text x="417" y="498" text-anchor="middle" fill="#b8d4f0" font-size="11">speeds → WheelCommands.</text>
+
+      <!-- Camera Generator  x=640, y=408, w=215, h=113 -->
+      <rect x="640" y="408" width="215" height="113" rx="6" fill="#1168BD"/>
+      <text x="747" y="430" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Component: OpenCV — camera.py»</text>
+      <text x="747" y="448" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">Camera Generator</text>
+      <line x1="650" y1="455" x2="845" y2="455" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+      <text x="747" y="470" text-anchor="middle" fill="#b8d4f0" font-size="11">Opens /dev/video0 via</text>
+      <text x="747" y="484" text-anchor="middle" fill="#b8d4f0" font-size="11">cv2.VideoCapture. JPEG-encodes</text>
+      <text x="747" y="498" text-anchor="middle" fill="#b8d4f0" font-size="11">each frame; yields MJPEG stream.</text>
+
+      <!-- ═══════════════════════════════════════════
+           ROW 3 — SERIAL
+      ════════════════════════════════════════════════ -->
+
+      <!-- Serial Driver  x=310, y=608, w=215, h=113 -->
+      <rect x="310" y="608" width="215" height="113" rx="6" fill="#1168BD"/>
+      <text x="417" y="630" text-anchor="middle" fill="#b8d4f0" font-size="10" font-style="italic">«Component: pyserial — serial_driver.py»</text>
+      <text x="417" y="648" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700">Serial Driver</text>
+      <line x1="320" y1="655" x2="515" y2="655" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+      <text x="417" y="670" text-anchor="middle" fill="#b8d4f0" font-size="11">Thin wrapper over the</text>
+      <text x="417" y="684" text-anchor="middle" fill="#b8d4f0" font-size="11">dxl_commander text protocol</text>
+      <text x="417" y="698" text-anchor="middle" fill="#b8d4f0" font-size="11">via USB Serial /dev/ttyACM0.</text>
+
+      <!-- ═══════════════════════════════════════════
+           DXL_COMMANDER  (External Container — bottom)
+           x=460, y=762, w=280, h=90
+           center: (600, 807)
+      ════════════════════════════════════════════════ -->
+      <rect x="460" y="762" width="280" height="90" rx="6" fill="#7a7a7a"/>
+      <text x="600" y="787" text-anchor="middle" fill="#ffffff" font-size="11" font-style="italic">«Container: Arduino C++ / OpenCM9.04»</text>
+      <text x="600" y="809" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="700">dxl_commander</text>
+      <line x1="470" y1="816" x2="730" y2="816" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+      <text x="600" y="834" text-anchor="middle" fill="#e0e0e0" font-size="12">Servo controller firmware. Owns Dynamixel TTL bus.</text>
+
+      <!-- ═══════════════════════════════════════════════════════════════
+           ARROWS
+      ════════════════════════════════════════════════════════════════════ -->
+
+      <!-- 1. Dashboard → WS Handler
+           (490, 138) → (147, 192)   diagonal down-left  -->
+      <line x1="490" y1="138" x2="150" y2="190" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="290" y="148" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">WebSocket drive commands</text>
+
+      <!-- 2. Dashboard → Stream Handler
+           (550, 138) → (547, 192)   near-vertical  -->
+      <line x1="550" y1="138" x2="547" y2="190" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="610" y="164" text-anchor="start"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">HTTP GET /stream</text>
+
+      <!-- 3. Dashboard → Status Handler
+           (610, 138) → (910, 192)   diagonal down-right  -->
+      <line x1="610" y1="138" x2="907" y2="190" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="775" y="148" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">HTTP GET /status</text>
+
+      <!-- 4. WS Handler → Command Translator
+           (147, 305) → (147, 408)   vertical  -->
+      <line x1="147" y1="305" x2="147" y2="406" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="147" y="355" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">raw gamepad axes</text>
+
+      <!-- 5. Command Translator → Ackermann
+           (255, 464) → (310, 464)   horizontal  -->
+      <line x1="255" y1="464" x2="308" y2="464" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="282" y="453" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">v, delta</text>
+
+      <!-- 6. Ackermann → WS Handler  (return — green, L-path along left edge)
+           M 310,464  L 10,464  L 10,248  L 40,248  -->
+      <path d="M 310,464 L 10,464 L 10,248 L 38,248"
+            fill="none" stroke="#16803a" stroke-width="1.5" marker-end="url(#arr-green)"/>
+      <text x="10" y="370" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#16803a" font-size="12"
+            transform="rotate(-90,10,370)">return WheelCommands</text>
+
+      <!-- 7. WS Handler → Serial Driver
+           (255, 248) → (310, 664)   diagonal right-down
+           Path: right edge of WS Handler → Serial Driver left edge  -->
+      <line x1="255" y1="280" x2="312" y2="637" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="225" y="460" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">4× set_steering</text>
+      <text x="225" y="474" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">4× set_drive_speed</text>
+
+      <!-- 8. Status Handler → Serial Driver
+           L-path along right edge: (967, 305) → (1105, 305) → (1105, 664) → (525, 664)  -->
+      <path d="M 967,305 L 1105,305 L 1105,664 L 527,664"
+            fill="none" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="1105" y="494" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12"
+            transform="rotate(-90,1105,494)">get_status ×8</text>
+
+      <!-- 9. Camera Generator → Stream Handler
+           (640, 452) → (655, 305)   diagonal up-left  -->
+      <line x1="640" y1="440" x2="628" y2="307" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="698" y="374" text-anchor="start"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">JPEG frame bytes</text>
+
+      <!-- 10. Serial Driver → dxl_commander
+            (417, 721) → (510, 762)   diagonal down  -->
+      <line x1="417" y1="721" x2="508" y2="760" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="415" y="748" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">USB Serial text commands</text>
+    </svg>
+  </div>
+</main>
+
+<script>
+  function downloadSVG() {
+    const svg = document.getElementById('c4-svg');
+    if (!svg) { alert('Diagram not ready.'); return; }
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const data = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([data], { type: 'image/svg+xml' });
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(blob),
+      download: 'c4-level3-components.svg'
+    });
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+</script>
+</body>
+</html>

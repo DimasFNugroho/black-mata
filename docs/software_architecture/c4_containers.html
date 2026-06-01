@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C4 Level 2 — Containers — Black-Mata Architecture</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --accent:  #58a6ff;
+    --green:   #3fb950;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px; line-height: 1.6;
+  }
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 40px; display: flex; align-items: center; gap: 4px; overflow-x: auto;
+  }
+  .nav-brand {
+    font-size: 14px; font-weight: 700; color: var(--text);
+    padding: 14px 16px 14px 0; margin-right: 12px;
+    border-right: 1px solid var(--border); white-space: nowrap; text-decoration: none;
+  }
+  nav a:not(.nav-brand) {
+    display: block; padding: 14px 14px; font-size: 13px; font-weight: 500;
+    color: var(--muted); text-decoration: none; white-space: nowrap;
+    border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+  }
+  nav a:not(.nav-brand):hover { color: var(--text); }
+  nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .sub-nav {
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 0 40px; display: flex; gap: 0; overflow-x: auto;
+  }
+  .sub-nav a {
+    display: block; padding: 10px 16px; font-size: 13px; font-weight: 500;
+    color: var(--muted); text-decoration: none; white-space: nowrap;
+    border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+  }
+  .sub-nav a:hover { color: var(--text); }
+  .sub-nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  main { max-width: 1400px; margin: 0 auto; padding: 48px 40px 100px; }
+  .page-header { margin-bottom: 32px; }
+  .level-badge {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    padding: 3px 10px; border-radius: 4px; margin-bottom: 12px;
+    background: #1f3a5f; color: var(--accent); border: 1px solid #2a5a8f;
+  }
+  .page-header h1 { font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+  .page-header p  { font-size: 14px; color: var(--muted); }
+
+  .toolbar {
+    display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .toolbar button {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); font-size: 13px; font-weight: 600;
+    padding: 8px 16px; border-radius: 7px; cursor: pointer;
+    display: flex; align-items: center; gap: 7px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .toolbar button:hover { border-color: var(--accent); background: #1f2d3d; }
+  .toolbar button svg { width: 15px; height: 15px; fill: currentColor; }
+
+  .diagram-card {
+    background: #ffffff; border: 1px solid #d0d7de;
+    border-radius: 12px; padding: 40px; overflow-x: auto;
+  }
+
+  @media print {
+    nav, .sub-nav, .toolbar, .page-header { display: none !important; }
+    body { background: #fff !important; }
+    .diagram-card { border: none !important; padding: 0 !important; background: #fff !important; }
+    #c4-svg { width: 100% !important; height: auto !important; }
+  }
+</style>
+</head>
+<body>
+<nav>
+  <a href="index.html" class="nav-brand">Black-Mata Arch.</a>
+  <a href="index.html">Overview</a>
+  <a href="c4.html" class="active">C4 Diagrams</a>
+  <a href="sequences.html">Sequences</a>
+  <a href="deployment.html">Deployment</a>
+  <a href="adr.html">ADRs</a>
+</nav>
+<div class="sub-nav">
+  <a href="c4_context.html">Level 1 · System Context</a>
+  <a href="c4_containers.html" class="active">Level 2 · Containers</a>
+  <a href="c4_components.html">Level 3 · Components</a>
+</div>
+<main>
+  <div class="page-header">
+    <div class="level-badge">C4 Level 2</div>
+    <h1>Container Diagram</h1>
+    <p>What are the deployable and runnable units, and how do they communicate?</p>
+  </div>
+  <div class="toolbar">
+    <button onclick="downloadSVG()">
+      <svg viewBox="0 0 16 16"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-5 2h10v1.5H3V14z"/></svg>
+      Download SVG
+    </button>
+    <button onclick="window.print()">
+      <svg viewBox="0 0 16 16"><path d="M4 1h8v3H4V1zM1 5h14v7h-3v3H4v-3H1V5zm3 6v3h8v-3H4zm9-4h1v1h-1V7z"/></svg>
+      Print / Save as PDF
+    </button>
+  </div>
+  <div class="diagram-card">
+    <!--
+      Canvas: 1100 × 840
+      Layout (top-to-bottom):
+        Operator (Person)  — top-left, outside boundary
+        Tailscale VPN      — right, outside boundary
+        System Boundary    — dashed rect wrapping 4 containers
+          Dashboard        — top container
+          Robot Agent      — second container
+          dxl_commander    — third container
+          AX-12A Servos    — bottom container (data store)
+    -->
+    <svg id="c4-svg" viewBox="0 0 1100 840"
+         xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;max-width:1100px;display:block;margin:0 auto"
+         font-family="system-ui,-apple-system,'Segoe UI',sans-serif">
+      <defs>
+        <marker id="arr" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0,10 3.5,0 7" fill="#444"/>
+        </marker>
+      </defs>
+
+      <!-- ═══════════════════════════════════════════════════════
+           OPERATOR  (Person)
+           head: cx=115, cy=38, r=22
+           box:  x=28, y=60, w=174, h=130
+      ════════════════════════════════════════════════════════════ -->
+      <circle cx="115" cy="38" r="22" fill="#08427B"/>
+      <line x1="115" y1="60" x2="115" y2="74" stroke="#08427B" stroke-width="3.5"/>
+      <line x1="90"  y1="68" x2="140" y2="68" stroke="#08427B" stroke-width="3.5"/>
+      <rect x="28" y="74" width="174" height="130" rx="6" fill="#08427B"/>
+      <text x="115" y="98"  text-anchor="middle" fill="#b8cfe8" font-size="11" font-style="italic">«Person»</text>
+      <text x="115" y="120" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">Operator</text>
+      <line x1="38" y1="128" x2="192" y2="128" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+      <text x="115" y="146" text-anchor="middle" fill="#b8cfe8" font-size="12">Controls the robot</text>
+      <text x="115" y="162" text-anchor="middle" fill="#b8cfe8" font-size="12">remotely from a</text>
+      <text x="115" y="178" text-anchor="middle" fill="#b8cfe8" font-size="12">browser.</text>
+
+      <!-- ═══════════════════════════════════════════════════════
+           TAILSCALE VPN  (External System)
+           box: x=868, y=310, w=200, h=120
+      ════════════════════════════════════════════════════════════ -->
+      <rect x="868" y="310" width="200" height="120" rx="6" fill="#7a7a7a"/>
+      <text x="968" y="338" text-anchor="middle" fill="#ffffff" font-size="11" font-style="italic">«External System»</text>
+      <text x="968" y="360" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">Tailscale VPN</text>
+      <line x1="878" y1="368" x2="1058" y2="368" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+      <text x="968" y="386" text-anchor="middle" fill="#e0e0e0" font-size="12">WireGuard mesh VPN.</text>
+      <text x="968" y="402" text-anchor="middle" fill="#e0e0e0" font-size="12">NAT traversal between</text>
+      <text x="968" y="418" text-anchor="middle" fill="#e0e0e0" font-size="12">operator and robot.</text>
+
+      <!-- ═══════════════════════════════════════════════════════
+           SYSTEM BOUNDARY  (dashed)
+           x=246, y=18, w=578, h=776
+      ════════════════════════════════════════════════════════════ -->
+      <rect x="246" y="18" width="578" height="776" rx="8"
+            fill="none" stroke="#666" stroke-width="1.5" stroke-dasharray="8,4"/>
+      <text x="256" y="14" fill="#666" font-size="11" font-weight="600">[System]  Black-Mata Robot System</text>
+
+      <!-- ═══════════════════════════════════════════════════════
+           DASHBOARD  (Container)
+           x=264, y=42, w=542, h=115
+           center: (535, 100)
+      ════════════════════════════════════════════════════════════ -->
+      <rect x="264" y="42" width="542" height="115" rx="6" fill="#1168BD"/>
+      <text x="535" y="68"  text-anchor="middle" fill="#b8d4f0" font-size="11" font-style="italic">«Container: HTML / Vanilla JS»</text>
+      <text x="535" y="90"  text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">Dashboard</text>
+      <line x1="274" y1="98" x2="796" y2="98" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+      <text x="535" y="116" text-anchor="middle" fill="#b8d4f0" font-size="12">Single-page operator UI. Renders camera stream,</text>
+      <text x="535" y="132" text-anchor="middle" fill="#b8d4f0" font-size="12">reads gamepad/keyboard input, displays servo telemetry.</text>
+
+      <!-- ═══════════════════════════════════════════════════════
+           ROBOT AGENT  (Container)
+           x=264, y=255, w=542, h=150
+           center: (535, 330)
+      ════════════════════════════════════════════════════════════ -->
+      <rect x="264" y="255" width="542" height="150" rx="6" fill="#1168BD"/>
+      <text x="535" y="281" text-anchor="middle" fill="#b8d4f0" font-size="11" font-style="italic">«Container: Python / FastAPI + uvicorn»</text>
+      <text x="535" y="303" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">Robot Agent</text>
+      <line x1="274" y1="311" x2="796" y2="311" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+      <text x="535" y="329" text-anchor="middle" fill="#b8d4f0" font-size="12">Central server on the Jetson. Hosts WebSocket endpoint</text>
+      <text x="535" y="345" text-anchor="middle" fill="#b8d4f0" font-size="12">for drive commands (/ws), MJPEG stream (/stream),</text>
+      <text x="535" y="361" text-anchor="middle" fill="#b8d4f0" font-size="12">and JSON REST endpoint for servo telemetry (/status).</text>
+      <text x="535" y="377" text-anchor="middle" fill="#b8d4f0" font-size="12">Runs at port 8000 via uvicorn.</text>
+
+      <!-- ═══════════════════════════════════════════════════════
+           DXL_COMMANDER  (Container)
+           x=264, y=505, w=542, h=130
+           center: (535, 570)
+      ════════════════════════════════════════════════════════════ -->
+      <rect x="264" y="505" width="542" height="130" rx="6" fill="#1168BD"/>
+      <text x="535" y="531" text-anchor="middle" fill="#b8d4f0" font-size="11" font-style="italic">«Container: Arduino C++ / OpenCM9.04»</text>
+      <text x="535" y="553" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">dxl_commander</text>
+      <line x1="274" y1="561" x2="796" y2="561" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+      <text x="535" y="579" text-anchor="middle" fill="#b8d4f0" font-size="12">Servo controller firmware. Owns the Dynamixel TTL bus.</text>
+      <text x="535" y="595" text-anchor="middle" fill="#b8d4f0" font-size="12">Translates text commands into AX-12A register reads</text>
+      <text x="535" y="611" text-anchor="middle" fill="#b8d4f0" font-size="12">and writes via Dynamixel2Arduino library.</text>
+
+      <!-- ═══════════════════════════════════════════════════════
+           AX-12A SERVOS  (ContainerDb / data store)
+           x=264, y=735, w=542, h=46
+           center: (535, 758)
+           Cylinder-style: extra top arc to indicate data store
+      ════════════════════════════════════════════════════════════ -->
+      <!-- cylinder body -->
+      <rect x="264" y="748" width="542" height="36" rx="0" fill="#1168BD"/>
+      <!-- cylinder top ellipse -->
+      <ellipse cx="535" cy="748" rx="271" ry="13" fill="#1a7ad4" stroke="#1168BD" stroke-width="1"/>
+      <!-- cylinder cap line to close bottom -->
+      <ellipse cx="535" cy="784" rx="271" ry="13" fill="#0d5aa7"/>
+      <!-- text overlay -->
+      <text x="535" y="744" text-anchor="middle" fill="#b8d4f0" font-size="11" font-style="italic">«Data Store: Dynamixel Hardware»</text>
+      <text x="535" y="766" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="700">8× AX-12A Servos</text>
+      <text x="535" y="784" text-anchor="middle" fill="#b8d4f0" font-size="12">4× JOINT steering (FL FR RL RR)  ·  4× WHEEL drive (FL FR RL RR)</text>
+
+      <!-- ═══════════════════════════════════════════════════════
+           ARROW 1:  Operator  →  Dashboard
+           (202, 110) → (264, 86)
+      ════════════════════════════════════════════════════════════ -->
+      <line x1="202" y1="110" x2="262" y2="90" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="210" y="87" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">Uses [Browser]</text>
+
+      <!-- ═══════════════════════════════════════════════════════
+           ARROW 2:  Operator  →  Tailscale
+           (202, 160) → (868, 370)
+      ════════════════════════════════════════════════════════════ -->
+      <line x1="202" y1="165" x2="866" y2="362" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="530" y="250" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">Connected via</text>
+
+      <!-- ═══════════════════════════════════════════════════════
+           ARROW 3a: Dashboard  →  Robot Agent
+           Three fanned arrows representing the 3 protocols
+           Left  (460, 157) → (460, 255): WebSocket JSON
+           Mid   (535, 157) → (535, 255): HTTP MJPEG
+           Right (610, 157) → (610, 255): HTTP JSON status
+      ════════════════════════════════════════════════════════════ -->
+      <!-- left arrow -->
+      <line x1="460" y1="157" x2="460" y2="253" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="356" y="196" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">Drive commands</text>
+      <text x="356" y="210" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">[WebSocket JSON]</text>
+      <line x1="356" y1="213" x2="459" y2="213" stroke="#888" stroke-width="0.7" stroke-dasharray="3,2"/>
+
+      <!-- center arrow -->
+      <line x1="535" y1="157" x2="535" y2="253" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="621" y="196" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">Camera feed</text>
+      <text x="621" y="210" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">[HTTP GET /stream]</text>
+      <line x1="536" y1="213" x2="621" y2="213" stroke="#888" stroke-width="0.7" stroke-dasharray="3,2"/>
+
+      <!-- right arrow -->
+      <line x1="610" y1="157" x2="610" y2="253" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="726" y="196" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">Servo status</text>
+      <text x="726" y="210" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">[HTTP GET /status]</text>
+      <line x1="611" y1="213" x2="726" y2="213" stroke="#888" stroke-width="0.7" stroke-dasharray="3,2"/>
+
+      <!-- ═══════════════════════════════════════════════════════
+           ARROW 4:  Robot Agent  →  Tailscale
+           (806, 330) → (868, 365)
+      ════════════════════════════════════════════════════════════ -->
+      <line x1="806" y1="330" x2="866" y2="356" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="858" y="330" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">Connected via</text>
+
+      <!-- ═══════════════════════════════════════════════════════
+           ARROW 5:  Robot Agent  →  dxl_commander
+           (535, 405) → (535, 505)
+      ════════════════════════════════════════════════════════════ -->
+      <line x1="535" y1="405" x2="535" y2="503" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="535" y="445" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">Servo commands &amp; telemetry queries</text>
+      <text x="535" y="459" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">[USB Serial 115200 baud — text protocol]</text>
+
+      <!-- ═══════════════════════════════════════════════════════
+           ARROW 6:  dxl_commander  →  Servos
+           (535, 635) → (535, 735)
+      ════════════════════════════════════════════════════════════ -->
+      <line x1="535" y1="635" x2="535" y2="733" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="535" y="672" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">Position and speed control</text>
+      <text x="535" y="686" text-anchor="middle"
+            stroke="white" stroke-width="6" paint-order="stroke"
+            fill="#333" font-size="12">[Dynamixel Protocol 1.0 — 1 Mbaud TTL]</text>
+    </svg>
+  </div>
+</main>
+
+<script>
+  function downloadSVG() {
+    const svg = document.getElementById('c4-svg');
+    if (!svg) { alert('Diagram not ready.'); return; }
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const data = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([data], { type: 'image/svg+xml' });
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(blob),
+      download: 'c4-level2-containers.svg'
+    });
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+</script>
+</body>
+</html>

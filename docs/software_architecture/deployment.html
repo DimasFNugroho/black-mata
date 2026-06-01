@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deployment Diagram — Black-Mata Architecture</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --accent:  #58a6ff;
+    --green:   #3fb950;
+    --orange:  #ffa657;
+    --purple:  #bc8cff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 40px;
+    display: flex; align-items: center; gap: 4px;
+    overflow-x: auto;
+  }
+  .nav-brand {
+    font-size: 14px; font-weight: 700; color: var(--text);
+    padding: 14px 16px 14px 0; margin-right: 12px;
+    border-right: 1px solid var(--border);
+    white-space: nowrap; text-decoration: none;
+  }
+  nav a:not(.nav-brand) {
+    display: block; padding: 14px 14px;
+    font-size: 13px; font-weight: 500;
+    color: var(--muted); text-decoration: none;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  nav a:not(.nav-brand):hover { color: var(--text); }
+  nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  main { max-width: 1300px; margin: 0 auto; padding: 48px 40px 100px; }
+
+  .page-header { margin-bottom: 48px; }
+  .page-header h1 { font-size: 26px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+  .page-header p  { font-size: 15px; color: var(--muted); }
+
+  .deploy-tag {
+    display: inline-block;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; padding: 4px 10px; border-radius: 4px;
+    background: #3a2f1f; color: var(--orange);
+    margin-bottom: 24px;
+  }
+
+  .diagram-card {
+    background: #ffffff;
+    border: 1px solid #d0d7de;
+    border-radius: 12px;
+    padding: 40px;
+    overflow-x: auto;
+    margin-bottom: 40px;
+  }
+  .mermaid { min-height: 100px; }
+
+  .toolbar {
+    display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .toolbar button {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); font-size: 13px; font-weight: 600;
+    padding: 8px 16px; border-radius: 7px; cursor: pointer;
+    display: flex; align-items: center; gap: 7px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .toolbar button:hover { border-color: var(--accent); background: #1f2d3d; }
+  .toolbar button svg { width: 15px; height: 15px; fill: currentColor; }
+
+  @media print {
+    nav, .toolbar, .page-header, .deploy-tag, .legend, h3.legend-heading { display: none !important; }
+    body { background: #fff !important; color: #000 !important; }
+    .diagram-card { border: none !important; padding: 0 !important; background: #fff !important; }
+    .mermaid svg { width: 100% !important; max-width: 100% !important; height: auto !important; }
+  }
+
+  .legend {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .legend-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+  .legend-node {
+    font-size: 12px; font-weight: 700;
+    letter-spacing: 0.06em; margin-bottom: 6px;
+  }
+  .legend-desc { font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .legend-links { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .legend-link {
+    font-size: 11px; font-family: monospace;
+    background: var(--bg); border: 1px solid var(--border);
+    padding: 2px 7px; border-radius: 4px; color: var(--muted);
+  }
+  h3.legend-heading {
+    font-size: 13px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--muted);
+    margin-bottom: 16px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="index.html" class="nav-brand">Black-Mata Arch.</a>
+  <a href="index.html">Overview</a>
+  <a href="c4.html">C4 Diagrams</a>
+  <a href="sequences.html">Sequences</a>
+  <a href="deployment.html" class="active">Deployment</a>
+  <a href="adr.html">ADRs</a>
+</nav>
+
+<main>
+
+  <div class="page-header">
+    <h1>Deployment Diagram</h1>
+    <p>Physical and virtual nodes, software artifacts deployed to each, and all communication paths.</p>
+  </div>
+
+  <span class="deploy-tag">Deployment</span>
+
+  <div class="toolbar">
+    <button onclick="downloadSVG()">
+      <svg viewBox="0 0 16 16"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-5 2h10v1.5H3V14z"/></svg>
+      Download SVG
+    </button>
+    <button onclick="window.print()">
+      <svg viewBox="0 0 16 16"><path d="M4 1h8v3H4V1zM1 5h14v7h-3v3H4v-3H1V5zm3 6v3h8v-3H4zm9-4h1v1h-1V7z"/></svg>
+      Print / Save as PDF
+    </button>
+  </div>
+  <div class="diagram-card">
+    <div class="mermaid">
+flowchart TB
+  subgraph OP["&lt;&lt;device&gt;&gt;  Operator Machine  (PC or Laptop)"]
+    BROWSER["&lt;&lt;artifact&gt;&gt;\nDashboard\nindex.html\nChrome or Firefox"]
+  end
+
+  subgraph VPN["&lt;&lt;external service&gt;&gt;  Tailscale VPN"]
+    MESH["WireGuard mesh network\nNAT traversal\nEnd-to-end encryption\nStable 100.x.x.x addressing"]
+  end
+
+  subgraph JETSON["&lt;&lt;device&gt;&gt;  Jetson / ARM SBC  (on robot)"]
+    subgraph AGENT["&lt;&lt;process&gt;&gt;  Robot Agent  —  uvicorn port 8000"]
+      MAIN["main.py\nEndpoints: /ws  /stream  /status"]
+      ACK["ackermann.py\n4WS kinematics"]
+      SER["serial_driver.py\npyserial wrapper"]
+      CAM["camera.py\nOpenCV MJPEG generator"]
+    end
+    USBCAM["&lt;&lt;device&gt;&gt;\nUSB Camera\n/dev/video0"]
+  end
+
+  subgraph OPENCM["&lt;&lt;device&gt;&gt;  OpenCM9.04 Microcontroller"]
+    FW["&lt;&lt;artifact&gt;&gt;\ndxl_commander.ino\nDynamixel2Arduino library\nUSB Serial 115200 baud"]
+  end
+
+  subgraph HW["&lt;&lt;device chain&gt;&gt;  8x AX-12A Dynamixel Servos"]
+    direction LR
+    S1["ID 1\nFL-steer\nJOINT"]
+    S2["ID 2\nFR-steer\nJOINT"]
+    S3["ID 3\nRL-steer\nJOINT"]
+    S4["ID 4\nRR-steer\nJOINT"]
+    S5["ID 5\nFL-drive\nWHEEL"]
+    S6["ID 6\nFR-drive\nWHEEL"]
+    S7["ID 7\nRL-drive\nWHEEL"]
+    S8["ID 8\nRR-drive\nWHEEL"]
+  end
+
+  BROWSER  --"WebSocket + HTTP\nvia Tailscale VPN"--> MESH
+  MESH     --"WebSocket + HTTP\n100.x.x.x : 8000"--> MAIN
+  USBCAM   --"USB  /dev/video0"-->                   CAM
+  MAIN     --> ACK
+  MAIN     --> SER
+  MAIN     --> CAM
+  SER      --"USB Serial\n/dev/ttyACM0\n115200 baud"-->  FW
+  FW       --"Dynamixel TTL\n1 Mbaud / Protocol 1.0"--> HW
+
+  style OP     fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f,font-size:14px
+  style VPN    fill:#f3f4f6,stroke:#9ca3af,color:#374151,font-size:14px
+  style JETSON fill:#dcfce7,stroke:#16a34a,color:#14532d,font-size:14px
+  style AGENT  fill:#bbf7d0,stroke:#15803d,color:#14532d,font-size:14px
+  style OPENCM fill:#fef3c7,stroke:#d97706,color:#78350f,font-size:14px
+  style HW     fill:#ede9fe,stroke:#7c3aed,color:#4c1d95,font-size:14px
+    </div>
+  </div>
+
+  <h3 class="legend-heading">Node Reference</h3>
+  <div class="legend">
+
+    <div class="legend-item">
+      <div class="legend-node" style="color:var(--accent)">Operator Machine</div>
+      <div class="legend-desc">Any PC or laptop running a modern browser. No installation required beyond Tailscale.</div>
+      <div class="legend-links">
+        <span class="legend-link">Chrome / Firefox</span>
+        <span class="legend-link">Tailscale client</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <div class="legend-node" style="color:var(--muted)">Tailscale VPN</div>
+      <div class="legend-desc">External WireGuard mesh VPN service. Provides stable VPN IPs and handles NAT traversal for both operator and robot.</div>
+      <div class="legend-links">
+        <span class="legend-link">100.x.x.x/32</span>
+        <span class="legend-link">WireGuard</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <div class="legend-node" style="color:var(--green)">Jetson / ARM SBC</div>
+      <div class="legend-desc">On-robot compute board. Runs the Robot Agent process and connects to USB camera and OpenCM9.04.</div>
+      <div class="legend-links">
+        <span class="legend-link">port 8000</span>
+        <span class="legend-link">/dev/video0</span>
+        <span class="legend-link">/dev/ttyACM0</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <div class="legend-node" style="color:var(--orange)">OpenCM9.04</div>
+      <div class="legend-desc">ROBOTIS microcontroller. Flashed with dxl_commander firmware. Owns the Dynamixel TTL bus.</div>
+      <div class="legend-links">
+        <span class="legend-link">USB Serial</span>
+        <span class="legend-link">115200 baud</span>
+        <span class="legend-link">Dynamixel2Arduino</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <div class="legend-node" style="color:var(--purple)">AX-12A Servo Chain</div>
+      <div class="legend-desc">8 servos daisy-chained on the Dynamixel TTL bus. IDs 1–4 steering (JOINT), IDs 5–8 drive (WHEEL).</div>
+      <div class="legend-links">
+        <span class="legend-link">1 Mbaud</span>
+        <span class="legend-link">Protocol 1.0</span>
+        <span class="legend-link">IDs 1–8</span>
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+<script>
+  function downloadSVG() {
+    const svg = document.querySelector('.mermaid svg');
+    if (!svg) { alert('Diagram not ready — please wait a moment and try again.'); return; }
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.style.background = '#161b22';
+    const data = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([data], { type: 'image/svg+xml' });
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'deployment.svg' });
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    themeVariables: {
+      fontSize: '15px',
+      fontFamily: 'system-ui, -apple-system, Segoe UI, sans-serif',
+    },
+    flowchart: {
+      htmlLabels: true,
+      curve: 'basis',
+      nodeSpacing: 50,
+      rankSpacing: 60,
+    }
+  });
+</script>
+</body>
+</html>
