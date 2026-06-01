@@ -293,7 +293,7 @@
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Gamepad input validator — all axes (raw + normalised) and buttons displayed live; drive preview with steer, throttle, e-stop, arm</span><span class="todo-mod">tools/gamepad/gamepad_test.py</span></div>
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Per-controller axis calibration — hardware procedure + software sweep; saves lo/hi/center per axis to JSON</span><span class="todo-mod">tools/gamepad/calibrations/</span></div>
         <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Gamepad → dashboard drive integration (evdev path, Jetson-local) — GamepadReader thread, /api/gamepad/state, drive merger with Shift/L1 precedence</span><span class="todo-mod">tools/dashboard/</span></div>
-        <div class="todo-row"><span class="todo-icon">⬜</span><span class="todo-text pending">Browser Gamepad API → remote drive via dashboard (operator-side gamepad over any network)</span><span class="todo-mod">tools/dashboard/</span></div>
+        <div class="todo-row"><span class="todo-icon">✅</span><span class="todo-text">Browser Gamepad API → remote drive via dashboard — gamepad plugged into the operator's PC; "ON THIS PC" row in the gamepad card; priority: Robot BT &gt; PC gamepad</span><span class="todo-mod">tools/dashboard/static/app.js</span></div>
       </div>
     </details>
 

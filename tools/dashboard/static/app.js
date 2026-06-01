@@ -258,10 +258,20 @@ setInterval(function() {
     speed  = _touch.throttle;
     active = true;
   } else if (_gp.connected && _gp.deadman) {
+    // Robot BT gamepad (evdev) — wins over PC gamepad; local operator overrides remote
     steer = _gp.steer * _maxSteer;
     speed = _gp.throttle;
     active = true;
+  } else if (_pcGp.connected && _pcGp.deadman) {
+    // PC gamepad (Browser Gamepad API) — last fallback
+    steer = _pcGp.steer * _maxSteer;
+    speed = _pcGp.throttle;
+    active = true;
   }
+
+  // Read PC gamepad every tick (Browser Gamepad API is poll-only)
+  _readPcGamepad();
+  updatePcGamepadWidget();
 
   updateGauges(steer, speed);
   if (active) {
@@ -544,7 +554,8 @@ function _touchRelease() {
 // gamepad card. Shift tracking is for the pill only — actual drive-source
 // switching happens in Phase E.
 
-var _gp = { connected: false, name: '', steer: 0, throttle: 0, deadman: false };
+var _gp   = { connected: false, name: '', steer: 0, throttle: 0, deadman: false };
+var _pcGp = { connected: false, name: '', steer: 0, throttle: 0, deadman: false };
 var _gpEstopComboPrev = false;
 var _shiftHeld = false;
 
@@ -588,7 +599,12 @@ function updateInputPill() {
     pill.className   = 'gamepad';
     return;
   }
-  if (!_gp.connected) {
+  if (_pcGp.connected && _pcGp.deadman) {
+    pill.textContent = 'GAMEPAD-PC';
+    pill.className   = 'gamepad';
+    return;
+  }
+  if (!_gp.connected && !_pcGp.connected) {
     pill.textContent = 'GAMEPAD: NONE';
     pill.className   = 'disconnect';
   } else {
@@ -658,6 +674,50 @@ function pollGamepad() {
   };
   xhr.send();
 }
+
+// ── PC Gamepad (Browser Gamepad API) ─────────────────────────────────────────
+// Polled in the 10 Hz drive loop; no separate interval needed.
+// W3C Standard Gamepad mapping: axes[0]=LX, axes[1]=LY, buttons[6]=L1/LB.
+// Y-axis is inverted (up = −1) so we negate it for throttle.
+
+function _readPcGamepad() {
+  var gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+  var gp = null;
+  for (var i = 0; i < gamepads.length; i++) {
+    if (gamepads[i] && gamepads[i].connected) { gp = gamepads[i]; break; }
+  }
+  if (!gp) {
+    _pcGp.connected = false;
+    _pcGp.deadman   = false;
+    _pcGp.steer     = 0;
+    _pcGp.throttle  = 0;
+    _pcGp.name      = '';
+    return;
+  }
+  var DEAD = 0.08;
+  var ax = gp.axes[0] || 0;
+  var ay = gp.axes[1] || 0;
+  _pcGp.connected = true;
+  _pcGp.name      = gp.id || 'Gamepad';
+  _pcGp.steer     = Math.abs(ax) > DEAD ? ax : 0;
+  _pcGp.throttle  = Math.abs(ay) > DEAD ? -ay : 0;  // invert Y: up = +throttle
+  _pcGp.deadman   = !!(gp.buttons[6] && gp.buttons[6].pressed) ||
+                    !!(gp.buttons[4] && gp.buttons[4].pressed);  // L1 or LB
+}
+
+function updatePcGamepadWidget() {
+  var dc = document.getElementById('pc-gp-disconnected');
+  var co = document.getElementById('pc-gp-connected');
+  if (!_pcGp.connected) {
+    dc.style.display = 'block';
+    co.style.display = 'none';
+    return;
+  }
+  dc.style.display = 'none';
+  co.style.display = 'block';
+  document.getElementById('pc-gp-name').textContent = _pcGp.name;
+}
+
 
 // The topbar pill is a pure state indicator now. Pairing lives on its own
 // dedicated button so the affordance is obvious and stays available even

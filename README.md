@@ -38,7 +38,7 @@ Firmware is compiled on x86, flashed to the OpenCM9.04 over SSH, and the Jetson 
 - [x] Battery gauge — live voltage with colour-coded fill bar
 - [x] Gamepad → dashboard drive integration (evdev path, Jetson-local) — live state widget, drive merger with Shift/L1 precedence, hold-to-confirm e-stop unlatch
 - [x] In-browser Bluetooth pairing modal — pair/swap a controller from the dashboard with no terminal and no sudo (SSE-driven progress; `server.py` + `static/setup_modal.*`)
-- [ ] Browser Gamepad API → remote drive via dashboard (operator-side gamepad over network)
+- [x] Browser Gamepad API — operator's PC gamepad drives the robot remotely over any network; "ON THIS PC" row in the Gamepad card; Robot BT takes priority over PC gamepad
 - [ ] Servo status panel (per-servo voltages, temperatures, positions, modes)
 
 ### Bluetooth Gamepad (`tools/gamepad/`)
@@ -123,9 +123,10 @@ python3 tools/gamepad/gamepad_test.py
 |---|---|---|---|
 | WASD | Hold **⇧ Shift** (deadman) | A / D | W / S |
 | Touchpad | **Press & hold** on the virtual pad (no Shift) | drag left / right | drag down / up |
-| Gamepad | Hold **L1** (deadman) | left stick X | left stick Y |
+| Gamepad (robot BT) | Hold **L1** (deadman) | left stick X | left stick Y |
+| Gamepad (this PC) | Hold **L1** (deadman) | left stick X | left stick Y |
 
-Gamepad works in both WASD and Touchpad modes as the fallback source. Mode is remembered across page reloads.
+Priority: WASD/Touchpad > Robot BT gamepad > PC gamepad. The person physically at the robot (robot BT) always overrides the remote operator (PC). Mode is remembered across page reloads.
 
 Gamepad control mapping:
 - Left stick X → steer, Left stick Y → throttle (+fwd / −rev)

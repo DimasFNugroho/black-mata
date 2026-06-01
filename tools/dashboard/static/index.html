@@ -179,20 +179,20 @@
 
     <!-- Gamepad live state -->
     <div class="card" id="gamepad-card" style="flex-shrink:0;">
-      <div class="gp-header">
-        <h3>Gamepad</h3>
-        <!-- Pairing is its own control, separate from the live-state widget,
-             and always available — you can pair/swap a controller even while
-             one is already connected. -->
+      <h3>Gamepad</h3>
+
+      <!-- ── ON ROBOT (Bluetooth / evdev) ── -->
+      <div class="gp-source-label">
+        ON ROBOT (Bluetooth)
         <button id="btn-pair-gamepad" class="btn btn-primary" type="button"
-                title="Pair or swap a Bluetooth controller">+ Pair Controller</button>
+                title="Pair or swap a Bluetooth controller on the robot">Pair to Robot</button>
       </div>
-      <div id="gp-disconnected" style="color:#555;text-align:center;font-size:11px;padding:6px;">
+      <div id="gp-disconnected" style="color:#555;font-size:11px;padding:4px 0;">
         No controller paired.
       </div>
       <div id="gp-connected" style="display:none;">
-        <div id="gp-name" style="font-size:11px;color:#777;text-align:center;margin-bottom:6px;">—</div>
-        <div style="display:flex;align-items:center;gap:16px;justify-content:center;">
+        <div id="gp-name" style="font-size:11px;color:#777;margin-bottom:6px;">—</div>
+        <div style="display:flex;align-items:center;gap:16px;">
           <svg id="gp-stick" width="80" height="80" viewBox="-50 -50 100 100"
                style="background:#0a0a0a;border:1px solid #222;border-radius:4px;">
             <line x1="-50" y1="0" x2="50" y2="0" stroke="#1a1a1a"/>
@@ -218,6 +218,16 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- ── ON THIS PC (Browser Gamepad API) ── -->
+      <div class="gp-source-label" style="margin-top:10px;">ON THIS PC</div>
+      <div id="pc-gp-disconnected" style="color:#555;font-size:11px;padding:4px 0;">
+        No controller detected — plug one in to use.
+      </div>
+      <div id="pc-gp-connected" style="display:none;">
+        <div id="pc-gp-name" style="font-size:11px;color:#777;margin-bottom:4px;">—</div>
+        <div style="font-size:10px;color:#444;">Hold L1 to drive · takes effect when robot BT gamepad is idle</div>
       </div>
     </div>
   </div>
