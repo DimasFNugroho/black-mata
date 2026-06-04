@@ -33,6 +33,12 @@
   }
   header h1 { font-size: 16px; font-weight: 700; color: #fff; white-space: nowrap; }
   .header-meta { font-size: 12px; color: var(--muted); }
+  .robot-label {
+    font-size: 12px; font-weight: 600; color: var(--accent);
+    margin-left: 10px; padding: 2px 9px; border-radius: 5px;
+    background: var(--bg); border: 1px solid var(--border); white-space: nowrap;
+  }
+  .robot-label:empty { display: none; }
 
   .overall-bar-wrap {
     flex: 1; min-width: 180px;
@@ -190,6 +196,13 @@
     padding: 14px 16px; margin-bottom: 16px;
   }
   .d-toolbar-msg { font-size: 12px; color: #d6c5e8; margin-bottom: 10px; line-height: 1.5; }
+  .d-namerow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .d-namerow label { font-size: 12px; color: #d6c5e8; flex-shrink: 0; }
+  .d-namerow input {
+    flex: 1; max-width: 380px; background: var(--surface2); border: 1px solid #4a3a5a;
+    color: var(--text); padding: 6px 10px; border-radius: 5px; font-size: 13px;
+  }
+  .d-namerow input:focus { outline: none; border-color: var(--accent); }
   .d-toolbar-btns { display: flex; gap: 8px; flex-wrap: wrap; }
 
   .d-section {
@@ -315,7 +328,7 @@
 <body>
 
 <header>
-  <h1>⬡ Black-Mata v1 — Field Acceptance Test</h1>
+  <h1>⬡ Black-Mata v1 — Field Acceptance Test<span class="robot-label" id="robot-label"></span></h1>
   <div class="overall-bar-wrap">
     <div class="overall-bar" id="overall-bar"></div>
     <div class="overall-pct" id="overall-pct">0%</div>
@@ -638,10 +651,12 @@ var BUILTIN_SECTIONS = [
 // ─── Test definition (coordinator-editable) ────────────────────────────────────
 // The DEFINITION (sections/items) is separate from the tester's RESULTS.
 // Precedence: locally-edited def  >  embedded def (shipped file)  >  built-in.
-var DEF_KEY  = 'bm_v1_def';
+var DEF_KEY     = 'bm_v1_def';
+var DEFNAME_KEY = 'bm_v1_defname';
 var STORE_KEY = 'bm_v1_accept_test';
 
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
+function slug(s)  { return (s || '').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'robot'; }
 function loadDef() {
   try { var d = localStorage.getItem(DEF_KEY); return d ? JSON.parse(d) : null; } catch(e) { return null; }
 }
@@ -666,8 +681,24 @@ function defSave() { localStorage.setItem(DEF_KEY, JSON.stringify(compact(SECTIO
 
 var SECTIONS = loadDef()
   || (typeof window !== 'undefined' && window.EMBEDDED_DEF ? clone(window.EMBEDDED_DEF) : clone(BUILTIN_SECTIONS));
+var _defName = (function() {
+  try { var n = localStorage.getItem(DEFNAME_KEY); if (n !== null) return n; } catch(e) {}
+  return (typeof window !== 'undefined' && window.EMBEDDED_DEFNAME) ? window.EMBEDDED_DEFNAME : '';
+})();
 var _design = false;        // coordinator "Edit list" mode
 var PRISTINE_HTML = '';     // captured at boot for the standalone-HTML export
+
+function updateRobotLabel() {
+  var el = document.getElementById('robot-label');
+  if (el) el.textContent = _defName ? ('▸ ' + _defName) : '';
+  document.title = (_defName ? _defName + ' — ' : '') + 'Black-Mata v1 — Acceptance Test';
+}
+function defNameSet(v) {
+  _defName = v;
+  if (v) localStorage.setItem(DEFNAME_KEY, v);
+  else   localStorage.removeItem(DEFNAME_KEY);
+  updateRobotLabel();
+}
 
 // ─── Render ───────────────────────────────────────────────────────────────────
 function load() {
@@ -978,6 +1009,7 @@ function exportIssues() {
   saveMeta();                                       // capture latest sign-off fields
   var L = [];
   L.push('# Black-Mata v1 Acceptance — Issue Report', '');
+  L.push('- Robot / model: '    + (_defName     || '—'));
   L.push('- Unit / hostname: '  + (_meta.unit   || '—'));
   L.push('- Tested by: '        + (_meta.tester || '—'));
   L.push('- Date: '             + (_meta.date   || '—'));
@@ -1054,11 +1086,16 @@ function toggleDesign() {
 function renderDesign() {
   var html =
     '<div class="d-toolbar">' +
-      '<div class="d-toolbar-msg">✎ Designer mode — editing the TEST DEFINITION (not results). Saved locally as you type. Finalise the list, then "Export standalone HTML" to hand a ready-to-use file to testers.</div>' +
+      '<div class="d-toolbar-msg">✎ Designer mode — editing the TEST DEFINITION (not results). Saved locally as you type. Finalise the list, then "Export standalone HTML" to hand a ready-to-use file to testers. One file per robot.</div>' +
+      '<div class="d-namerow">' +
+        '<label>Robot / model name</label>' +
+        '<input id="d-defname" placeholder="e.g. Black-Mata #2 — Mecanum variant" value="' + escAttr(_defName) + '" oninput="defNameSet(this.value)">' +
+      '</div>' +
       '<div class="d-toolbar-btns">' +
         '<button class="btn-hdr" onclick="exportStandalone()">Export standalone HTML</button>' +
         '<button class="btn-hdr" onclick="exportDef()">Export definition (JSON)</button>' +
         '<button class="btn-hdr" onclick="importDefPrompt()">Import definition</button>' +
+        '<button class="btn-hdr" onclick="newBlankList()">New blank list</button>' +
         '<button class="btn-hdr danger" onclick="revertBuiltin()">Revert to built-in</button>' +
       '</div>' +
     '</div>';
@@ -1150,8 +1187,17 @@ function itemMove(si, ii, dir) {
   defSave(); renderAll();
 }
 
+function newBlankList() {
+  if (!confirm('Start a NEW BLANK list? This replaces the current list (export first if you want to keep it).')) return;
+  SECTIONS = [{ id: 's' + Date.now(), num: 'SEC 1', title: 'New section', items: ['New check'] }];
+  defNameSet('');
+  var nm = prompt('Robot / model name for this new list (optional):', '');
+  if (nm) defNameSet(nm);
+  defSave(); renderAll();
+}
 function exportDef() {
-  downloadFile(JSON.stringify(compact(SECTIONS), null, 2), 'v1_acceptance_def.json', 'application/json');
+  var payload = { name: _defName, sections: compact(SECTIONS) };
+  downloadFile(JSON.stringify(payload, null, 2), 'v1_acceptance_def_' + slug(_defName) + '.json', 'application/json');
 }
 function importDefPrompt() {
   var inp = document.createElement('input');
@@ -1161,10 +1207,15 @@ function importDefPrompt() {
     var r = new FileReader();
     r.onload = function() {
       try {
-        var def = JSON.parse(r.result);
-        if (!Array.isArray(def)) throw new Error('JSON root is not a list of sections');
+        var parsed = JSON.parse(r.result);
+        // accept either a bare array (legacy) or { name, sections }
+        var def  = Array.isArray(parsed) ? parsed : parsed.sections;
+        var name = Array.isArray(parsed) ? null  : parsed.name;
+        if (!Array.isArray(def)) throw new Error('JSON is not a section list (or { name, sections })');
         if (!confirm('Replace the current list with the imported definition?\n\nTester results are kept but may not line up with the new rows — Reset is recommended after importing.')) return;
-        SECTIONS = def; defSave(); renderAll();
+        SECTIONS = def;
+        if (name != null) defNameSet(name);
+        defSave(); renderAll();
       } catch (e) { alert('Import failed: ' + e.message); }
     };
     r.readAsText(f);
@@ -1175,18 +1226,21 @@ function revertBuiltin() {
   if (!confirm('Discard your edits and revert to the built-in list?')) return;
   localStorage.removeItem(DEF_KEY);
   SECTIONS = clone(BUILTIN_SECTIONS);
+  defNameSet('');
   renderAll();
 }
 function exportStandalone() {
   // strip any previously-embedded def back to a bare anchor, then inject the current one
   var base   = PRISTINE_HTML.replace(/<!--DEF_START-->[\s\S]*?<!--DEF_END-->/, '<!--DEF_ANCHOR-->');
   var json   = JSON.stringify(compact(SECTIONS)).replace(/<\//g, '<\\/');
-  var inject  = '<!--DEF_START--><script>window.EMBEDDED_DEF=' + json + ';<\/script><!--DEF_END-->';
-  downloadFile(base.replace('<!--DEF_ANCHOR-->', inject), 'v1_acceptance_test.html', 'text/html');
+  var nm     = JSON.stringify(_defName || '').replace(/<\//g, '<\\/');
+  var inject  = '<!--DEF_START--><script>window.EMBEDDED_DEF=' + json + ';window.EMBEDDED_DEFNAME=' + nm + ';<\/script><!--DEF_END-->';
+  downloadFile(base.replace('<!--DEF_ANCHOR-->', inject), 'v1_acceptance_' + slug(_defName) + '.html', 'text/html');
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 PRISTINE_HTML = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+updateRobotLabel();
 renderAll();
 // Expand first incomplete section automatically
 if (!_design) {
