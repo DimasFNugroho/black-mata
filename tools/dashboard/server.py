@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'gamepad'))
 
 from software.robot.serial_driver import SerialDriver
-from software.robot.ackermann import Ackermann, AckermannConfig
+from software.robot.ackermann import Ackermann, AckermannConfig, _steer_angles
 
 # Gamepad support is optional — the dashboard works without it. If evdev
 # isn't installed (e.g. on a workstation that won't ever have a gamepad
@@ -58,6 +58,7 @@ _driver         = None
 _gamepad_reader = None
 _setup_session  = None
 _last_drive_t   = 0.0
+_last_steer_deg = 0.0    # last commanded steer; drives the bird's-eye geometry
 
 DEFAULTS = {
     'wheelbase':             0.20,
@@ -68,6 +69,7 @@ DEFAULTS = {
     'steer_dir':             [1, -1, -1,  1],
     'drive_dir':             [1, -1,  1, -1],
     'steer_offset_deg':      [0.0, 0.0, 0.0, 0.0],
+    'steer_gear_ratio':      1.0,
     'servo_ids':             [4, 2, 8, 6, 3, 1, 7, 5],
     'batt_max_v':   12.6,
     'batt_ok_v':    11.0,
@@ -99,6 +101,7 @@ def _build_ackermann(c):
     cfg.steer_dir             = list( c.get('steer_dir',             DEFAULTS['steer_dir']))
     cfg.drive_dir             = list( c.get('drive_dir',             DEFAULTS['drive_dir']))
     cfg.steer_offset_deg      = list( c.get('steer_offset_deg',      DEFAULTS['steer_offset_deg']))
+    cfg.steer_gear_ratio      = float(c.get('steer_gear_ratio',      DEFAULTS['steer_gear_ratio'])) or 1.0
     cfg.servo_ids             = list( c.get('servo_ids',             DEFAULTS['servo_ids']))
     return cfg
 
@@ -422,16 +425,20 @@ class Handler(BaseHTTPRequestHandler):
                 'temp_c':    sv.temperature,
                 'volt_v':    sv.voltage,
             } for sv in s.servos]
+            # Bird's-eye draws the COMMANDED geometry (shared with ackermann_ui),
+            # not a servo-feedback readback — see _steer_angles.
+            cfg = _build_ackermann(_load_config())
             self._send_json({
                 'connected': True,
-                'state': {'seq': s.seq, 'e_stop': s.e_stop, 'servos': servos},
+                'state': {'seq': s.seq, 'e_stop': s.e_stop, 'servos': servos,
+                          'steer_angles': _steer_angles(cfg, _last_steer_deg)},
             })
 
         else:
             self._send_json({'error': 'not found'}, 404)
 
     def do_POST(self):
-        global _last_drive_t, _setup_session
+        global _last_drive_t, _last_steer_deg, _setup_session
         data = self._read_json()
 
         if self.path == '/drive':
@@ -445,7 +452,8 @@ class Handler(BaseHTTPRequestHandler):
             speed_mps = max(-1.0, min(1.0, speed_mps))
             targets   = Ackermann(cfg).compute(steer_deg, speed_mps)
             _driver.send_frame(targets, servo_ids=cfg.servo_ids)
-            _last_drive_t = time.monotonic()
+            _last_drive_t   = time.monotonic()
+            _last_steer_deg = steer_deg
             self._send_json({'ok': True, 'steer_deg': steer_deg, 'speed_mps': speed_mps})
 
         elif self.path == '/estop':
@@ -453,6 +461,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({'error': 'No robot connected'}, 503)
                 return
             _driver.send_estop()
+            _last_steer_deg = 0.0      # recenter the bird's-eye on e-stop
             self._send_json({'status': 'e-stop sent'})
 
         elif self.path == '/api/gamepad/setup/start':
@@ -489,11 +498,13 @@ class Handler(BaseHTTPRequestHandler):
 # ── Keepalive ─────────────────────────────────────────────────────────────────
 
 def _keepalive_loop():
+    global _last_steer_deg
     while True:
         time.sleep(0.2)
         if _driver is None:
             continue
         if time.monotonic() - _last_drive_t > 0.3:
+            _last_steer_deg = 0.0      # drive frames stopped → recenter bird's-eye
             try:
                 cfg     = _build_ackermann(_load_config())
                 targets = Ackermann(cfg).estop_targets()
