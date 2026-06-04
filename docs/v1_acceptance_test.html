@@ -105,27 +105,84 @@
   .section.open .section-body { display: block; }
 
   .item {
-    display: flex; align-items: flex-start; gap: 10px;
     padding: 5px 0; border-bottom: 1px solid #1a1f26;
   }
   .item:last-child { border-bottom: none; }
 
-  .item input[type="checkbox"] {
-    margin-top: 3px; width: 15px; height: 15px; flex-shrink: 0;
-    accent-color: var(--green); cursor: pointer;
-  }
-  .item label {
-    font-size: 13px; color: var(--text); cursor: pointer; flex: 1;
-    line-height: 1.5;
-  }
-  .item.checked label { color: var(--muted); text-decoration: line-through; }
+  .item-row { display: flex; align-items: flex-start; gap: 10px; }
 
-  .item label code {
+  /* ── per-row status toggle (✓ / ✗) ── */
+  .status-toggle { display: flex; gap: 3px; flex-shrink: 0; margin-top: 1px; }
+  .st-btn {
+    width: 22px; height: 22px; border-radius: 4px; cursor: pointer; padding: 0;
+    border: 1px solid var(--border); background: var(--surface2);
+    color: var(--muted); font-size: 12px; font-weight: 700; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .st-btn:hover { border-color: var(--accent); color: var(--text); }
+  .st-btn.st-pass.active { background: #1f3a2f; border-color: #2a5a3a; color: var(--green); }
+  .st-btn.st-fail.active { background: #3a1f1f; border-color: #5a2a2a; color: var(--red); }
+
+  .item-label { font-size: 13px; color: var(--text); flex: 1; line-height: 1.5; }
+  .item.pass .item-label { color: var(--muted); text-decoration: line-through; }
+
+  .item-label code {
     font-family: 'SFMono-Regular', 'Consolas', monospace;
     font-size: 12px; background: var(--bg);
     padding: 1px 5px; border-radius: 3px; color: var(--accent);
   }
-  .item label .warn { color: var(--yellow); font-style: italic; font-size: 12px; }
+  .item-label .warn { color: var(--yellow); font-style: italic; font-size: 12px; }
+
+  /* ── per-row note ── */
+  .note-btn {
+    flex-shrink: 0; width: 24px; height: 22px; border-radius: 4px; cursor: pointer;
+    border: 1px solid transparent; background: transparent;
+    color: var(--muted); font-size: 13px; line-height: 1; margin-top: 1px;
+  }
+  .note-btn:hover { border-color: var(--border); color: var(--accent); }
+  .note-btn.has-note { color: var(--accent); }
+  .note-wrap { margin: 6px 0 4px 64px; }
+  .note-area {
+    width: 100%; min-height: 48px; resize: vertical;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); padding: 7px 10px;
+    font-family: inherit; font-size: 12px; line-height: 1.5;
+  }
+  .note-area:focus { outline: none; border-color: var(--accent); }
+  .item.fail .note-area { border-color: #5a2a2a; }
+
+  /* ── "how to test" expander ── */
+  .info-btn {
+    flex-shrink: 0; width: 24px; height: 22px; border-radius: 4px; cursor: pointer;
+    border: 1px solid transparent; background: transparent;
+    color: var(--muted); font-size: 13px; line-height: 1; margin-top: 1px;
+  }
+  .info-btn:hover { border-color: var(--border); color: var(--accent); }
+  .how-wrap {
+    font-size: 12px; color: var(--muted); margin: 6px 0 6px 64px;
+    padding: 8px 11px; border-left: 2px solid var(--accent);
+    border-radius: 0 4px 4px 0; background: var(--surface2); line-height: 1.55;
+  }
+  .how-wrap strong { color: var(--accent); }
+  .how-wrap code {
+    font-family: monospace; font-size: 11px; color: var(--orange);
+    background: var(--bg); padding: 1px 4px; border-radius: 3px;
+  }
+
+  /* ── evidence gating ── */
+  .gated-dot { color: var(--yellow); font-size: 9px; vertical-align: middle; margin-right: 5px; }
+  .ev-chip {
+    display: inline-block; font-size: 10px; font-weight: 700; color: var(--orange);
+    background: #3a2f1f; border: 1px solid #5a4a2a; border-radius: 4px;
+    padding: 1px 6px; margin-left: 6px; white-space: nowrap;
+  }
+  .val-row { display: flex; align-items: center; gap: 8px; margin: 6px 0 4px 64px; }
+  .val-row label { font-size: 12px; color: var(--muted); }
+  .val-input {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    padding: 3px 8px; border-radius: 5px; font-family: monospace; font-size: 12px; width: 140px;
+  }
+  .val-input:focus { outline: none; border-color: var(--accent); }
 
   .sub-note {
     font-size: 12px; color: var(--muted); margin: 6px 0 10px 25px;
@@ -188,9 +245,11 @@
 
   @media print {
     header { position: static; }
-    .btn-hdr, .sec-chevron { display: none; }
+    .btn-hdr, .sec-chevron, .note-btn { display: none; }
     .section-body { display: block !important; }
     .section { break-inside: avoid; }
+    .note-wrap:not(.has-content) { display: none !important; }
+    .note-wrap.has-content { display: block !important; }
   }
 </style>
 </head>
@@ -206,6 +265,7 @@
   <button class="btn-hdr" onclick="expandAll()">Expand all</button>
   <button class="btn-hdr" onclick="collapseAll()">Collapse all</button>
   <button class="btn-hdr" onclick="window.print()">Print / PDF</button>
+  <button class="btn-hdr" onclick="exportIssues()">Export issues</button>
   <button class="btn-hdr danger" onclick="resetAll()">Reset</button>
 </header>
 
@@ -233,9 +293,9 @@ var SECTIONS = [
       'After boot: <code>hciconfig</code> lists <code>hci0</code> — adapter auto-powered',
       '<code>rfkill list bluetooth</code> shows NOT blocked',
       '<code>systemctl is-active bluetooth</code> → active',
-      '<code>bash tools/gamepad/check_bluetooth_host.sh</code> — all 9 checks PASS (ERTM WARN is acceptable)',
-      'Exit code is 0 — gate passed',
-      'Adapter Powered: yes with no manual intervention',
+      '<code>bash tools/gamepad/check_bluetooth_host.sh</code> — 8 PASS / 1 WARN (ERTM) / 0 FAIL',
+      'Run <code>echo $?</code> immediately after — output must be <code>0</code>',
+      'Check #9 reports <code>Adapter is powered</code> without having run <code>bluetoothctl power on</code> or <code>hciconfig hci0 up</code> since boot — confirms <code>AutoEnable=true</code> took effect',
     ]
   },
   {
@@ -244,8 +304,11 @@ var SECTIONS = [
       'x86: <code>python build.py</code> — build completes, no errors',
       'x86: <code>./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh</code> — flashes, board resets',
       'OpenCM LED blinks after flash (firmware running)',
-      '<code>./tools/monitor/serial_monitor.sh</code> — STATE frames at ~10 Hz, sequence numbers incrementing',
-      'No CRC errors in first 30 s of monitoring',
+      { t: '<code>./tools/monitor/serial_monitor.sh</code> — STATE frames at ~10 Hz, sequence numbers incrementing',
+        how: 'The monitor streams raw frames; it has no rate meter. Eyeball it — roughly 10 frames scroll per second and the <code>seq</code> field rises by 1 each frame. A frozen or wildly varying rate is a problem.' },
+      { t: 'Sequence numbers increment continuously — no gaps over 30 s (proxy for dropped / corrupt frames)',
+        how: 'serial_monitor.sh is a raw passthrough and cannot count CRC errors directly. Watch the <code>seq</code> field instead: it must advance 0,1,2,… with no skipped values for 30 s. A gap means a frame was lost or rejected. True per-frame CRC accounting is a Debug-build / decoder-script job — out of scope for v1.',
+        val: 'Seq gaps in 30 s' },
       '<code>e_stop: 0</code> in state output — not stuck in e-stop on power-up',
       'All 8 servo IDs discovered — <code>python3 tools/dynamixel/dxl_identify.py</code>',
       'No ID conflicts; all servos respond with AX-12A model',
@@ -269,8 +332,7 @@ var SECTIONS = [
       'Save config — confirms write to <code>ackermann_config.json</code>',
       'Reload ackermann_ui — all values repopulate correctly',
       '<code>ackermann_config.json</code> contains <code>default_drive_mode</code> field',
-      'Toggle default drive mode → Touchpad — "Saved" flash; JSON updated',
-      'Toggle back to WASD — "Saved" flash; JSON updated',
+      'Toggle default drive mode → "Saved" flash; <code>default_drive_mode</code> updates in JSON (dashboard honoring the default is re-tested in SEC 7)',
       'Battery threshold fields save and reload correctly',
     ]
   },
@@ -297,13 +359,18 @@ var SECTIONS = [
       'Config refreshes within 5 s after manually editing and saving JSON',
       'Drive mode is WASD on first load (matches <code>default_drive_mode</code> in config)',
       'MJPEG feed visible in camera panel (proxied via :8082)',
-      'Camera frame rotated correctly (robot-mounted orientation)',
+      { t: 'Camera frame matches robot POV — object on the robot\'s right shows on the right; forward = top of frame',
+        how: 'Place a recognisable object to the physical RIGHT of the robot. It must appear on the RIGHT in the dashboard image, and the robot\'s forward direction must point to the TOP of the frame. Mirrored (left/right swapped) or rotated = fix the rotation in the camera config.',
+        ev: true },
       'Bird\'s-eye SVG shows all four wheel icons',
       'All four wheel steer angles read ≈ 0.0° at rest',
       'Manually push a front wheel — angle label updates in real time',
       'Ackermann arc appears when steer angle > 0.5°; disappears at 0',
-      'All 8 servos show temperature labels (S:°C, D:°C) — cool-blue at ambient',
-      'Battery fill bar shows non-zero percentage; voltage ± 0.2 V of multimeter',
+      { t: 'All 8 servos show temperature labels (S:°C, D:°C) — near ambient at rest',
+        how: 'The AX-12A torques off at its Highest-Limit-Temperature (control-table addr 12, default 70 °C) — that auto-shutdown is what you\'re protecting against. At rest every servo should read near room temperature, expect < ~40 °C. Anything already hot at rest is a fault. Confirm the limit against your firmware if you changed it.' },
+      { t: 'Battery fill bar shows non-zero percentage; voltage within ± 0.2 V of multimeter',
+        how: 'Read the dashboard voltage and compare to a multimeter on the battery terminals — they must agree within ± 0.2 V. Record the dashboard reading.',
+        val: 'Battery (V)' },
     ]
   },
   {
@@ -321,7 +388,9 @@ var SECTIONS = [
       'Shift + W + A → forward-left arc; both gauges update simultaneously',
       'While Shift held: pill shows KEYBOARD (blue)',
       'Release Shift: pill shows IDLE (or GAMEPAD: NONE)',
-      'Network kill test: hold Shift+W → <code>iptables DROP :8082</code> → robot stops ≤ 300 ms',
+      { t: 'Network kill test: hold Shift+W → drop dashboard traffic → robot stops ≤ 300 ms',
+        how: 'On the Jetson, while holding Shift+W: <code>sudo iptables -A INPUT -p tcp --dport 8082 -j DROP</code>. The robot must stop within 300 ms (deadman times out when frames stop arriving). Undo with the same line but <code>-D</code> instead of <code>-A</code>.',
+        ev: true },
       'Restore iptables rule → dashboard reconnects; robot controllable again',
     ]
   },
@@ -347,19 +416,17 @@ var SECTIONS = [
     id: 's8', num: 'SEC 8', title: 'E-Stop — All Six Paths',
     note: 'Test each path independently. Re-arm fully between each test.',
     items: [
-      '[Path 1 — Space/Esc] Driving → press Space → instant stop; button turns amber "↻ HOLD TO RESET"',
+      { t: '[Path 1 — Space/Esc] Driving → press Space → instant stop; button turns amber "↻ HOLD TO RESET"', ev: true },
       '[Path 1] Shift+W while latched → NO movement',
       '[Path 1] Hold button 1 s → latch clears; button returns to red "■ E-STOP"',
-      '[Path 2 — Button click] Driving → click red E-STOP → instant stop',
+      { t: '[Path 2 — Button click] Driving → click red E-STOP → instant stop', ev: true },
       '[Path 2] Hold button 1 s → re-arms',
-      '[Path 3 — Gamepad combo] L1+sticks driving → L1 + D-pad diagonal → instant stop (rising edge, not held)',
+      { t: '[Path 3 — Gamepad combo] L1+sticks driving → L1 + D-pad diagonal → instant stop (rising edge, not held)', ev: true },
       '[Path 3] Dashboard button turns amber confirming latch',
-      '[Path 4 — LS+RS re-arm] While latched: hold both stick clicks 1 s → latch clears',
+      { t: '[Path 4 — LS+RS re-arm] While latched: hold both stick clicks 1 s → latch clears', ev: true },
       '[Path 4] Partial hold (< 1 s) → latch stays; must complete full 1 s hold',
-      '[Path 5 — Serial kill] Driving → physically unplug OpenCM USB → all servos stop ≤ 500 ms',
-      '[Path 5] Dashboard shows "no robot (sim)"; replug → reconnects',
-      '[Path 6 — Camera loss IS NOT E-STOP] Unplug camera while driving → robot KEEPS DRIVING',
-      '[Path 6] Camera feed blanks; drive continues; replug → camera restores',
+      { t: '[Path 5 — Serial kill] Driving → physically unplug OpenCM USB → all servos stop ≤ 500 ms (full hot-unplug/replug cycle re-tested in SEC 15)', ev: true },
+      { t: '[Path 6 — Camera loss IS NOT E-STOP] Unplug camera while driving → robot KEEPS DRIVING (full cycle re-tested in SEC 15)', ev: true },
     ]
   },
   {
@@ -379,7 +446,9 @@ var SECTIONS = [
       'L1 + left stick back → reverse; release L1 → stops immediately',
       'L1 + left stick left/right → steers; bird\'s-eye arcs update',
       'Input pill shows GAMEPAD: [controller name] while deadman held',
-      '[Range test] Pair controller from 1.5 m away — completes successfully',
+      { t: '[Range test] Pair controller from 1.5 m away — completes successfully',
+        how: 'Hold the controller ~1.5 m from the dongle and run the pair flow. It should complete without repeated retries or timeouts. Record the distance actually used.',
+        ev: true },
       '[Swap] Click "Pair to Robot" again while connected → modal opens without crash',
       '[Swap] Pair again → new controller name appears in "ON ROBOT" row',
     ]
@@ -425,7 +494,8 @@ var SECTIONS = [
       'Drive the robot from the phone using Touchpad — full round trip over internet',
       'E-stop from the phone works instantly',
       'Stop ngrok (Ctrl+C) → robot no longer reachable externally',
-      'Dashboard on LAN still works normally (ngrok is not a dependency)',
+      { t: 'Dashboard on LAN still works normally (ngrok is not a dependency)',
+        how: '"Works normally" = open the LAN URL (:8082) directly, confirm the camera feed loads, drive the robot, and trigger one e-stop. All must work with ngrok stopped.' },
     ]
   },
   {
@@ -447,10 +517,15 @@ var SECTIONS = [
     items: [
       '[0:00–1:30] WASD — figure-of-eight path; Ackermann arcs on bird\'s-eye track geometry',
       '[1:30–3:00] Touchpad — same path; drag off-pad mid-drive intentionally — no runaway',
-      '[3:00–4:00] Robot BT gamepad — full-throttle sprint and hard steer; no frame drops / CRC errors',
-      '[4:00–5:00] PC gamepad from laptop — latency acceptable for teleoperation',
+      { t: '[3:00–4:00] Robot BT gamepad — full-throttle sprint and hard steer; sequence numbers keep incrementing with no gaps',
+        how: 'Watch the dashboard / serial during the sprint: the STATE <code>seq</code> must keep advancing with no gaps and no disconnects. (Direct CRC counting isn\'t available in v1 — the seq stream is the proxy.)' },
+      { t: '[4:00–5:00] PC gamepad from laptop — command-to-motion latency under ~150 ms',
+        how: 'Quick check: at the 100 ms control tick, motion should start / stop within 1–2 ticks of input, no perceptible lag. To measure: film the controller and a wheel together at 240 fps (~4 ms/frame) and count frames between input and motion — under ~36 frames = under 150 ms.',
+        val: 'Latency (ms)' },
       'Battery gauge decreased visibly (voltage drop under load displayed correctly)',
-      'Temperature labels on drive servos shifted warmer (thermal load visible)',
+      { t: 'Drive servos shifted warmer under load — none approaching the 70 °C shutdown',
+        how: 'Drive servos warm under load (expected). They must stay well below the AX-12A 70 °C auto-shutdown — flag if any exceeds ~60 °C. Record the hottest reading at the end of the run.',
+        val: 'Hottest drive servo (°C)' },
       'All 8 servo IDs present throughout — no disconnection events',
       'No dashboard JS errors for the entire session (console clean)',
     ]
@@ -460,12 +535,12 @@ var SECTIONS = [
     items: [
       '[Dashboard crash] Robot idle → <code>pkill -f server.py</code> → robot stays stopped (no spurious motion)',
       '[Dashboard crash] Restart dashboard → conn-badge returns green; all widgets repopulate',
-      '[Serial hot-unplug] Driving → unplug OpenCM USB → servos stop ≤ 500 ms (firmware watchdog fires)',
+      { t: '[Serial hot-unplug] Driving → unplug OpenCM USB → servos stop ≤ 500 ms (firmware watchdog fires)', ev: true },
       '[Serial hot-unplug] Replug → server reconnects; send_estop() fires before allowing drive',
       '[Camera hot-unplug] Driving → unplug camera → robot KEEPS DRIVING (processes isolated)',
       '[Camera hot-unplug] Feed blanks; replug → restores without action; drive throughout uninterrupted',
       '[Browser close] Driving via Shift+W → close browser tab → robot stops ≤ 300 ms',
-      '[BT out of range] Driving via Robot BT → carry controller 5+ m behind a wall → link drops; robot stops',
+      { t: '[BT out of range] Driving via Robot BT → carry controller 5+ m behind a wall → link drops; robot stops', ev: true },
       '[BT out of range] Return in range → GamepadReader auto-reconnects within a few seconds',
     ]
   },
@@ -492,8 +567,9 @@ var SECTIONS = [
       '<code>ackermann_config.json</code> has correct calibration values (steer offsets intact)',
       '<code>default_drive_mode</code> in config is <code>"wasd"</code> (shipping default)',
       'No stale BT bonds from test pairings (run a fresh pair to confirm clean state)',
-      'Serial monitor shows clean STATE frames — no CRC errors at rest',
-      'All widget values make sense: battery healthy, temps at ambient, steer ≈ 0°',
+      { t: 'Serial monitor shows clean STATE frames — <code>seq</code> increments with no gaps at rest',
+        how: 'Same seq-gap proxy as SEC 2: watch <code>seq</code> advance with no skips for a short window at rest. (No direct CRC meter in v1.)' },
+      'All widget values within expected ranges: battery within ± 0.2 V of multimeter, all servos < ~40 °C at rest, all steer angles within ± 1° of 0°',
     ]
   },
 ];
@@ -513,11 +589,53 @@ var _state = load();
 var _meta  = _state._meta || { tester: '', date: '', unit: '', commit: '', verdict: '' };
 
 function itemKey(sId, idx) { return sId + '_' + idx; }
+function noteKey(key) { return 'note_' + key; }
 
-function sectionStatus(sId, count, checked) {
-  if (checked === 0)     return { cls: 'todo',    label: 'TODO' };
-  if (checked === count) return { cls: 'pass',    label: 'PASS' };
-  return                        { cls: 'partial', label: checked + '/' + count };
+// Per-item status: 'pass' | 'fail' | 'todo'. (true kept for backward-compat = pass.)
+function itemStatus(key) {
+  var v = _state[key];
+  if (v === 'pass' || v === true) return 'pass';
+  if (v === 'fail') return 'fail';
+  return 'todo';
+}
+
+function countSection(sec) {
+  var pass = 0, fail = 0;
+  sec.items.forEach(function(_, i) {
+    var s = itemStatus(itemKey(sec.id, i));
+    if (s === 'pass') pass++;
+    else if (s === 'fail') fail++;
+  });
+  return { total: sec.items.length, pass: pass, fail: fail };
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function sectionStatus(total, pass, fail) {
+  if (fail > 0)       return { cls: 'fail',    label: 'FAIL' };
+  if (pass === 0)     return { cls: 'todo',    label: 'TODO' };
+  if (pass === total) return { cls: 'pass',    label: 'PASS' };
+  return                     { cls: 'partial', label: pass + '/' + total };
+}
+
+// Items are plain strings, or objects { t, how, ev, val } for the non-trivial rows:
+//   t   — label (required)        how — "how to test" detail (shows ⓘ expander)
+//   ev  — evidence-gated flag     val — label for a typed measured-value field (implies gated)
+function normItem(item) { return (typeof item === 'string') ? { t: item } : item; }
+function isGated(obj)   { return !!(obj.ev || obj.val); }
+
+function rowHasEvidence(key, obj) {
+  var note = (_state[noteKey(key)] || '').trim();
+  var val  = obj.val ? (_state['val_' + key] || '').trim() : '';
+  return note.length > 0 || val.length > 0;
+}
+
+function itemObjByKey(key) {
+  var us  = key.lastIndexOf('_');
+  var sec = SECTIONS.find(function(s){ return s.id === key.slice(0, us); });
+  return sec ? normItem(sec.items[parseInt(key.slice(us + 1), 10)]) : null;
 }
 
 function renderSection(sec) {
@@ -525,38 +643,62 @@ function renderSection(sec) {
   div.className = 'section';
   div.id = sec.id;
 
-  // Count checked
-  var total   = sec.items.length;
-  var checked = 0;
-  sec.items.forEach(function(_, i) {
-    if (_state[itemKey(sec.id, i)]) checked++;
-  });
-
-  var st = sectionStatus(sec.id, total, checked);
-  var pct = total > 0 ? Math.round(checked / total * 100) : 0;
+  var c = countSection(sec);
+  var st = sectionStatus(c.total, c.pass, c.fail);
+  var pct = c.total > 0 ? Math.round(c.pass / c.total * 100) : 0;
 
   div.innerHTML =
     '<div class="section-header" onclick="toggleSection(\'' + sec.id + '\')">' +
       '<span class="sec-num">' + sec.num + '</span>' +
       '<span class="sec-title">' + sec.title + '</span>' +
-      '<span class="sec-progress" id="' + sec.id + '-prog">' + checked + ' / ' + total + '</span>' +
+      '<span class="sec-progress" id="' + sec.id + '-prog">' + c.pass + ' / ' + c.total + '</span>' +
       '<span class="sec-status ' + st.cls + '" id="' + sec.id + '-status">' + st.label + '</span>' +
       '<span class="sec-chevron">▶</span>' +
     '</div>' +
     '<div class="sec-bar-wrap"><div class="sec-bar" id="' + sec.id + '-bar" style="width:' + pct + '%"></div></div>' +
     '<div class="section-body" id="' + sec.id + '-body">' +
       (sec.note ? '<div class="sub-note"><code>' + sec.note.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</code></div>' : '') +
-      sec.items.map(function(text, i) {
-        var key = itemKey(sec.id, i);
-        var chk = _state[key] ? 'checked' : '';
-        return '<div class="item' + (chk ? ' checked' : '') + '" id="item-' + key + '">' +
-          '<input type="checkbox" id="cb-' + key + '" ' + chk + ' onchange="toggle(\'' + key + '\',\'' + sec.id + '\')">' +
-          '<label for="cb-' + key + '">' + text + '</label>' +
-        '</div>';
-      }).join('') +
+      sec.items.map(function(text, i) { return renderItem(sec.id, text, i); }).join('') +
     '</div>';
 
   return div;
+}
+
+function renderItem(sId, item, i) {
+  var obj     = normItem(item);
+  var key     = itemKey(sId, i);
+  var status  = itemStatus(key);
+  var note    = _state[noteKey(key)] || '';
+  var hasNote = note.trim().length > 0;
+  var gated   = isGated(obj);
+  var evMissing = gated && status === 'pass' && !rowHasEvidence(key, obj);
+
+  var infoBtn = obj.how
+    ? '<button class="info-btn" title="How to test" onclick="toggleHow(\'' + key + '\')">ⓘ</button>' : '';
+  var howBlock = obj.how
+    ? '<div class="how-wrap" id="how-' + key + '" style="display:none"><strong>How to test:</strong> ' + obj.how + '</div>' : '';
+  var valField = obj.val
+    ? '<div class="val-row"><label>' + esc(obj.val) + '</label>' +
+      '<input class="val-input" id="val-' + key + '" value="' + esc(_state['val_' + key] || '') + '" oninput="saveVal(\'' + key + '\')"></div>' : '';
+  var gatedDot = gated ? '<span class="gated-dot" title="Evidence expected on PASS">●</span>' : '';
+  var evChip   = '<span class="ev-chip" id="evchip-' + key + '"' + (evMissing ? '' : ' style="display:none"') + '>evidence missing</span>';
+
+  return '<div class="item ' + status + (gated ? ' gated' : '') + '" id="item-' + key + '">' +
+    '<div class="item-row">' +
+      '<div class="status-toggle">' +
+        '<button class="st-btn st-pass' + (status==='pass'?' active':'') + '" title="Pass" onclick="setStatus(\'' + key + '\',\'' + sId + '\',\'pass\')">✓</button>' +
+        '<button class="st-btn st-fail' + (status==='fail'?' active':'') + '" title="Fail" onclick="setStatus(\'' + key + '\',\'' + sId + '\',\'fail\')">✗</button>' +
+      '</div>' +
+      '<span class="item-label">' + gatedDot + obj.t + evChip + '</span>' +
+      infoBtn +
+      '<button class="note-btn' + (hasNote?' has-note':'') + '" id="notebtn-' + key + '" title="Add note / evidence" onclick="toggleNote(\'' + key + '\')">✎</button>' +
+    '</div>' +
+    howBlock +
+    valField +
+    '<div class="note-wrap' + (hasNote?' has-content':'') + '" id="note-' + key + '" style="display:' + (hasNote?'block':'none') + '">' +
+      '<textarea class="note-area" id="noteta-' + key + '" placeholder="Notes / evidence — observed value, serial output, screenshot filename…" oninput="saveNote(\'' + key + '\')">' + esc(note) + '</textarea>' +
+    '</div>' +
+  '</div>';
 }
 
 function renderAll() {
@@ -569,41 +711,91 @@ function renderAll() {
   updateOverall();
 }
 
-function toggle(key, sId) {
-  var cb = document.getElementById('cb-' + key);
-  _state[key] = cb.checked;
+function setStatus(key, sId, status) {
+  var cur  = itemStatus(key);
+  var next = (cur === status) ? 'todo' : status;   // click active button again to clear
+  if (next === 'todo') delete _state[key];
+  else                 _state[key] = next;
   save(_state);
+
   var row = document.getElementById('item-' + key);
-  if (cb.checked) row.classList.add('checked');
-  else            row.classList.remove('checked');
+  row.className = 'item ' + next;
+  row.querySelector('.st-pass').classList.toggle('active', next === 'pass');
+  row.querySelector('.st-fail').classList.toggle('active', next === 'fail');
+
+  if (next === 'fail') {                            // failing a row → open its note
+    var wrap = document.getElementById('note-' + key);
+    wrap.style.display = 'block';
+    document.getElementById('noteta-' + key).focus();
+  }
+  updateEvidenceFlag(key);
   updateSection(sId);
   updateOverall();
   updateSignoffGrid();
 }
 
+function toggleNote(key) {
+  var wrap = document.getElementById('note-' + key);
+  var show = (wrap.style.display === 'none' || !wrap.style.display);
+  wrap.style.display = show ? 'block' : 'none';
+  if (show) document.getElementById('noteta-' + key).focus();
+}
+
+function toggleHow(key) {
+  var w = document.getElementById('how-' + key);
+  w.style.display = (w.style.display === 'none' || !w.style.display) ? 'block' : 'none';
+}
+
+function saveNote(key) {
+  var val = document.getElementById('noteta-' + key).value;
+  var has = val.trim().length > 0;
+  if (has) _state[noteKey(key)] = val;
+  else     delete _state[noteKey(key)];
+  save(_state);
+  document.getElementById('notebtn-' + key).classList.toggle('has-note', has);
+  document.getElementById('note-' + key).classList.toggle('has-content', has);
+  updateEvidenceFlag(key);
+}
+
+function saveVal(key) {
+  var v = document.getElementById('val-' + key).value;
+  if (v.trim().length) _state['val_' + key] = v;
+  else                 delete _state['val_' + key];
+  save(_state);
+  updateEvidenceFlag(key);
+}
+
+// Show/hide the amber "evidence missing" chip (flag-only — never blocks).
+function updateEvidenceFlag(key) {
+  var chip = document.getElementById('evchip-' + key);
+  if (!chip) return;
+  var obj = itemObjByKey(key);
+  var show = obj && isGated(obj) && itemStatus(key) === 'pass' && !rowHasEvidence(key, obj);
+  chip.style.display = show ? '' : 'none';
+}
+
 function updateSection(sId) {
-  var sec   = SECTIONS.find(function(s){ return s.id === sId; });
-  var total = sec.items.length;
-  var checked = 0;
-  sec.items.forEach(function(_, i) { if (_state[itemKey(sId, i)]) checked++; });
-  var st  = sectionStatus(sId, total, checked);
-  var pct = total > 0 ? Math.round(checked / total * 100) : 0;
-  document.getElementById(sId + '-prog').textContent   = checked + ' / ' + total;
+  var sec = SECTIONS.find(function(s){ return s.id === sId; });
+  var c   = countSection(sec);
+  var st  = sectionStatus(c.total, c.pass, c.fail);
+  var pct = c.total > 0 ? Math.round(c.pass / c.total * 100) : 0;
+  document.getElementById(sId + '-prog').textContent   = c.pass + ' / ' + c.total;
   document.getElementById(sId + '-status').textContent = st.label;
   document.getElementById(sId + '-status').className   = 'sec-status ' + st.cls;
   document.getElementById(sId + '-bar').style.width    = pct + '%';
 }
 
 function updateOverall() {
-  var total = 0, checked = 0;
+  var total = 0, pass = 0, fail = 0;
   SECTIONS.forEach(function(sec) {
-    total += sec.items.length;
-    sec.items.forEach(function(_, i) { if (_state[itemKey(sec.id, i)]) checked++; });
+    var c = countSection(sec);
+    total += c.total; pass += c.pass; fail += c.fail;
   });
-  var pct = total > 0 ? Math.round(checked / total * 100) : 0;
+  var pct = total > 0 ? Math.round(pass / total * 100) : 0;
   document.getElementById('overall-bar').style.width = pct + '%';
   document.getElementById('overall-pct').textContent = pct + '%';
-  document.getElementById('header-count').textContent = checked + ' / ' + total + ' items';
+  document.getElementById('header-count').textContent =
+    pass + ' / ' + total + ' passed' + (fail > 0 ? ' · ' + fail + ' failed' : '');
 }
 
 function toggleSection(sId) {
@@ -615,7 +807,7 @@ function expandAll()   { SECTIONS.forEach(function(s){ document.getElementById(s
 function collapseAll() { SECTIONS.forEach(function(s){ document.getElementById(s.id).classList.remove('open'); }); }
 
 function resetAll() {
-  if (!confirm('Reset ALL checkboxes and sign-off fields? This cannot be undone.')) return;
+  if (!confirm('Reset ALL pass/fail marks, notes, and sign-off fields? This cannot be undone.')) return;
   localStorage.removeItem(STORE_KEY);
   _state = {};
   _meta  = { tester: '', date: '', unit: '', commit: '', verdict: '' };
@@ -645,9 +837,8 @@ function updateSignoffGrid() {
   var grid = document.getElementById('signoff-grid');
   if (!grid) return;
   grid.innerHTML = SECTIONS.map(function(sec) {
-    var total = sec.items.length, checked = 0;
-    sec.items.forEach(function(_, i) { if (_state[itemKey(sec.id, i)]) checked++; });
-    var st = sectionStatus(sec.id, total, checked);
+    var c = countSection(sec);
+    var st = sectionStatus(c.total, c.pass, c.fail);
     return '<div class="signoff-row ' + st.cls + '">' +
       '<div class="dot"></div>' +
       '<span class="sec-lbl">' + sec.num + ' — ' + sec.title + '</span>' +
@@ -673,15 +864,86 @@ function setVerdict(v) {
   document.getElementById('v-blocked').className  = 'verdict-btn' + (v==='blocked'?' blocked':'');
 }
 
+// ─── Export issue report ───────────────────────────────────────────────────────
+function stripHtml(s) {
+  var d = document.createElement('div');
+  d.innerHTML = s;
+  return (d.textContent || d.innerText || '').replace(/\s+/g, ' ').trim();
+}
+
+function exportIssues() {
+  saveMeta();                                       // capture latest sign-off fields
+  var L = [];
+  L.push('# Black-Mata v1 Acceptance — Issue Report', '');
+  L.push('- Unit / hostname: '  + (_meta.unit   || '—'));
+  L.push('- Tested by: '        + (_meta.tester || '—'));
+  L.push('- Date: '             + (_meta.date   || '—'));
+  L.push('- Firmware commit: '  + (_meta.commit || '—'));
+  L.push('- Verdict: '          + (_meta.verdict ? _meta.verdict.toUpperCase() : '—'));
+
+  var total = 0, pass = 0, fail = 0;
+  var fails = [], notes = [], values = [], gaps = [];
+  SECTIONS.forEach(function(sec) {
+    var secFail = [], secNote = [], secVal = [], secGap = [];
+    sec.items.forEach(function(item, i) {
+      var obj  = normItem(item);
+      var key  = itemKey(sec.id, i);
+      var st   = itemStatus(key);
+      total++;
+      if (st === 'pass') pass++; else if (st === 'fail') fail++;
+      var note  = (_state[noteKey(key)] || '').trim();
+      var val   = obj.val ? (_state['val_' + key] || '').trim() : '';
+      var label = stripHtml(obj.t);
+      if (st === 'fail')
+        secFail.push('- ' + label + (note ? '\n      Note: ' + note.replace(/\n/g, '\n      ') : ''));
+      else if (note)
+        secNote.push('- [' + st.toUpperCase() + '] ' + label + '\n      Note: ' + note.replace(/\n/g, '\n      '));
+      if (obj.val)
+        secVal.push('- ' + obj.val + ': ' + (val || '—') + '   (' + label + ')');
+      if (isGated(obj) && st === 'pass' && !rowHasEvidence(key, obj))
+        secGap.push('- ' + label);
+    });
+    function emit(arr, target) {
+      if (arr.length) { target.push('### ' + sec.num + ' — ' + sec.title); target.push.apply(target, arr); target.push(''); }
+    }
+    emit(secFail, fails); emit(secNote, notes); emit(secVal, values); emit(secGap, gaps);
+  });
+
+  L.push('- Summary: ' + pass + ' passed, ' + fail + ' failed, ' + (total-pass-fail) + ' not tested (of ' + total + ')');
+  if (gaps.length) L.push('- ⚠ ' + gaps.length + ' gated PASS row(s) missing evidence');
+  L.push('');
+
+  L.push('## Failures', '');
+  if (fails.length) L.push.apply(L, fails);
+  else              L.push('_No failures recorded._', '');
+
+  if (values.length) { L.push('## Measured values', ''); L.push.apply(L, values); }
+  if (gaps.length)   { L.push('## Evidence gaps (gated PASS without value/note)', ''); L.push.apply(L, gaps); L.push(''); }
+  if (notes.length)  { L.push('## Other notes', ''); L.push.apply(L, notes); }
+
+  var md = L.join('\n');
+  var safeUnit = (_meta.unit || 'unit').replace(/[^a-z0-9_-]+/gi, '');
+  var fname = 'black-mata-acceptance-' + safeUnit + '-' + (_meta.date || new Date().toISOString().slice(0,10)) + '.md';
+
+  var blob = new Blob([md], { type: 'text/markdown' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href = url; a.download = fname;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(md).catch(function(){});  // best-effort clipboard copy
+  }
+}
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 renderAll();
 // Expand first incomplete section automatically
 for (var i = 0; i < SECTIONS.length; i++) {
-  var sec = SECTIONS[i];
-  var total = sec.items.length, checked = 0;
-  sec.items.forEach(function(_, j) { if (_state[itemKey(sec.id, j)]) checked++; });
-  if (checked < total) {
-    document.getElementById(sec.id).classList.add('open');
+  var c = countSection(SECTIONS[i]);
+  if (c.pass < c.total) {
+    document.getElementById(SECTIONS[i].id).classList.add('open');
     break;
   }
 }
