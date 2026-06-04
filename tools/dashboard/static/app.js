@@ -117,20 +117,14 @@ function updatePanels(d) {
     }
   });
 
-  // ── Bird's-eye: actual steer angles + drive arrows ────────────────────────
-  var tpd     = 1023 / 300;
-  var center  = parseInt(cfg.steer_center_ticks) || 512;
-  var sDir    = cfg.steer_dir      || [1,-1,-1,1];
-  var dDir    = cfg.drive_dir      || [1,-1,1,-1];
-  var offsets = cfg.steer_offset_deg || [0,0,0,0];
-  var maxSt   = parseFloat(cfg.max_steer_deg) || 30;
-
-  var steerAngles = WHEEL_ORDER.map(function(lbl, i) {
-    var sv = d.state.servos[sids[i] - 1];
-    if (!sv || !sv.available || sDir[i] === 0) return 0;
-    return Math.max(-maxSt, Math.min(maxSt,
-      (sv.pos - center) / (sDir[i] * tpd) - offsets[i]));
-  });
+  // ── Bird's-eye: COMMANDED steer geometry + drive arrows ───────────────────
+  // The server computes per-wheel angles from the last commanded steer via the
+  // shared Ackermann geometry (server _steer_angles), so this matches ackermann_ui
+  // exactly and needs no servo calibration (offset/center/gear only affect ticks).
+  var dDir = cfg.drive_dir || [1,-1,1,-1];
+  var steerAngles = (d.state.steer_angles && d.state.steer_angles.length === 4)
+    ? d.state.steer_angles
+    : [0, 0, 0, 0];
 
   WHEEL_ORDER.forEach(function(lbl, i) {
     var pos = WHEEL_POS[lbl];

@@ -88,6 +88,14 @@ class AckermannConfig:
     steer_center_ticks: int   = 512              # tick at physical neutral
     ticks_per_deg:      float = 1023.0 / 300.0  # ≈ 3.41 ticks/degree
 
+    # Steering linkage ratio: physical WHEEL degrees per servo-SHAFT degree.
+    # 1.0 = wheel rigidly 1:1 with the servo shaft. If the linkage makes the
+    # wheel turn MORE than the shaft (e.g. wheel moves 2° for every 1° of shaft),
+    # set this to that ratio so commanded/displayed steering angles are TRUE
+    # wheel angles and the Ackermann geometry is physically correct.
+    # Measure: command a known angle, divide the measured wheel angle by it.
+    steer_gear_ratio:   float = 1.0
+
     # Mounting direction signs — flip to match physical installation
     # Index order: [FL, FR, RL, RR]
     # steer_dir[i] = +1  →  positive angle  increases tick count
@@ -131,10 +139,41 @@ def _encode_wheel_speed(fraction: float, direction: int, max_ticks: int) -> int:
 
 
 def _angle_to_ticks(angle_deg: float, direction: int, center: int,
-                    ticks_per_deg: float) -> int:
-    """Convert a physical steering angle (degrees) to servo ticks."""
-    ticks = center + direction * angle_deg * ticks_per_deg
+                    ticks_per_deg: float, gear_ratio: float = 1.0) -> int:
+    """Convert a physical WHEEL steering angle (degrees) to servo ticks.
+
+    gear_ratio = wheel° per shaft°. The servo shaft only needs to rotate
+    angle_deg / gear_ratio to put the wheel at angle_deg.
+    """
+    ticks = center + direction * (angle_deg / gear_ratio) * ticks_per_deg
     return int(max(0, min(1023, round(ticks))))
+
+
+def _steer_angles(cfg: AckermannConfig, steer_deg: float) -> List[float]:
+    """Per-wheel steering angles [FL, FR, RL, RR] in degrees for a steering
+    input — the geometry the bird's-eye view should draw.
+
+    This is the same Ackermann angle computation compute() performs internally,
+    factored out as the single source of truth so the dashboard and ackermann_ui
+    render identical angles for the same commanded steer (no duplicated math).
+    Independent of servo calibration (center/offset/gear) — those only affect the
+    tick the servo is driven to, not the geometric wheel angle.
+    """
+    δ_deg = max(-cfg.max_steer_deg, min(cfg.max_steer_deg, steer_deg))
+    if abs(δ_deg) < 0.5:
+        return [0.0, 0.0, 0.0, 0.0]
+    L2 = cfg.wheelbase   / 2.0
+    W2 = cfg.track_width / 2.0
+    δ_rad = math.radians(abs(δ_deg))
+    sign  = 1 if δ_deg > 0 else -1
+    R = L2 / math.tan(δ_rad)
+    outer_abs = math.degrees(math.atan2(L2, R + W2))
+    inner_abs = math.degrees(math.atan2(L2, R - W2))
+    if sign > 0:   # right turn: FL/RL outer, FR/RR inner
+        fl_deg, fr_deg =  outer_abs,  inner_abs
+    else:          # left turn
+        fl_deg, fr_deg = -inner_abs, -outer_abs
+    return [round(fl_deg, 2), round(fr_deg, 2), round(-fl_deg, 2), round(-fr_deg, 2)]
 
 
 # ── Kinematics ────────────────────────────────────────────────────────────────
@@ -152,6 +191,12 @@ class Ackermann:
 
     def __init__(self, config: AckermannConfig = None):
         self.cfg = config or AckermannConfig()
+
+    def steer_angles(self, steer_deg: float) -> List[float]:
+        """Per-wheel steering angles [FL, FR, RL, RR] for the bird's-eye view.
+        See module-level _steer_angles — this is the shared geometry both the
+        dashboard and ackermann_ui should render."""
+        return _steer_angles(self.cfg, steer_deg)
 
     def compute(self, steer_deg: float, speed_frac: float) -> List[ServoCmd]:
         """
@@ -230,7 +275,7 @@ class Ackermann:
                 enable_torque=1,
                 target=_angle_to_ticks(
                     angles[i] + cfg.steer_offset_deg[i], cfg.steer_dir[i],
-                    cfg.steer_center_ticks, cfg.ticks_per_deg
+                    cfg.steer_center_ticks, cfg.ticks_per_deg, cfg.steer_gear_ratio
                 ),
             )
             for i in range(4)

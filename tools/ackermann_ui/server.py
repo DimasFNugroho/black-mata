@@ -60,6 +60,7 @@ def _build_cfg(c):
     cfg.steer_dir             = _l('steer_dir',        [1, -1, -1,  1])
     cfg.drive_dir             = _l('drive_dir',        [1, -1,  1, -1])
     cfg.steer_offset_deg      = _l('steer_offset_deg', [0.0, 0.0, 0.0, 0.0])
+    cfg.steer_gear_ratio      = _f('steer_gear_ratio', 1.0) or 1.0
     cfg.servo_ids             = _l('servo_ids',        [4, 2, 8, 6, 3, 1, 7, 5])
     # Profile parameters (not AckermannConfig fields — stored alongside)
     cfg._steer_rate_deg_s     = _f('steer_rate_deg_s',   30.0)
@@ -129,7 +130,7 @@ def _compute_result(steer_deg, speed_mps, cfg):
     # min/max reachable: neutral +/- max_steer range, clamped to 0-1023
     position_space = []
     for i in range(4):
-        tpd     = cfg.ticks_per_deg
+        tpd     = cfg.ticks_per_deg / cfg.steer_gear_ratio   # ticks per WHEEL degree
         neutral = int(round(cfg.steer_center_ticks + cfg.steer_dir[i] * cfg.steer_offset_deg[i] * tpd))
         span    = int(round(cfg.max_steer_deg * tpd))
         position_space.append({
@@ -296,7 +297,7 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     fl_s = s.servos[cfg.servo_ids[0] - 1]
                     if fl_s.available and cfg.steer_dir[0] != 0:
-                        raw_angle = (fl_s.pos - cfg.steer_center_ticks) / (cfg.steer_dir[0] * cfg.ticks_per_deg)
+                        raw_angle = (fl_s.pos - cfg.steer_center_ticks) * cfg.steer_gear_ratio / (cfg.steer_dir[0] * cfg.ticks_per_deg)
                         steer_fb = raw_angle - cfg.steer_offset_deg[0]
                         steer_fb = max(-cfg.max_steer_deg, min(cfg.max_steer_deg, steer_fb))
                     else:
@@ -474,7 +475,7 @@ class Handler(BaseHTTPRequestHandler):
                 sid = cfg.servo_ids[i]
                 sv  = s.servos[sid - 1]
                 if sv.available and cfg.steer_dir[i] != 0:
-                    offset = (sv.pos - cfg.steer_center_ticks) / (cfg.steer_dir[i] * cfg.ticks_per_deg)
+                    offset = (sv.pos - cfg.steer_center_ticks) * cfg.steer_gear_ratio / (cfg.steer_dir[i] * cfg.ticks_per_deg)
                     offsets.append(round(offset, 2))
                     details.append({'id': sid, 'pos': sv.pos, 'offset_deg': round(offset, 2)})
                 else:
@@ -738,6 +739,7 @@ HTML_PAGE = """<!DOCTYPE html>
         <span id="c-maxticks-pct" style="font-size:11px;color:#fa0;margin-left:6px;">29%</span>
       </div>
       <div class="cfg-row"><label>steer_center_ticks</label>      <input id="c-center"    type="number" step="1"    value="512"></div>
+      <div class="cfg-row"><label>steer_gear_ratio (wheel°/shaft°)</label><input id="c-gear" type="number" step="0.05" value="1.0" min="0.1"></div>
       <div class="cfg-row"><label>steer_dir [FL,FR,RL,RR]</label><input id="c-sdir" type="text" value="1,-1,-1,1"></div>
       <div class="cfg-row"><label>drive_dir [FL,FR,RL,RR]</label><input id="c-ddir" type="text" value="1,-1,1,-1"></div>
       <div class="cfg-row" style="grid-column:1/-1"><label>steer_offset_deg [FL,FR,RL,RR]</label><input id="c-offset" type="text" value="0,0,0,0" style="width:160px"></div>
@@ -868,6 +870,7 @@ function readConfig() {
     max_steer_deg:         parseFloat(document.getElementById('c-maxsteer').value),
     max_wheel_speed_ticks: Math.min(parseInt(document.getElementById('c-maxticks').value) || 300, 1023),
     steer_center_ticks:    parseInt(document.getElementById('c-center').value),
+    steer_gear_ratio:      parseFloat(document.getElementById('c-gear').value) || 1.0,
     steer_dir:             parseDir('c-sdir'),
     drive_dir:             parseDir('c-ddir'),
     steer_offset_deg:      parseFloat4('c-offset'),
@@ -888,6 +891,7 @@ function fillConfig(c) {
   document.getElementById('c-maxsteer').value  = c.max_steer_deg;
   document.getElementById('c-maxticks').value  = Math.min(c.max_wheel_speed_ticks || 300, 1023);
   document.getElementById('c-center').value    = c.steer_center_ticks;
+  document.getElementById('c-gear').value      = c.steer_gear_ratio !== undefined ? c.steer_gear_ratio : 1.0;
   document.getElementById('c-sdir').value      = c.steer_dir.join(',');
   document.getElementById('c-ddir').value      = c.drive_dir.join(',');
   var off = c.steer_offset_deg || [0,0,0,0];

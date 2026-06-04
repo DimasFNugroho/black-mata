@@ -62,6 +62,67 @@ class TestAngleToTicks:
     def test_clamp_high(self):
         assert _angle_to_ticks(200.0, 1, 512, CFG.ticks_per_deg) == 1023
 
+    def test_default_gear_ratio_unchanged(self):
+        # gear_ratio defaults to 1.0 → identical to omitting it
+        assert _angle_to_ticks(20.0, 1, 512, CFG.ticks_per_deg) == \
+               _angle_to_ticks(20.0, 1, 512, CFG.ticks_per_deg, 1.0)
+
+    def test_gear_ratio_halves_shaft_travel(self):
+        # With a 2:1 linkage, a 20° WHEEL command rotates the shaft only 10°,
+        # so it lands at the same tick as a 10° command at ratio 1.0.
+        geared = _angle_to_ticks(20.0, 1, 512, CFG.ticks_per_deg, 2.0)
+        direct = _angle_to_ticks(10.0, 1, 512, CFG.ticks_per_deg, 1.0)
+        assert geared == direct
+
+
+# ── Ackermann.compute — gear ratio round-trip ──────────────────────────────────
+
+class TestGearRatio:
+    def test_geared_shaft_travel_is_half(self):
+        # Same steer input → same computed WHEEL angle either way; only the shaft
+        # travel differs. With ratio 2.0 the shaft moves half as far from center.
+        base   = AckermannConfig()                       # ratio 1.0
+        geared = AckermannConfig(); geared.steer_gear_ratio = 2.0
+        c = base.steer_center_ticks
+        t_base   = Ackermann(base).compute(20.0, 0.0)[0].target
+        t_geared = Ackermann(geared).compute(20.0, 0.0)[0].target
+        assert abs((t_geared - c) - (t_base - c) / 2) <= 1   # ±1 tick rounding
+
+
+# ── _steer_angles (shared bird's-eye geometry) ─────────────────────────────────
+
+from software.robot.ackermann import _steer_angles
+
+
+class TestSteerAngles:
+    def test_straight_is_zero(self):
+        assert _steer_angles(AckermannConfig(), 0.0) == [0.0, 0.0, 0.0, 0.0]
+
+    def test_rear_counter_phase(self):
+        a = _steer_angles(AckermannConfig(), 20.0)
+        assert a[2] == -a[0] and a[3] == -a[1]      # RL=-FL, RR=-FR
+
+    def test_inner_exceeds_outer_on_right_turn(self):
+        # right turn: FL outer, FR inner → |inner| > |outer|
+        fl, fr, _, _ = _steer_angles(AckermannConfig(), 25.0)
+        assert abs(fr) > abs(fl)
+
+    def test_clamped_to_max_steer(self):
+        cfg = AckermannConfig()
+        assert _steer_angles(cfg, 999) == _steer_angles(cfg, cfg.max_steer_deg)
+
+    def test_matches_compute_ticks(self):
+        # the geometry behind the bird's-eye must agree with what compute() drives
+        cfg = AckermannConfig()
+        for delta in (-30, -15, 10, 25, 30):
+            angles = _steer_angles(cfg, delta)
+            cmds   = Ackermann(cfg).compute(delta, 0.0)
+            for i in range(4):
+                expect = _angle_to_ticks(angles[i] + cfg.steer_offset_deg[i],
+                                         cfg.steer_dir[i], cfg.steer_center_ticks,
+                                         cfg.ticks_per_deg, cfg.steer_gear_ratio)
+                assert abs(cmds[i].target - expect) <= 1, f'delta={delta} wheel={i}'
+
 
 # ── Ackermann.compute — straight ───────────────────────────────────────────────
 
