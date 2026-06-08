@@ -18,3 +18,10 @@ a.out
 PLAN.md
 CLAUDE.md
 docs/wiring/servo_map.json
+cd_resume.sh
+
+# Kinematics config file
+tools/ackermann_ui/ackermann_config.json
+
+# Runtime state (PID/log for commission_page.sh etc.)
+.run/
