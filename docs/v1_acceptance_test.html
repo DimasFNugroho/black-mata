@@ -712,6 +712,15 @@ var DEF_KEY     = 'bm_v1_def';
 var DEFNAME_KEY = 'bm_v1_defname';
 var STORE_KEY = 'bm_v1_accept_test';
 
+// When this page is served over HTTP (e.g. via Tailscale for phone access), seed it
+// automatically from a sibling snapshot file instead of the built-in list. Only seeds
+// a FRESH browser (no saved results yet) so a tester's in-progress work is never wiped;
+// re-seeds only if the file is genuinely newer (different savedAt) AND results are still
+// blank. Append ?load to the URL to force a re-load (with confirmation). No effect on
+// file:// — there it falls back to the built-in / embedded definition as before.
+var AUTOLOAD_FILE  = 'black-mata-acceptance-unit-2026-06-07.json';
+var AUTOLOAD_STAMP = 'bm_v1_autoload_stamp';   // savedAt of the file we last applied
+
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
 function slug(s)  { return (s || '').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'robot'; }
 function loadDef() {
@@ -1377,6 +1386,51 @@ function exportStandalone() {
   downloadFile(base.replace('<!--DEF_ANCHOR-->', inject), 'v1_acceptance_' + slug(_defName) + '.html', 'text/html');
 }
 
+// ─── Auto-load from sibling JSON (HTTP only) ────────────────────────────────────
+// Apply a parsed snapshot object in place (same effect as Open, no file picker).
+function applySnapshot(p) {
+  var sections = Array.isArray(p) ? p : p.sections;
+  if (!Array.isArray(sections)) throw new Error('not a snapshot — missing sections[]');
+  SECTIONS = sections;
+  defNameSet(Array.isArray(p) ? '' : (p.name || ''));
+  defSave();
+  _state = (!Array.isArray(p) && p.state && typeof p.state === 'object') ? p.state : {};
+  _meta  = _state._meta || { tester: '', date: '', unit: '', commit: '', verdict: '' };
+  save(_state);
+  renderAll();
+  updateSignoffGrid();
+}
+
+function autoLoadSnapshot() {
+  if (!/^https?:$/.test(location.protocol)) return;            // file:// → keep built-in/embedded
+  var forced   = /[?&]load(=|&|$)/.test(location.search);
+  var hasWork  = !!localStorage.getItem(STORE_KEY) || !!localStorage.getItem(DEF_KEY);
+  fetch(AUTOLOAD_FILE, { cache: 'no-store' })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(p) {
+      var stamp    = (p && p.savedAt) || '';
+      var lastSeen = '';
+      try { lastSeen = localStorage.getItem(AUTOLOAD_STAMP) || ''; } catch(e) {}
+      // Decide whether to apply:
+      //  - forced (?load): always, after confirming we won't silently clobber edits
+      //  - fresh browser: seed automatically
+      //  - newer file but results still blank: re-seed automatically
+      if (!forced && hasWork && stamp === lastSeen) return;     // tester is working on current file → leave alone
+      if (forced && hasWork &&
+          !confirm('Reload the checklist from the server file?\n\nThis REPLACES the list and any results in THIS browser.')) return;
+      if (!forced && hasWork && stamp !== lastSeen) {
+        // file changed since we seeded; only re-seed if no results were entered here yet
+        var st = {}; try { st = JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); } catch(e) {}
+        var hasResults = Object.keys(st).some(function(k) { return k !== '_meta'; });
+        if (hasResults) { console.info('[autoload] server file changed but local results exist — keeping local. Append ?load to override.'); return; }
+      }
+      applySnapshot(p);
+      try { localStorage.setItem(AUTOLOAD_STAMP, stamp); } catch(e) {}
+      console.info('[autoload] loaded ' + AUTOLOAD_FILE + (stamp ? ' (savedAt ' + stamp + ')' : ''));
+    })
+    .catch(function(e) { console.info('[autoload] skipped (' + e.message + ') — using built-in list'); });
+}
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 PRISTINE_HTML = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
 updateRobotLabel();
@@ -1392,6 +1446,7 @@ if (!_design) {
   }
 }
 updateSignoffGrid();
+autoLoadSnapshot();
 </script>
 </body>
 </html>
