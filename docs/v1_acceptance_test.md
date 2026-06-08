@@ -50,7 +50,12 @@ bash tools/gamepad/check_bluetooth_host.sh
 
 ## SECTION 2 — Firmware Verification
 
-### 2a — Build and flash
+> Black-mata comms-contract test — verifies the OpenCM exchanges the data the
+> black-mata system needs with the Jetson (**not** the full Dynamixel protocol).
+> **Stop the agent/dashboard first** so the serial port is free:
+> `sudo systemctl stop black-mata-dashboard`.
+
+### 2a — Build and upload
 
 ```bash
 # On x86 laptop:
@@ -62,27 +67,48 @@ python build.py   # select black_mata, Release
 - [ ] Flash script connects over SSH, uploads binary, resets the board
 - [ ] OpenCM9.04 LED blinks post-flash (firmware running)
 
-### 2b — Serial frames
+### 2b — Heartbeat + data contract
 
 ```bash
-# On x86:
-./tools/monitor/serial_monitor.sh
+# Agent/dashboard stopped, OpenCM attached:
+python3 tools/dynamixel/dxl_binary_monitor.py --check 30
 ```
 
-- [ ] STATE frames arriving at ~10 Hz (observe sequence numbers incrementing)
-- [ ] No CRC errors in the first 30 s
-- [ ] `e_stop: 0` in the state output (not stuck in e-stop on power-up)
+> Read-only (torque off, no motion). Asserts the black-mata STATE contract the
+> dashboard/ackermann_ui consume — every configured servo `available`;
+> `pos/speed/temp/voltage` in range; `mode` matches config; and `seq` advances
+> with no gaps. Run with the agent stopped (two writers corrupt the stream).
 
-### 2c — Servo discovery
+- [ ] `--check 30` prints **RESULT: PASS** (contract satisfied)
+- [ ] `seq` heartbeat steady — **0 gaps** over the window
+- [ ] Live view (no `--check`) shows all 8 servos with roles and `e_stop=0 (normal)`
+
+### 2c — Servo map and conflicts
 
 ```bash
-# On Jetson (ackermann_ui stopped):
 python3 tools/dynamixel/dxl_identify.py
 ```
 
-- [ ] All **8 servo IDs** discovered (4 steer + 4 drive)
+- [ ] All **8 servo IDs** discovered (4 steer + 4 drive), match config roles
 - [ ] Each servo responds with its model (AX-12A)
 - [ ] No ID conflicts
+
+### 2d — Watchdog e-stop
+
+```bash
+# Raise the robot / clear the wheels first:
+python3 tools/dynamixel/firmware_estop_test.py
+```
+
+> Nudges one steering servo ~12°, cuts the CMD-frame stream so the firmware
+> watchdog (500 ms) drops torque (servo goes limp), then resumes and recovers.
+> Verifies the firmware safes the robot on Jetson silence. Never spins a wheel.
+
+- [ ] Phase 1: servo nudges — command path works
+- [ ] Phase 2: comms cut → servo goes **limp** within ~0.5 s (watchdog dropped torque)
+- [ ] Phase 3: frames resume → servo recovers, controllable
+- [ ] **RESULT: PASS**
+- [ ] *(known gap)* firmware `e_stop` byte is always 0 — verified by behavior, not the flag; fix per `firmware/dxl_commander/ESTOP_REPORTING_SPEC.md`, then `e_stop` must read 1 after the silence window
 
 ---
 
@@ -144,8 +170,8 @@ python3 tools/camera/camera_test.py
 ```
 
 - [ ] Terminal shows "Camera server started on :8083"
-- [ ] `curl -I http://<jetson-ip>:8083/stream` returns `200` with `multipart/x-mixed-replace`
-- [ ] `curl http://<jetson-ip>:8083/health` returns `{"status":"ok"}`
+- [ ] `curl -i -m 2 http://<jetson-ip>:8083/stream` returns `200` with `multipart/x-mixed-replace`
+- [ ] `curl -i http://<jetson-ip>:8083/health` returns `200` with `{"status":"ok"}`
 - [ ] Open `http://<jetson-ip>:8083/stream` in a browser — live MJPEG visible
 
 ### 4a — Camera auto-reconnect
@@ -477,7 +503,7 @@ Drive the robot in a real environment for **5 continuous minutes**, cycling thro
 
 - [ ] **0:00–1:30** — WASD keyboard: figure-of-eight path; verify Ackermann arcs on bird's-eye track the geometry
 - [ ] **1:30–3:00** — Touchpad: same path; verify responsiveness; drag off-pad mid-drive intentionally — no runaway
-- [ ] **3:00–4:00** — Robot BT gamepad: full throttle sprint and hard steer; verify no frame drops or CRC errors in serial monitor
+- [ ] **3:00–4:00** — Robot BT gamepad: full throttle sprint and hard steer; dashboard conn-badge stays green and `curl http://localhost:8082/state` shows `seq` advancing (do NOT run a serial monitor — the agent owns the port)
 - [ ] **4:00–5:00** — PC gamepad: drive from the laptop; verify latency is acceptable for teleoperation
 - [ ] Battery gauge has decreased (voltage drop under load is visible and correctly displayed)
 - [ ] Temperature labels on the drive servos have shifted colour (thermal load visible)

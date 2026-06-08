@@ -315,13 +315,62 @@
   .verdict-btn.approved { border-color: var(--green); color: var(--green); background: #1f3a2f; }
   .verdict-btn.blocked  { border-color: var(--red);   color: var(--red);   background: #3a1f1f; }
 
+  /* ── print / PDF helpers (screen-hidden mirrors) ── */
+  .print-only { display: none; }
+  .note-print { display: none; }
+
+  /* ── print / PDF: light-theme commissioning report ── */
   @media print {
-    header { position: static; }
-    .btn-hdr, .sec-chevron, .note-btn { display: none; }
+    :root {
+      --bg: #ffffff; --surface: #ffffff; --surface2: #f5f5f5;
+      --border: #cccccc; --text: #111111; --muted: #555555;
+      --accent: #0b5cad; --green: #1a7f37; --red: #cf222e;
+      --yellow: #9a6700; --orange: #bc4c00;
+    }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    @page { margin: 14mm; }
+    body { background: #fff; color: #111; font-size: 11px; }
+
+    header { position: static; border-bottom: 2px solid #111; padding: 0 0 10px; }
+    header h1 { font-size: 15px; }
+    .btn-hdr, .sec-chevron, .note-btn, .info-btn, .status-toggle { display: none !important; }
+    .how-wrap { display: none !important; }                 /* guidance, not a result */
+    .print-only { display: block; }
+    .print-header-meta { flex-basis: 100%; font-size: 10px; color: #444; margin-top: 6px; }
+
+    main { max-width: none; padding: 12px 0 20px; }
+    .section { break-inside: auto; border: 1px solid #ccc; margin-bottom: 10px; }
+    .section-header { border-bottom: 1px solid #ccc; }
     .section-body { display: block !important; }
-    .section { break-inside: avoid; }
-    .note-wrap:not(.has-content) { display: none !important; }
-    .note-wrap.has-content { display: block !important; }
+    .item { break-inside: avoid; border-bottom: 1px solid #eee; padding: 3px 0; }
+
+    /* textual status — unambiguous in grayscale (background colour may not print) */
+    .item-label::before { content: '[ NOT TESTED ]  '; font-weight: 700; color: #555; }
+    .item.pass .item-label::before { content: '[ PASS ]  '; color: #1a7f37; }
+    .item.fail .item-label::before { content: '[ FAIL ]  '; color: #cf222e; }
+    .item.pass .item-label { color: #111; text-decoration: none; }
+
+    .sec-status.pass    { background: #e6f4ea; color: #1a7f37; border-color: #bcdfc6; }
+    .sec-status.fail    { background: #fbe9e9; color: #cf222e; border-color: #f0c4c4; }
+    .sec-status.partial { background: #fdf3e3; color: #bc4c00; border-color: #ecd8a8; }
+    .sec-status.todo    { background: #f0f0f0; color: #555;    border-color: #ddd; }
+
+    /* notes → printable text mirror (a <textarea> does not paginate or grow to fit) */
+    .note-wrap { display: none !important; }
+    .note-print { display: block; margin: 3px 0 4px 30px; white-space: pre-wrap;
+                  font-size: 10.5px; color: #333; background: #f7f7f7;
+                  border-left: 3px solid #999; padding: 4px 8px; border-radius: 0 3px 3px 0; }
+    .note-print:empty { display: none; }
+    .note-print::before { content: 'Note: '; font-weight: 700; color: #555; }
+
+    .val-row { margin-left: 30px; }
+    .val-input { background: #fff; border: 1px solid #ccc; color: #111; }
+
+    .signoff { background: #fff; border: 1px solid #ccc; break-inside: avoid; }
+    .field-row input { background: #fff; border: none; border-bottom: 1px solid #999; color: #111; }
+    .verdict-btn { border: 1px solid #ccc; color: #999; }
+    .verdict-btn.approved { background: #e6f4ea; border-color: #1a7f37; color: #1a7f37; }
+    .verdict-btn.blocked  { background: #fbe9e9; border-color: #cf222e; color: #cf222e; }
   }
 </style>
 </head>
@@ -336,10 +385,13 @@
   <div class="header-meta" id="header-count">0 / 0 items</div>
   <button class="btn-hdr" onclick="expandAll()">Expand all</button>
   <button class="btn-hdr" onclick="collapseAll()">Collapse all</button>
+  <button class="btn-hdr" onclick="saveSnapshot()">Save (JSON)</button>
+  <button class="btn-hdr" onclick="openSnapshot()">Open (JSON)</button>
   <button class="btn-hdr" onclick="window.print()">Print / PDF</button>
   <button class="btn-hdr" onclick="exportIssues()">Export issues</button>
   <button class="btn-hdr" id="design-btn" onclick="toggleDesign()">Edit list</button>
   <button class="btn-hdr danger" onclick="resetAll()">Reset</button>
+  <div class="print-only print-header-meta" id="print-header-meta"></div>
 </header>
 
 <main id="main"></main>
@@ -374,18 +426,23 @@ var BUILTIN_SECTIONS = [
   },
   {
     id: 's2', num: 'SEC 2', title: 'Firmware Verification',
+    note: 'Black-mata comms-contract test — does the OpenCM exchange the data the black-mata system needs with the Jetson (NOT the full Dynamixel protocol). STOP the agent/dashboard first so the serial port is free: sudo systemctl stop black-mata-dashboard',
     items: [
-      'x86: <code>python build.py</code> — build completes, no errors',
-      'x86: <code>./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh</code> — flashes, board resets',
+      'Build: x86 <code>python build.py</code> (black_mata target) — completes, no errors',
+      'Upload: x86 <code>./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh</code> — flashes, board resets',
       'OpenCM LED blinks after flash (firmware running)',
-      { t: '<code>./tools/monitor/serial_monitor.sh</code> — STATE frames at ~10 Hz, sequence numbers incrementing',
-        how: 'The monitor streams raw frames; it has no rate meter. Eyeball it — roughly 10 frames scroll per second and the <code>seq</code> field rises by 1 each frame. A frozen or wildly varying rate is a problem.' },
-      { t: 'Sequence numbers increment continuously — no gaps over 30 s (proxy for dropped / corrupt frames)',
-        how: 'serial_monitor.sh is a raw passthrough and cannot count CRC errors directly. Watch the <code>seq</code> field instead: it must advance 0,1,2,… with no skipped values for 30 s. A gap means a frame was lost or rejected. True per-frame CRC accounting is a Debug-build / decoder-script job — out of scope for v1.',
+      { t: 'Heartbeat + data contract: <code>python3 tools/dynamixel/dxl_binary_monitor.py --check 30</code> → RESULT: PASS',
+        how: 'Read-only (torque OFF — no servo motion). Asserts the black-mata STATE contract that ackermann_ui/dashboard actually consume: every configured servo available; pos/speed/temp/voltage in range; mode matches config; and <code>seq</code> advances with no gaps over the window. Run with the agent stopped — two writers on the port corrupt the stream and flip servo modes.' },
+      { t: '<code>seq</code> heartbeat steady — 0 gaps over the check window',
+        how: 'The --check report prints the gap count; it must be 0. <code>seq</code> is the request/response heartbeat between Jetson and OpenCM — a gap means a STATE reply was lost or rejected.',
         val: 'Seq gaps in 30 s' },
-      '<code>e_stop: 0</code> in state output — not stuck in e-stop on power-up',
-      'All 8 servo IDs discovered — <code>python3 tools/dynamixel/dxl_identify.py</code>',
+      'Servo map: <code>python3 tools/dynamixel/dxl_identify.py</code> — all 8 IDs discovered, match config roles',
       'No ID conflicts; all servos respond with AX-12A model',
+      { t: 'Watchdog e-stop: <code>python3 tools/dynamixel/firmware_estop_test.py</code> → RESULT: PASS',
+        how: 'Nudges ONE steering servo ~12° (proves the command path), cuts the CMD-frame stream so the firmware watchdog (500 ms) drops torque — the servo goes LIMP — then resumes and the servo recovers. Verifies the firmware safes the robot when the Jetson goes silent. Never spins a wheel; refuses drive servos.',
+        ev: true },
+      { t: 'Firmware reports <code>e_stop</code> correctly (after ESTOP_REPORTING_SPEC.md fix)',
+        how: 'KNOWN GAP: the current firmware never sets the STATE <code>e_stop</code> byte to 1 (it is cleared before every frame is built), so the watchdog above is verified by servo behaviour, not the flag. Once firmware/dxl_commander/ESTOP_REPORTING_SPEC.md is implemented, <code>e_stop</code> must read 1 on the first frame after the silence window. Until then this row stays not-tested.' },
     ]
   },
   {
@@ -414,8 +471,8 @@ var BUILTIN_SECTIONS = [
     id: 's4', num: 'SEC 4', title: 'Camera Stream + Auto-reconnect',
     note: 'Run: python3 tools/camera/camera_test.py',
     items: [
-      '<code>curl -I http://&lt;jetson-ip&gt;:8083/stream</code> → 200 multipart/x-mixed-replace',
-      '<code>curl http://&lt;jetson-ip&gt;:8083/health</code> → {"status":"ok"}',
+      '<code>curl -i -m 2 http://&lt;jetson-ip&gt;:8083/stream</code> → 200 multipart/x-mixed-replace',
+      '<code>curl -i http://&lt;jetson-ip&gt;:8083/health</code> → 200 {"status":"ok"}',
       'Open <code>:8083/stream</code> in browser — live MJPEG visible',
       'Physically unplug USB camera — <code>/health</code> returns 503 within ~2 s',
       'Stream blanks in browser; camera_test.py stays running (no crash)',
@@ -591,8 +648,8 @@ var BUILTIN_SECTIONS = [
     items: [
       '[0:00–1:30] WASD — figure-of-eight path; Ackermann arcs on bird\'s-eye track geometry',
       '[1:30–3:00] Touchpad — same path; drag off-pad mid-drive intentionally — no runaway',
-      { t: '[3:00–4:00] Robot BT gamepad — full-throttle sprint and hard steer; sequence numbers keep incrementing with no gaps',
-        how: 'Watch the dashboard / serial during the sprint: the STATE <code>seq</code> must keep advancing with no gaps and no disconnects. (Direct CRC counting isn\'t available in v1 — the seq stream is the proxy.)' },
+      { t: '[3:00–4:00] Robot BT gamepad — full-throttle sprint and hard steer; STATE <code>seq</code> keeps advancing, no disconnects',
+        how: 'The dashboard/agent owns the serial port during driving — do NOT start a serial monitor here (it would contend for the port). Verify from the running dashboard instead: the conn-badge stays green for the whole sprint, and <code>curl http://localhost:8082/state</code> shows <code>seq</code> advancing between polls. A stall or a disconnect event is the failure. (Hard seq-gap / CRC counts are not available in v1.)' },
       { t: '[4:00–5:00] PC gamepad from laptop — command-to-motion latency under ~150 ms',
         how: 'Quick check: at the 100 ms control tick, motion should start / stop within 1–2 ticks of input, no perceptible lag. To measure: film the controller and a wheel together at 240 fps (~4 ms/frame) and count frames between input and motion — under ~36 frames = under 150 ms.',
         val: 'Latency (ms)' },
@@ -641,8 +698,8 @@ var BUILTIN_SECTIONS = [
       '<code>ackermann_config.json</code> has correct calibration values (steer offsets intact)',
       '<code>default_drive_mode</code> in config is <code>"wasd"</code> (shipping default)',
       'No stale BT bonds from test pairings (run a fresh pair to confirm clean state)',
-      { t: 'Serial monitor shows clean STATE frames — <code>seq</code> increments with no gaps at rest',
-        how: 'Same seq-gap proxy as SEC 2: watch <code>seq</code> advance with no skips for a short window at rest. (No direct CRC meter in v1.)' },
+      { t: 'At rest with services running, STATE <code>seq</code> advances and <code>e_stop</code> = 0',
+        how: 'Auto-start holds the dashboard/agent on the serial port, and its keepalive sends neutral frames at 5 Hz, so <code>seq</code> advances even idle — no need to stop the service or run a serial monitor. Verify: <code>curl http://localhost:8082/state</code> twice a few seconds apart → <code>seq</code> has advanced and <code>e_stop</code> is 0. (Only if no service is running, fall back to <code>python3 tools/dynamixel/dxl_binary_monitor.py --rate 10</code>.)' },
       'All widget values within expected ranges: battery within ± 0.2 V of multimeter, all servos < ~40 °C at rest, all steer angles within ± 1° of 0°',
     ]
   },
@@ -831,6 +888,7 @@ function renderItem(sId, item, i) {
     '<div class="note-wrap' + (hasNote?' has-content':'') + '" id="note-' + key + '" style="display:' + (hasNote?'block':'none') + '">' +
       '<textarea class="note-area" id="noteta-' + key + '" placeholder="Notes / evidence — observed value, serial output, screenshot filename…" oninput="saveNote(\'' + key + '\')">' + esc(note) + '</textarea>' +
     '</div>' +
+    '<div class="note-print" id="noteprint-' + key + '">' + esc(note) + '</div>' +
   '</div>';
 }
 
@@ -843,6 +901,7 @@ function renderAll() {
   });
   main.appendChild(renderSignoff());
   updateOverall();
+  refreshPrintMeta();
 }
 
 function setStatus(key, sId, status) {
@@ -888,6 +947,8 @@ function saveNote(key) {
   save(_state);
   document.getElementById('notebtn-' + key).classList.toggle('has-note', has);
   document.getElementById('note-' + key).classList.toggle('has-content', has);
+  var mirror = document.getElementById('noteprint-' + key);
+  if (mirror) mirror.textContent = val;
   updateEvidenceFlag(key);
 }
 
@@ -988,6 +1049,7 @@ function saveMeta() {
   _meta.commit  = document.getElementById('f-commit').value;
   _state._meta  = _meta;
   save(_state);
+  refreshPrintMeta();
 }
 
 function setVerdict(v) {
@@ -996,6 +1058,7 @@ function setVerdict(v) {
   save(_state);
   document.getElementById('v-approved').className = 'verdict-btn' + (v==='approved'?' approved':'');
   document.getElementById('v-blocked').className  = 'verdict-btn' + (v==='blocked'?' blocked':'');
+  refreshPrintMeta();
 }
 
 // ─── Export issue report ───────────────────────────────────────────────────────
@@ -1070,6 +1133,82 @@ function exportIssues() {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(md).catch(function(){});  // best-effort clipboard copy
   }
+}
+
+// ─── Full snapshot save / open (the portable "saved file") ──────────────────────
+// One self-contained JSON bundles the DEFINITION (sections) + the RESULTS (_state:
+// pass/fail, notes, measured values, and _meta sign-off). Opening it reproduces the
+// page exactly — no row-misalignment, because the def travels with its results.
+var SNAPSHOT_SCHEMA = 'black-mata-acceptance/v1';
+
+function saveSnapshot() {
+  if (document.getElementById('f-tester')) saveMeta();   // capture latest sign-off fields
+  var payload = {
+    schema:   SNAPSHOT_SCHEMA,
+    name:     _defName || '',
+    savedAt:  new Date().toISOString(),
+    sections: compact(SECTIONS),
+    state:    _state
+  };
+  var safeUnit = (_meta.unit || _defName || 'unit').replace(/[^a-z0-9_-]+/gi, '') || 'unit';
+  var date     = _meta.date || new Date().toISOString().slice(0, 10);
+  downloadFile(JSON.stringify(payload, null, 2),
+    'black-mata-acceptance-' + safeUnit + '-' + date + '.json', 'application/json');
+}
+
+function openSnapshot() {
+  var inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json,application/json';
+  inp.onchange = function() {
+    var f = inp.files[0]; if (!f) return;
+    var r = new FileReader();
+    r.onload = function() {
+      try {
+        var p = JSON.parse(r.result);
+        // Accept a full snapshot {sections,state}, a {name,sections} definition, or a bare array.
+        var sections = Array.isArray(p) ? p : p.sections;
+        if (!Array.isArray(sections)) throw new Error('not a snapshot — missing sections[]');
+        if (!confirm('Open this saved file?\n\nIt REPLACES the current checklist AND all results / notes in this browser. Use "Save (JSON)" first if you want to keep them.')) return;
+
+        SECTIONS = sections;
+        defNameSet(Array.isArray(p) ? '' : (p.name || ''));
+        defSave();
+
+        if (!Array.isArray(p) && p.state && typeof p.state === 'object') {
+          _state = p.state;                 // full snapshot → restore results
+        } else {
+          _state = {};                       // definition-only file → blank results
+        }
+        _meta = _state._meta || { tester: '', date: '', unit: '', commit: '', verdict: '' };
+        save(_state);
+
+        _design = false;
+        document.body.classList.remove('design-mode');
+        var db = document.getElementById('design-btn');
+        if (db) db.textContent = 'Edit list';
+
+        renderAll();
+        updateSignoffGrid();
+      } catch (e) { alert('Open failed: ' + e.message); }
+    };
+    r.readAsText(f);
+  };
+  inp.click();
+}
+
+// Fill the print-only header line shown at the top of the PDF.
+function refreshPrintMeta() {
+  var el = document.getElementById('print-header-meta');
+  if (!el) return;
+  var parts = [];
+  if (_defName)     parts.push('Robot: '     + esc(_defName));
+  if (_meta.unit)   parts.push('Unit: '      + esc(_meta.unit));
+  if (_meta.tester) parts.push('Tested by: ' + esc(_meta.tester));
+  if (_meta.date)   parts.push('Date: '      + esc(_meta.date));
+  if (_meta.commit) parts.push('Commit: '    + esc(_meta.commit));
+  parts.push('Generated: ' + new Date().toISOString().slice(0, 16).replace('T', ' '));
+  if (_meta.verdict) parts.push('Verdict: ' + esc(_meta.verdict.toUpperCase()));
+  el.innerHTML = parts.join('  ·  ');
 }
 
 // ─── Designer mode (coordinator edits the definition) ──────────────────────────

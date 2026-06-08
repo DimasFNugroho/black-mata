@@ -1,0 +1,464 @@
+{
+  "schema": "black-mata-acceptance/v1",
+  "name": "",
+  "savedAt": "2026-06-07T15:22:24.781Z",
+  "sections": [
+    {
+      "id": "s0",
+      "num": "SEC 0",
+      "title": "Pre-flight Hardware",
+      "items": [
+        "12 V battery ≥ 11.0 V on multimeter before power-on",
+        "All 8 servo connectors seated; no open links in the daisy chain",
+        "USB camera plugged in — <code>lsusb</code> shows camera vendor/product",
+        "RTL8761B dongle plugged in — <code>lsusb</code> shows <code>0bda:a760</code>",
+        "OpenCM9.04 USB Serial connected — <code>ls /dev/ttyACM*</code> shows device",
+        "<code>/dev/opencm</code> symlink exists — <code>ls -l /dev/opencm</code>",
+        "<code>/dev/robot_camera</code> symlink exists — <code>ls -l /dev/robot_camera</code>"
+      ]
+    },
+    {
+      "id": "s1",
+      "num": "SEC 1",
+      "title": "Cold Boot Baseline",
+      "note": "Full power cycle first. Do not SSH in until the Jetson is fully up.",
+      "items": [
+        "After boot: <code>hciconfig</code> lists <code>hci0</code> — adapter auto-powered",
+        "<code>rfkill list bluetooth</code> shows NOT blocked",
+        "<code>systemctl is-active bluetooth</code> → active",
+        "<code>bash tools/gamepad/check_bluetooth_host.sh</code> — 8 PASS / 1 WARN (ERTM) / 0 FAIL",
+        "Run <code>echo $?</code> immediately after — output must be <code>0</code>",
+        "Check #9 reports <code>Adapter is powered</code> without having run <code>bluetoothctl power on</code> or <code>hciconfig hci0 up</code> since boot — confirms <code>AutoEnable=true</code> took effect"
+      ]
+    },
+    {
+      "id": "s2",
+      "num": "SEC 2",
+      "title": "Firmware Verification",
+      "note": "Black-mata comms-contract test — does the OpenCM exchange the data the black-mata system needs with the Jetson (NOT the full Dynamixel protocol). STOP the agent/dashboard first so the serial port is free: sudo systemctl stop black-mata-dashboard",
+      "items": [
+        "Build: x86 <code>python build.py</code> (black_mata target) — completes, no errors",
+        "Upload: x86 <code>./tools/remote_update/x86_flash_opencm_bin_via_ssh.sh</code> — flashes, board resets",
+        "OpenCM LED blinks after flash (firmware running)",
+        {
+          "t": "Heartbeat + data contract: <code>python3 tools/dynamixel/dxl_binary_monitor.py --check 30</code> → RESULT: PASS",
+          "how": "Read-only (torque OFF — no servo motion). Asserts the black-mata STATE contract that ackermann_ui/dashboard actually consume: every configured servo available; pos/speed/temp/voltage in range; mode matches config; and <code>seq</code> advances with no gaps over the window. Run with the agent stopped — two writers on the port corrupt the stream and flip servo modes."
+        },
+        {
+          "t": "<code>seq</code> heartbeat steady — 0 gaps over the check window",
+          "how": "The --check report prints the gap count; it must be 0. <code>seq</code> is the request/response heartbeat between Jetson and OpenCM — a gap means a STATE reply was lost or rejected.",
+          "val": "Seq gaps in 30 s"
+        },
+        "Servo map: <code>python3 tools/dynamixel/dxl_identify.py</code> — all 8 IDs discovered, match config roles",
+        "No ID conflicts; all servos respond with AX-12A model",
+        {
+          "t": "Watchdog e-stop: <code>python3 tools/dynamixel/firmware_estop_test.py</code> → RESULT: PASS",
+          "how": "Nudges ONE steering servo ~12° (proves the command path), cuts the CMD-frame stream so the firmware watchdog (500 ms) drops torque — the servo goes LIMP — then resumes and the servo recovers. Verifies the firmware safes the robot when the Jetson goes silent. Never spins a wheel; refuses drive servos.",
+          "ev": true
+        },
+        {
+          "t": "Firmware reports <code>e_stop</code> correctly (after ESTOP_REPORTING_SPEC.md fix)",
+          "how": "KNOWN GAP: the current firmware never sets the STATE <code>e_stop</code> byte to 1 (it is cleared before every frame is built), so the watchdog above is verified by servo behaviour, not the flag. Once firmware/dxl_commander/ESTOP_REPORTING_SPEC.md is implemented, <code>e_stop</code> must read 1 on the first frame after the silence window. Until then this row stays not-tested."
+        }
+      ]
+    },
+    {
+      "id": "s3",
+      "num": "SEC 3",
+      "title": "Ackermann UI Calibration",
+      "note": "Stop dashboard first. Run: python3 tools/ackermann_ui/server.py --port /dev/opencm → open :8081",
+      "items": [
+        "Servo ID map matches physical wheel roles (FL/FR/RL/RR steer + drive)",
+        "Nudge each steer servo individually — correct wheel moves",
+        "Nudge each drive servo individually — correct wheel spins",
+        "Torque off steering → all four steer servos go limp",
+        "Push all four wheels straight-ahead physically",
+        "Record neutral → offsets fill in automatically",
+        "Send to robot → wheels hold straight under torque",
+        "Bird's-eye steer angle readback ≈ 0.0° for all wheels at neutral",
+        "Steer slider to +30° — Ackermann geometry correct (inner tighter than outer)",
+        "Steer slider to −30° — correct opposite geometry",
+        "Return to 0° — wheels return straight, no drift",
+        "Save config — confirms write to <code>ackermann_config.json</code>",
+        "Reload ackermann_ui — all values repopulate correctly",
+        "<code>ackermann_config.json</code> contains <code>default_drive_mode</code> field",
+        "Toggle default drive mode → \"Saved\" flash; <code>default_drive_mode</code> updates in JSON (dashboard honoring the default is re-tested in SEC 7)",
+        "Battery threshold fields save and reload correctly"
+      ]
+    },
+    {
+      "id": "s4",
+      "num": "SEC 4",
+      "title": "Camera Stream + Auto-reconnect",
+      "note": "Run: python3 tools/camera/camera_test.py",
+      "items": [
+        "<code>curl -i http://&lt;jetson-ip&gt;:8083/stream</code> → 200 multipart/x-mixed-replace",
+        "<code>curl -i http://&lt;jetson-ip&gt;:8083/health</code> → {\"status\":\"ok\"}",
+        "Open <code>:8083/stream</code> in browser — live MJPEG visible",
+        "Physically unplug USB camera — <code>/health</code> returns 503 within ~2 s",
+        "Stream blanks in browser; camera_test.py stays running (no crash)",
+        "Replug camera — <code>/health</code> returns 200 within ~4 s",
+        "Stream resumes in browser WITHOUT any page refresh"
+      ]
+    },
+    {
+      "id": "s5",
+      "num": "SEC 5",
+      "title": "Dashboard Startup & Config",
+      "note": "Run: python3 tools/dashboard/server.py --port /dev/opencm → open :8082",
+      "items": [
+        "Dashboard loads — no JS console errors (check browser DevTools)",
+        "<code>conn-badge</code> shows \"connected\" (green)",
+        "<code>cfg-info</code> bar shows correct max steer and max output % from config",
+        "Config refreshes within 5 s after manually editing and saving JSON",
+        "Drive mode is WASD on first load (matches <code>default_drive_mode</code> in config)",
+        "MJPEG feed visible in camera panel (proxied via :8082)",
+        {
+          "t": "Camera frame matches robot POV — object on the robot's right shows on the right; forward = top of frame",
+          "how": "Place a recognisable object to the physical RIGHT of the robot. It must appear on the RIGHT in the dashboard image, and the robot's forward direction must point to the TOP of the frame. Mirrored (left/right swapped) or rotated = fix the rotation in the camera config.",
+          "ev": true
+        },
+        "Bird's-eye SVG shows all four wheel icons",
+        "All four wheel steer angles read ≈ 0.0° at rest",
+        "Manually push a front wheel — angle label updates in real time",
+        "Ackermann arc appears when steer angle > 0.5°; disappears at 0",
+        {
+          "t": "All 8 servos show temperature labels (S:°C, D:°C) — near ambient at rest",
+          "how": "The AX-12A torques off at its Highest-Limit-Temperature (control-table addr 12, default 70 °C) — that auto-shutdown is what you're protecting against. At rest every servo should read near room temperature, expect < ~40 °C. Anything already hot at rest is a fault. Confirm the limit against your firmware if you changed it."
+        },
+        {
+          "t": "Battery fill bar shows non-zero percentage; voltage within ± 0.2 V of multimeter",
+          "how": "Read the dashboard voltage and compare to a multimeter on the battery terminals — they must agree within ± 0.2 V. Record the dashboard reading.",
+          "val": "Battery (V)"
+        }
+      ]
+    },
+    {
+      "id": "s6",
+      "num": "SEC 6",
+      "title": "WASD Keyboard Drive",
+      "note": "Raise robot off the ground or clear a run area before all drive tests.",
+      "items": [
+        "Topbar hint: \"Hold ⇧ + WASD to drive or L1 + sticks (gamepad).\"",
+        "Drive mode toggle shows ⌨ WASD selected",
+        "W/A/S/D without Shift → NO movement (deadman not held)",
+        "Shift + W → robot moves forward; release Shift → stops",
+        "Shift + S → robot reverses; release → stops",
+        "Output gauge bar fills during drive; returns to 0 on release",
+        "Shift + A → steers left; bird's-eye arcs correct Ackermann geometry",
+        "Shift + D → steers right",
+        "Shift + W + A → forward-left arc; both gauges update simultaneously",
+        "While Shift held: pill shows KEYBOARD (blue)",
+        "Release Shift: pill shows IDLE (or GAMEPAD: NONE)",
+        {
+          "t": "Network kill test: hold Shift+W → drop dashboard traffic → robot stops ≤ 300 ms",
+          "how": "On the Jetson, while holding Shift+W: <code>sudo iptables -A INPUT -p tcp --dport 8082 -j DROP</code>. The robot must stop within 300 ms (deadman times out when frames stop arriving). Undo with the same line but <code>-D</code> instead of <code>-A</code>.",
+          "ev": true
+        },
+        "Restore iptables rule → dashboard reconnects; robot controllable again"
+      ]
+    },
+    {
+      "id": "s7",
+      "num": "SEC 7",
+      "title": "Touchpad Drive Mode",
+      "items": [
+        "Click ⊹ Touchpad toggle — WASD grid disappears, touchpad SVG appears",
+        "Hints update: \"drag up → fwd / drag right → steer / Spc/Esc → e-stop\"",
+        "Topbar updates to touchpad hint text",
+        "W/A/S/D keyboard keys are COMPLETELY INERT in Touchpad mode",
+        "Click and hold pad centre → no movement (centre deadzone)",
+        "Click hold + drag right → steers right; steer gauge fills; bird's-eye updates",
+        "Click hold + drag up → drives forward; output gauge fills",
+        "Release pointer → robot stops; dot snaps to centre",
+        "Press inside pad, drag OUTSIDE boundary — input still tracks (pointer capture)",
+        "Release off-pad → robot stops cleanly",
+        "Set default to Touchpad in ackermann_ui → reload dashboard → opens in Touchpad",
+        "Set back to WASD in ackermann_ui → reload → WASD mode",
+        "Drive in Touchpad mode → click ⌨ WASD toggle mid-drive → robot stops immediately"
+      ]
+    },
+    {
+      "id": "s8",
+      "num": "SEC 8",
+      "title": "E-Stop — All Six Paths",
+      "note": "Test each path independently. Re-arm fully between each test.",
+      "items": [
+        {
+          "t": "[Path 1 — Space/Esc] Driving → press Space → instant stop; button turns amber \"↻ HOLD TO RESET\"",
+          "ev": true
+        },
+        "[Path 1] Shift+W while latched → NO movement",
+        "[Path 1] Hold button 1 s → latch clears; button returns to red \"■ E-STOP\"",
+        {
+          "t": "[Path 2 — Button click] Driving → click red E-STOP → instant stop",
+          "ev": true
+        },
+        "[Path 2] Hold button 1 s → re-arms",
+        {
+          "t": "[Path 3 — Gamepad combo] L1+sticks driving → L1 + D-pad diagonal → instant stop (rising edge, not held)",
+          "ev": true
+        },
+        "[Path 3] Dashboard button turns amber confirming latch",
+        {
+          "t": "[Path 4 — LS+RS re-arm] While latched: hold both stick clicks 1 s → latch clears",
+          "ev": true
+        },
+        "[Path 4] Partial hold (< 1 s) → latch stays; must complete full 1 s hold",
+        {
+          "t": "[Path 5 — Serial kill] Driving → physically unplug OpenCM USB → all servos stop ≤ 500 ms (full hot-unplug/replug cycle re-tested in SEC 15)",
+          "ev": true
+        },
+        {
+          "t": "[Path 6 — Camera loss IS NOT E-STOP] Unplug camera while driving → robot KEEPS DRIVING (full cycle re-tested in SEC 15)",
+          "ev": true
+        }
+      ]
+    },
+    {
+      "id": "s9",
+      "num": "SEC 9",
+      "title": "Robot Bluetooth Gamepad",
+      "items": [
+        "[Terminal pair] <code>bash tools/gamepad/reset_bluetooth_host.sh</code> — bonds cleared",
+        "[Terminal pair] <code>bash tools/gamepad/setup_gamepad.sh --verbose</code> — scan finds G3 V2",
+        "[Terminal pair] \"Pairing successful\" — trust and connect succeed",
+        "[Terminal pair] <code>hcitool con</code> shows active ACL connection",
+        "[Modal pair] <code>reset_bluetooth_host.sh</code> to clear bond again",
+        "[Modal pair] Dashboard: click \"Pair to Robot\" — modal opens",
+        "[Modal pair] Continue → progress bar through scan phase",
+        "[Modal pair] G3 V2 appears in device list; click it → pair/trust/connect progress shown",
+        "[Modal pair] \"ON ROBOT (Bluetooth)\" row shows controller name — no terminal needed",
+        "L1 released → NO movement (deadman not held)",
+        "L1 + left stick forward → robot drives forward",
+        "L1 + left stick back → reverse; release L1 → stops immediately",
+        "L1 + left stick left/right → steers; bird's-eye arcs update",
+        "Input pill shows GAMEPAD: [controller name] while deadman held",
+        {
+          "t": "[Range test] Pair controller from 1.5 m away — completes successfully",
+          "how": "Hold the controller ~1.5 m from the dongle and run the pair flow. It should complete without repeated retries or timeouts. Record the distance actually used.",
+          "ev": true
+        },
+        "[Swap] Click \"Pair to Robot\" again while connected → modal opens without crash",
+        "[Swap] Pair again → new controller name appears in \"ON ROBOT\" row"
+      ]
+    },
+    {
+      "id": "s10",
+      "num": "SEC 10",
+      "title": "PC Gamepad (Browser Gamepad API)",
+      "note": "Use a USB gamepad or a BT gamepad paired to the operator laptop via OS Bluetooth settings.",
+      "items": [
+        "\"ON THIS PC\" shows \"No controller detected — plug in via USB or pair via your OS Bluetooth settings.\"",
+        "Plug USB gamepad into operator laptop — name appears in \"ON THIS PC\" within 100 ms",
+        "No page reload needed for detection",
+        "No BT gamepad L1 held → hold L1/LB on PC gamepad + sticks → robot drives",
+        "Input pill shows GAMEPAD-PC",
+        "Release L1 → robot stops",
+        "[Priority test] Both gamepads connected; hold both L1s → robot follows ROBOT BT (local override)",
+        "[Priority test] Release Robot BT L1 only → robot switches to PC gamepad immediately (if PC L1 still held)",
+        "[Priority test] Release PC L1 → robot stops",
+        "[Unplug mid-drive] Driving via PC gamepad → unplug USB → robot stops within one 100 ms tick",
+        "\"ON THIS PC\" returns to \"No controller detected\" on unplug"
+      ]
+    },
+    {
+      "id": "s11",
+      "num": "SEC 11",
+      "title": "Input Priority Matrix",
+      "note": "Run each combination. Confirm ONLY the expected source drives the robot.",
+      "items": [
+        "Shift held (WASD mode), no other source → KEYBOARD drives",
+        "Touchpad pressed (Touchpad mode), no other source → TOUCHPAD drives",
+        "Robot BT L1, no Shift/Touchpad → GAMEPAD-ROBOT drives",
+        "PC L1, no Shift/Touchpad/BT → GAMEPAD-PC drives",
+        "Shift + Robot BT L1 simultaneously → KEYBOARD wins (manual beats gamepad)",
+        "Touchpad + Robot BT L1 simultaneously → TOUCHPAD wins (manual beats gamepad)",
+        "Robot BT L1 + PC L1 simultaneously → GAMEPAD-ROBOT wins (local overrides remote)",
+        "Nothing held → IDLE (no movement, no drive frames sent)"
+      ]
+    },
+    {
+      "id": "s12",
+      "num": "SEC 12",
+      "title": "Remote Access via ngrok",
+      "note": "Run: ngrok http 8082 on the Jetson (dashboard + camera already running)",
+      "items": [
+        "ngrok prints a https://*.ngrok-free.app URL",
+        "Open URL on a MOBILE PHONE on 4G/5G (different network)",
+        "Dashboard loads fully: camera feed, bird's-eye, all widgets",
+        "Drive the robot from the phone using Touchpad — full round trip over internet",
+        "E-stop from the phone works instantly",
+        "Stop ngrok (Ctrl+C) → robot no longer reachable externally",
+        {
+          "t": "Dashboard on LAN still works normally (ngrok is not a dependency)",
+          "how": "\"Works normally\" = open the LAN URL (:8082) directly, confirm the camera feed loads, drive the robot, and trigger one e-stop. All must work with ngrok stopped."
+        }
+      ]
+    },
+    {
+      "id": "s13",
+      "num": "SEC 13",
+      "title": "Systemd Auto-start",
+      "note": "Run: bash tools/setup/autostart.sh enable → sudo reboot",
+      "items": [
+        "After reboot, camera and dashboard start WITHOUT any manual SSH",
+        "Dashboard reachable at :8082 within 30 s of Jetson becoming pingable",
+        "Camera feed live in dashboard (camera service up before dashboard)",
+        "<code>systemctl status black-mata-camera black-mata-dashboard</code> — both active, no failed restarts",
+        "Disable: <code>bash tools/setup/autostart.sh disable</code> → reboot → services do NOT start",
+        "No stale processes on port 8082 or 8083 after disable",
+        "Re-enable: <code>autostart.sh enable</code> — services re-enabled"
+      ]
+    },
+    {
+      "id": "s14",
+      "num": "SEC 14",
+      "title": "5-Minute Drive Endurance",
+      "note": "Drive continuously, cycling through all input modes. Clear run area required.",
+      "items": [
+        "[0:00–1:30] WASD — figure-of-eight path; Ackermann arcs on bird's-eye track geometry",
+        "[1:30–3:00] Touchpad — same path; drag off-pad mid-drive intentionally — no runaway",
+        {
+          "t": "[3:00–4:00] Robot BT gamepad — full-throttle sprint and hard steer; STATE <code>seq</code> keeps advancing, no disconnects",
+          "how": "The dashboard/agent owns the serial port during driving — do NOT start a serial monitor here (it would contend for the port). Verify from the running dashboard instead: the conn-badge stays green for the whole sprint, and <code>curl http://localhost:8082/state</code> shows <code>seq</code> advancing between polls. A stall or a disconnect event is the failure. (Hard seq-gap / CRC counts are not available in v1.)"
+        },
+        {
+          "t": "[4:00–5:00] PC gamepad from laptop — command-to-motion latency under ~150 ms",
+          "how": "Quick check: at the 100 ms control tick, motion should start / stop within 1–2 ticks of input, no perceptible lag. To measure: film the controller and a wheel together at 240 fps (~4 ms/frame) and count frames between input and motion — under ~36 frames = under 150 ms.",
+          "val": "Latency (ms)"
+        },
+        "Battery gauge decreased visibly (voltage drop under load displayed correctly)",
+        {
+          "t": "Drive servos shifted warmer under load — none approaching the 70 °C shutdown",
+          "how": "Drive servos warm under load (expected). They must stay well below the AX-12A 70 °C auto-shutdown — flag if any exceeds ~60 °C. Record the hottest reading at the end of the run.",
+          "val": "Hottest drive servo (°C)"
+        },
+        "All 8 servo IDs present throughout — no disconnection events",
+        "No dashboard JS errors for the entire session (console clean)"
+      ]
+    },
+    {
+      "id": "s15",
+      "num": "SEC 15",
+      "title": "Fault Injection",
+      "items": [
+        "[Dashboard crash] Robot idle → <code>pkill -f server.py</code> → robot stays stopped (no spurious motion)",
+        "[Dashboard crash] Restart dashboard → conn-badge returns green; all widgets repopulate",
+        {
+          "t": "[Serial hot-unplug] Driving → unplug OpenCM USB → servos stop ≤ 500 ms (firmware watchdog fires)",
+          "ev": true
+        },
+        "[Serial hot-unplug] Replug → server reconnects; send_estop() fires before allowing drive",
+        "[Camera hot-unplug] Driving → unplug camera → robot KEEPS DRIVING (processes isolated)",
+        "[Camera hot-unplug] Feed blanks; replug → restores without action; drive throughout uninterrupted",
+        "[Browser close] Driving via Shift+W → close browser tab → robot stops ≤ 300 ms",
+        {
+          "t": "[BT out of range] Driving via Robot BT → carry controller 5+ m behind a wall → link drops; robot stops",
+          "ev": true
+        },
+        "[BT out of range] Return in range → GamepadReader auto-reconnects within a few seconds"
+      ]
+    },
+    {
+      "id": "s16",
+      "num": "SEC 16",
+      "title": "Commissioning Tools Verification",
+      "items": [
+        "<code>check_bluetooth_host.sh</code> — 8 PASS / 1 WARN (ERTM) / 0 FAIL",
+        "<code>commission_bluetooth.sh</code> — reports \"fully commissioned\" immediately",
+        "Embedded check_bluetooth_host output within guide: same PASS/WARN counts",
+        "[Reproduce cycle] <code>reset_bluetooth_host.sh</code> → reboot → check shows 4+ FAIL (clean slate confirmed)",
+        "[Reproduce cycle] <code>setup_bluetooth_host.sh</code> → reboot → check returns 8 PASS / 0 FAIL",
+        "[Reproduce cycle] Proves procedure is REPEATABLE on this unit",
+        "x86: <code>bash tools/gamepad/push_gamepad_to_jetson.sh</code> — password prompted once (SSH multiplexing)",
+        "All 14 files transferred; no \"Is a directory\" or permission errors"
+      ]
+    },
+    {
+      "id": "s17",
+      "num": "SEC 17",
+      "title": "Final State Verification",
+      "note": "Clean reboot with auto-start enabled. Verify the robot ships in a known-good state.",
+      "items": [
+        "Dashboard reachable at :8082 without any SSH after reboot",
+        "Camera feed live without any SSH",
+        "<code>check_bluetooth_host.sh</code> still passes (commissioning survived all testing)",
+        "<code>ackermann_config.json</code> has correct calibration values (steer offsets intact)",
+        "<code>default_drive_mode</code> in config is <code>\"wasd\"</code> (shipping default)",
+        "No stale BT bonds from test pairings (run a fresh pair to confirm clean state)",
+        {
+          "t": "At rest with services running, STATE <code>seq</code> advances and <code>e_stop</code> = 0",
+          "how": "Auto-start holds the dashboard/agent on the serial port, and its keepalive sends neutral frames at 5 Hz, so <code>seq</code> advances even idle — no need to stop the service or run a serial monitor. Verify: <code>curl http://localhost:8082/state</code> twice a few seconds apart → <code>seq</code> has advanced and <code>e_stop</code> is 0. (Only if no service is running, fall back to <code>python3 tools/dynamixel/dxl_binary_monitor.py --rate 10</code>.)"
+        },
+        "All widget values within expected ranges: battery within ± 0.2 V of multimeter, all servos < ~40 °C at rest, all steer angles within ± 1° of 0°"
+      ]
+    }
+  ],
+  "state": {
+    "s0_1": true,
+    "s0_0": true,
+    "s0_2": true,
+    "s0_3": true,
+    "s0_4": true,
+    "s0_5": true,
+    "s0_6": true,
+    "s1_0": true,
+    "s1_1": true,
+    "s1_2": true,
+    "s1_3": true,
+    "s1_4": true,
+    "s1_5": true,
+    "s2_0": true,
+    "s2_1": true,
+    "s2_2": true,
+    "s2_6": "pass",
+    "s17_0": true,
+    "s17_1": true,
+    "s17_2": true,
+    "s17_3": true,
+    "s17_5": true,
+    "s17_7": true,
+    "s16_0": true,
+    "s3_0": true,
+    "s3_1": true,
+    "s3_2": true,
+    "s3_3": "pass",
+    "s3_4": "pass",
+    "s3_5": "pass",
+    "s3_6": "pass",
+    "s3_7": "pass",
+    "s3_8": "pass",
+    "s3_9": "pass",
+    "s3_10": "pass",
+    "s3_11": "pass",
+    "s3_12": "pass",
+    "s3_13": "pass",
+    "s3_14": "pass",
+    "s3_15": "pass",
+    "s4_2": "pass",
+    "s4_0": "pass",
+    "s4_1": "pass",
+    "s4_3": "pass",
+    "s4_4": "pass",
+    "s4_5": "pass",
+    "s4_6": "pass",
+    "s17_4": "pass",
+    "s16_1": "pass",
+    "s13_0": "pass",
+    "s13_1": "pass",
+    "s13_2": "pass",
+    "s13_3": "pass",
+    "s13_4": "pass",
+    "s13_5": "pass",
+    "s13_6": "pass",
+    "s2_5": "pass",
+    "_meta": {
+      "tester": "",
+      "date": "2026-06-07",
+      "unit": "mata-desktop",
+      "commit": "3123420",
+      "verdict": ""
+    }
+  }
+}
